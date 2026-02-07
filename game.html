@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - GitHub Pages</title>
+    <title>Tetris Multiplayer - Refactored</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
@@ -13,1809 +13,627 @@
             --bg-grid: #151b3d;
             --border-glow: #00ffff;
             --text-primary: #ffffff;
-            --text-secondary: #8b9dc3;
             --accent-cyan: #00ffff;
             --accent-pink: #ff00ff;
-            --accent-yellow: #ffff00;
-            --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.5);
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+
         body {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
+            font-family: 'Orbitron', sans-serif;
+            background: var(--bg-dark);
             color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
-            position: relative;
-        }
-        
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
-                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 0, 255, 0.03) 2px, rgba(255, 0, 255, 0.03) 4px);
-            pointer-events: none;
-            animation: scanlines 8s linear infinite;
-        }
-        
-        @keyframes scanlines {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(4px); }
-        }
-        
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-            position: relative;
-            z-index: 1;
-        }
-        
-        h1 {
-            font-family: 'Press Start 2P', cursive;
-            text-align: center;
-            font-size: 2rem;
-            margin-bottom: 30px;
-            text-transform: uppercase;
-            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
-            animation: glow-pulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes glow-pulse {
-            0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5)); }
-            50% { filter: drop-shadow(0 0 20px rgba(255, 0, 255, 0.8)); }
-        }
-        
-        .controls-panel {
-            background: rgba(21, 27, 61, 0.8);
-            border: 2px solid var(--border-glow);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .control-item {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        
-        .control-item label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-        }
-        
-        .control-item input, .control-item select {
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-            font-size: 0.9rem;
-        }
-        
-        .control-item input:focus, .control-item select:focus {
-            outline: none;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-        }
-        
-        button {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
-            border: none;
-            color: var(--bg-dark);
-            padding: 12px 24px;
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.7rem;
-            border-radius: 5px;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .game-area {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-        
-        .player-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
-        }
-        
-        .player-header {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 1rem;
-            color: var(--accent-cyan);
-            text-shadow: 0 0 10px var(--accent-cyan);
-        }
-        
-        .game-wrapper {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-        }
-        
-        .side-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        
-        .info-box {
-            background: rgba(21, 27, 61, 0.9);
-            border: 2px solid var(--accent-cyan);
-            border-radius: 8px;
-            padding: 15px;
-            min-width: 150px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        .info-box h3 {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.6rem;
-            margin-bottom: 10px;
-            color: var(--accent-yellow);
-            text-align: center;
-        }
-        
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            margin: 5px 0;
-            font-size: 0.9rem;
-        }
-        
-        .stat-label {
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-        }
-        
-        .stat-value {
-            color: var(--accent-cyan);
-            font-weight: bold;
-        }
-        
-        .canvas-container {
-            position: relative;
-            border: 3px solid var(--border-glow);
-            border-radius: 5px;
-            box-shadow: 
-                var(--shadow-glow),
-                inset 0 0 20px rgba(0, 255, 255, 0.1);
-            background: rgba(10, 14, 39, 0.95);
-        }
-        
-        canvas {
-            display: block;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-        
-        .mini-canvas-container {
-            background: rgba(10, 14, 39, 0.9);
-            border: 2px solid var(--accent-pink);
-            border-radius: 5px;
-            padding: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100px;
+            overflow: hidden;
+            height: 100vh;
         }
 
-        /* CHAT MOVED TO SIDE */
-        .chat-container {
-            position: fixed;
-            right: 20px;
-            top: 120px;
-            width: 320px;
-            background: rgba(21, 27, 61, 0.95);
-            border: 2px solid var(--border-glow);
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: var(--shadow-glow);
-            z-index: 5;
-            transition: transform 0.25s ease;
+        #ui-layer { margin: 10px; z-index: 10; text-align: center; }
+        .game-container { display: flex; gap: 40px; margin-top: 20px; }
+        .player-section { position: relative; border: 4px solid var(--bg-grid); padding: 10px; background: rgba(0,0,0,0.3); }
+        canvas { background: #000; display: block; }
+        .hold-canvas, .queue-canvas { background: #000; border: 2px solid var(--bg-grid); }
+        
+        .controls { margin-top: 10px; display: flex; gap: 10px; justify-content: center; }
+        input, button { 
+            padding: 8px; font-family: 'Orbitron'; background: #1a1a2e; color: white; border: 1px solid var(--accent-cyan);
         }
+        button:hover { background: var(--accent-cyan); color: black; cursor: pointer; }
 
-        .chat-container.hidden-chat {
-            transform: translateX(120%);
+        #chat-container {
+            position: fixed; bottom: 20px; right: 20px; width: 250px;
+            background: rgba(10, 14, 39, 0.9); border: 1px solid var(--accent-cyan);
         }
-        
-        .chat-messages {
-            height: 200px;
-            overflow-y: auto;
-            background: rgba(10, 14, 39, 0.8);
-            border: 1px solid var(--accent-cyan);
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-            font-size: 0.85rem;
-        }
-        
-        .chat-message {
-            margin: 5px 0;
-            padding: 5px;
-            border-left: 2px solid var(--accent-pink);
-            padding-left: 8px;
-        }
-        
-        .chat-input-container {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .chat-input {
-            flex: 1;
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 10px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-        }
-        
-        .connection-panel {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .connection-panel input {
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 10px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-            width: 300px;
-        }
-        
-        #gameStatus {
-            text-align: center;
-            margin-top: 20px;
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.8rem;
-            color: var(--accent-yellow);
-            text-shadow: 0 0 10px var(--accent-yellow);
-        }
-        
-        #myPeerId {
-            background: rgba(21, 27, 61, 0.9);
-            border: 2px solid var(--accent-cyan);
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        #myPeerId .peer-id-label {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            margin-bottom: 10px;
-        }
-        
-        #myPeerId .peer-id-value {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.9rem;
-            color: var(--accent-cyan);
-            word-break: break-all;
-            user-select: all;
-            cursor: pointer;
-            padding: 10px;
-            background: rgba(10, 14, 39, 0.8);
-            border-radius: 5px;
-            border: 1px solid var(--accent-pink);
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-
-        .copy-btn {
-            margin-top: 10px;
-            font-size: 0.6rem;
-            padding: 8px 16px;
-        }
+        #chat-messages { height: 150px; overflow-y: auto; font-size: 10px; padding: 5px; }
+        #chat-input { width: 100%; border: none; background: #151b3d; color: white; padding: 5px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>⬛ Tetris Online Battle ⬛</h1>
-        
-        <div class="controls-panel">
-            <h2 style="font-family: 'Press Start 2P', cursive; font-size: 1rem; margin-bottom: 15px; text-align: center;">Game Settings</h2>
-            
-            <div class="controls-grid">
-                <div class="control-item">
-                    <label>Move Left</label>
-                    <input type="text" id="keyLeft" value="ArrowLeft" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Move Right</label>
-                    <input type="text" id="keyRight" value="ArrowRight" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Soft Drop</label>
-                    <input type="text" id="keySoftDrop" value="ArrowDown" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Hard Drop</label>
-                    <input type="text" id="keyHardDrop" value=" " readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate CW</label>
-                    <input type="text" id="keyRotateCW" value="ArrowUp" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate CCW</label>
-                    <input type="text" id="keyRotateCCW" value="z" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate 180</label>
-                    <input type="text" id="keyRotate180" value="x" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Hold Piece</label>
-                    <input type="text" id="keyHold" value="c" readonly>
-                </div>
-                <div class="control-item">
-                    <label>ARR (ms)</label>
-                    <input type="number" id="arr" value="0" min="0" max="200">
-                </div>
-                <div class="control-item">
-                    <label>DAS (ms)</label>
-                    <input type="number" id="das" value="167" min="0" max="500">
-                </div>
-                <div class="control-item">
-                    <label>DCD (ms)</label>
-                    <input type="number" id="dcd" value="0" min="0" max="100">
-                </div>
-                <div class="control-item">
-                    <label>SDF (multiplier)</label>
-                    <select id="sdf">
-                        <option value="1">1x</option>
-                        <option value="2">2x</option>
-                        <option value="6" selected>6x</option>
-                        <option value="10">10x</option>
-                        <option value="20">20x</option>
-                        <option value="inf">Infinite</option>
-                    </select>
-                </div>
-                <div class="control-item">
-                    <label>Prevent Missdrop</label>
-                    <select id="preventMissdrop">
-                        <option value="true" selected>On</option>
-                        <option value="false">Off</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 15px; color: var(--text-secondary); font-size: 0.75rem;">
-                Click on any key binding to change it
-            </div>
-        </div>
-        
-        <div id="myPeerId" class="hidden">
-            <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
-            <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
-            <button class="copy-btn" onclick="copyPeerId()">📋 Copy ID</button>
-        </div>
-        
-        <div class="connection-panel">
-            <button id="createGameBtn">Create Game</button>
-            <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
-            <button id="joinGameBtn">Join Game</button>
-            <button id="restartBtn" class="hidden">Restart Game</button>
-        </div>
-        
-        <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
 
-        <div id="scoreDisplay" style="text-align:center;margin-top:10px;font-family:'Press Start 2P',cursive;font-size:0.7rem;color:var(--accent-cyan);">
-            Score: 0 - 0
-        </div>
-        
-        <div class="game-area hidden" id="gameArea">
-            <div class="player-container">
-                <div class="player-header">🎮 YOU</div>
-                <div class="game-wrapper">
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>HOLD</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="holdCanvas1" width="80" height="80"></canvas>
-                            </div>
-                        </div>
-                        <div class="info-box">
-                            <h3>STATS</h3>
-                            <div class="stat">
-                                <span class="stat-label">PPS:</span>
-                                <span class="stat-value" id="pps1">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">APM:</span>
-                                <span class="stat-value" id="apm1">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">B2B:</span>
-                                <span class="stat-value" id="b2b1">0</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Combo:</span>
-                                <span class="stat-value" id="combo1">0</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="canvas-container">
-                        <canvas id="gameCanvas1" width="320" height="640"></canvas>
-                    </div>
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>NEXT</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="queueCanvas1" width="80" height="480"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="player-container">
-                <div class="player-header">🎮 OPPONENT</div>
-                <div class="game-wrapper">
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>HOLD</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="holdCanvas2" width="80" height="80"></canvas>
-                            </div>
-                        </div>
-                        <div class="info-box">
-                            <h3>STATS</h3>
-                            <div class="stat">
-                                <span class="stat-label">PPS:</span>
-                                <span class="stat-value" id="pps2">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">APM:</span>
-                                <span class="stat-value" id="apm2">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">B2B:</span>
-                                <span class="stat-value" id="b2b2">0</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Combo:</span>
-                                <span class="stat-value" id="combo2">0</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="canvas-container">
-                        <canvas id="gameCanvas2" width="320" height="640"></canvas>
-                    </div>
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>NEXT</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="queueCanvas2" width="80" height="480"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="chat-container hidden-chat" id="chatContainer">
-            <h3 style="font-family: 'Press Start 2P', cursive; font-size: 0.8rem; margin-bottom: 10px; text-align: center; color: var(--accent-yellow);">
-                💬 CHAT (Press T)
-            </h3>
-            <div class="chat-messages" id="chatMessages"></div>
-            <div class="chat-input-container">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
-                <button id="sendChatBtn">Send</button>
-            </div>
-        </div>
+<div id="ui-layer">
+    <h1 style="color: var(--accent-cyan); text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
+    <div class="controls">
+        <button id="create-btn">Create Game</button>
+        <input type="text" id="join-id" placeholder="Enter Friend's ID">
+        <button id="join-btn">Join</button>
+        <button id="restart-btn" style="display:none;">Restart Game</button>
     </div>
-    
-    <script>
-        // Game Constants
-        const COLS = 10;
-        const ROWS = 20;
-        const BLOCK_SIZE = 32;
-        const PREVIEW_BLOCK_SIZE = 16;
+    <div id="peer-id-display">Your ID: <span id="my-id">...</span></div>
+</div>
 
-        // Seeded RNG for synchronized bags
-        class SeededRandom {
-            constructor(seed) {
-                this.seed = seed;
-            }
-            
-            next() {
-                this.seed = (this.seed * 9301 + 49297) % 233280;
-                return this.seed / 233280;
-            }
-        }
+<div class="game-container">
+    <div class="player-section" id="player1-area">
+        <h3>YOU</h3>
+        <canvas id="holdCanvas1" class="hold-canvas" width="80" height="80"></canvas>
+        <canvas id="gameCanvas1" width="300" height="600"></canvas>
+        <canvas id="queueCanvas1" class="queue-canvas" width="80" height="400"></canvas>
+        <div id="stats1">Lines: 0 | Attack: 0</div>
+    </div>
+    <div class="player-section" id="player2-area">
+        <h3>OPPONENT</h3>
+        <canvas id="holdCanvas2" class="hold-canvas" width="80" height="80"></canvas>
+        <canvas id="gameCanvas2" width="300" height="600"></canvas>
+        <canvas id="queueCanvas2" class="queue-canvas" width="80" height="400"></canvas>
+        <div id="stats2">Lines: 0 | Attack: 0</div>
+    </div>
+</div>
 
-        // Multiplayer shared bag system with seed
-        let sharedPieceQueue = [];
-        let bagSeed = 0;
-        let seededRNG = null;
+<div id="chat-container">
+    <div id="chat-messages"></div>
+    <input type="text" id="chat-input" placeholder="Press T to chat...">
+</div>
 
-        // Score system
-        let myScore = 0;
-        let opponentScore = 0;
+<script>
+/** * SEEDED RANDOM GENERATOR 
+ * Ensures both players get the exact same pieces
+ */
+class SeededRandom {
+    constructor(seed) {
+        this.seed = seed % 2147483647;
+        if (this.seed <= 0) this.seed += 2147483646;
+    }
+    next() {
+        return this.seed = (this.seed * 48271) % 2147483647;
+    }
+    nextFloat() {
+        return (this.next() - 1) / 2147483646;
+    }
+}
 
-        function updateScoreUI() {
-            document.getElementById("scoreDisplay").textContent = `Score: ${myScore} - ${opponentScore}`;
-        }
+const COLS = 10;
+const ROWS = 20;
+const BLOCK_SIZE = 30;
+
+const COLORS = {
+    'I': '#00f0f0', 'O': '#f0f000', 'T': '#a000f0',
+    'S': '#00f000', 'Z': '#f00000', 'J': '#0000f0', 'L': '#f0a000'
+};
+
+const PIECES = {
+    'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    'O': [[1,1],[1,1]],
+    'T': [[0,1,0],[1,1,1],[0,0,0]],
+    'S': [[0,1,1],[1,1,0],[0,0,0]],
+    'Z': [[1,1,0],[0,1,1],[0,0,0]],
+    'J': [[1,0,0],[1,1,1],[0,0,0]],
+    'L': [[0,0,1],[1,1,1],[0,0,0]]
+};
+
+// SRS Kick Data (Simplified)
+const KICKS = {
+    "0-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+    "1-0": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+    "1-2": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+    "2-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+    "2-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]],
+    "3-2": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+    "3-0": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+    "0-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]]
+};
+
+class GameState {
+    constructor(canvasId, holdId, queueId, playerNum, seed) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.holdCanvas = document.getElementById(holdId);
+        this.queueCanvas = document.getElementById(queueId);
+        this.playerNum = playerNum;
         
-        // PeerJS connection
-        let peer = null;
-        let conn = null;
-        let isHost = false;
-        let myPeerId = null;
+        this.rng = new SeededRandom(seed);
+        this.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+        this.queue = [];
+        this.holdPiece = null;
+        this.canHold = true;
+        this.score = 0;
+        this.lines = 0;
+        this.attack = 0;
         
-        // SRS Kick Table from https://harddrop.com/wiki/SRS
-        const KICK_TABLE = {
-            'JLSTZ': {
-                '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-                'R->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-                'R->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-                '2->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-                '2->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-                'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-                'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
-            },
-            'I': {
-                '0->R': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-                'R->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-                'R->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-                '2->R': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-                '2->L': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-                'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-                'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
-            },
-            'O': {
-                '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]],
-                '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
-            }
-        };
-        
-        // Tetromino shapes and colors
-        const SHAPES = {
-            'I': {
-                shape: [
-                    [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
-                    [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]],
-                    [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]],
-                    [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]
-                ],
-                color: '#00f0f0'
-            },
-            'O': {
-                shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]],
-                color: '#f0f000'
-            },
-            'T': {
-                shape: [
-                    [[0,1,0], [1,1,1], [0,0,0]],
-                    [[0,1,0], [0,1,1], [0,1,0]],
-                    [[0,0,0], [1,1,1], [0,1,0]],
-                    [[0,1,0], [1,1,0], [0,1,0]]
-                ],
-                color: '#a000f0'
-            },
-            'S': {
-                shape: [
-                    [[0,1,1], [1,1,0], [0,0,0]],
-                    [[0,1,0], [0,1,1], [0,0,1]],
-                    [[0,0,0], [0,1,1], [1,1,0]],
-                    [[1,0,0], [1,1,0], [0,1,0]]
-                ],
-                color: '#00f000'
-            },
-            'Z': {
-                shape: [
-                    [[1,1,0], [0,1,1], [0,0,0]],
-                    [[0,0,1], [0,1,1], [0,1,0]],
-                    [[0,0,0], [1,1,0], [0,1,1]],
-                    [[0,1,0], [1,1,0], [1,0,0]]
-                ],
-                color: '#f00000'
-            },
-            'J': {
-                shape: [
-                    [[1,0,0], [1,1,1], [0,0,0]],
-                    [[0,1,1], [0,1,0], [0,1,0]],
-                    [[0,0,0], [1,1,1], [0,0,1]],
-                    [[0,1,0], [0,1,0], [1,1,0]]
-                ],
-                color: '#0000f0'
-            },
-            'L': {
-                shape: [
-                    [[0,0,1], [1,1,1], [0,0,0]],
-                    [[0,1,0], [0,1,0], [0,1,1]],
-                    [[0,0,0], [1,1,1], [1,0,0]],
-                    [[1,1,0], [0,1,0], [0,1,0]]
-                ],
-                color: '#f0a000'
-            }
-        };
+        this.currentPiece = null;
+        this.currentType = '';
+        this.currentX = 0;
+        this.currentY = 0;
+        this.currentRotation = 0;
+        this.lastMoveWasRotation = false;
+        this.lastKickIndex = 0;
 
-        function generateBag() {
-            const bag = ['I','O','T','S','Z','J','L'];
+        this.dropCounter = 0;
+        this.dropInterval = 1000;
+        this.lockTimer = 0;
+        this.lockDelay = 500;
+        this.isGameOver = false;
+
+        this.fillQueue();
+        this.spawnPiece();
+    }
+
+    fillQueue() {
+        while (this.queue.length < 14) {
+            let bag = ['I','O','T','S','Z','J','L'];
             for (let i = bag.length - 1; i > 0; i--) {
-                const j = Math.floor(seededRNG.next() * (i + 1));
+                const j = Math.floor(this.rng.nextFloat() * (i + 1));
                 [bag[i], bag[j]] = [bag[j], bag[i]];
             }
-            return bag;
+            this.queue.push(...bag);
         }
+    }
 
-        function getSharedNextPiece() {
-            if (sharedPieceQueue.length === 0) {
-                const newBag = generateBag();
-                sharedPieceQueue.push(...newBag);
-            }
-            return sharedPieceQueue.shift();
+    spawnPiece(type = null) {
+        this.currentType = type || this.queue.shift();
+        this.fillQueue();
+        this.currentPiece = PIECES[this.currentType];
+        this.currentX = Math.floor(COLS / 2) - Math.floor(this.currentPiece[0].length / 2);
+        this.currentY = 0;
+        this.currentRotation = 0;
+        this.canHold = true;
+        this.lastMoveWasRotation = false;
+
+        if (!this.isValid(this.currentX, this.currentY, this.currentPiece)) {
+            this.isGameOver = true;
+            return false;
         }
-        
-        // Game State
-        class GameState {
-            constructor(canvasId, holdCanvasId, queueCanvasId, playerId) {
-                this.canvas = document.getElementById(canvasId);
-                this.ctx = this.canvas.getContext('2d');
-                this.holdCanvas = document.getElementById(holdCanvasId);
-                this.holdCtx = this.holdCanvas.getContext('2d');
-                this.queueCanvas = document.getElementById(queueCanvasId);
-                this.queueCtx = this.queueCanvas.getContext('2d');
-                this.playerId = playerId;
-                
-                this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-                this.currentPiece = null;
-                this.currentX = 0;
-                this.currentY = 0;
-                this.currentRotation = 0;
-                this.holdPiece = null;
-                this.canHold = true;
+        return true;
+    }
 
-                this.queue = [];
-                this.gravity = 1000;
-                this.lastGravityTime = 0;
-                this.gameStartTime = Date.now();
-                
-                this.lockDelay = 500;
-                this.lockDelayTimer = 0;
-                this.isTouchingGround = false;
-                this.maxLockResets = 15;
-                this.lockResetCount = 0;
-                this.hardDropCooldown = 0;
-                this.hardDropCooldownFrames = 10;
-
-                this.lastMoveOrRotateTime = 0;
-                this.wasManualDrop = false; // Track if piece was dropped manually
-                
-                this.piecesPlaced = 0;
-                this.attacksSent = 0;
-                this.b2bCounter = 0;
-                this.comboCounter = -1;
-                this.lastClearWasB2B = false;
-                
-                this.dcdTimer = 0;
-
-                // Track last rotation for T-spin detection
-                this.lastSuccessfulRotation = null;
-                this.lastKickUsed = 0;
-
-                // Garbage queue system
-                this.pendingGarbage = [];
-                
-                this.initQueue();
-            }
-            
-            initQueue() {
-                for (let i = 0; i < 6; i++) {
-                    this.queue.push(getSharedNextPiece());
-                }
-            }
-            
-            getSpawnColumn(pieceType) {
-                const spawnColumns = {
-                    'O': 4,
-                    'T': 3,
-                    'Z': 3,
-                    'I': 3,
-                    'L': 3,
-                    'J': 3,
-                    'S': 3
-                };
-                return spawnColumns[pieceType] || 3;
-            }
-            
-            spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(getSharedNextPiece());
-                this.currentPiece = pieceType;
-                this.currentRotation = 0;
-                this.currentX = this.getSpawnColumn(pieceType);
-                this.currentY = 0;
-                this.canHold = true;
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                this.hardDropCooldown = 0;
-                this.lastSuccessfulRotation = null;
-                this.lastKickUsed = 0;
-                this.wasManualDrop = false;
-                
-                if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
-                    return false;
-                }
-                return true;
-            }
-            
-            isValidPosition(x, y, rotation) {
-                const shape = SHAPES[this.currentPiece].shape[rotation];
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col]) {
-                            const newX = x + col;
-                            const newY = y + row;
-                            if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
-                            if (newY >= 0 && this.board[newY][newX]) return false;
-                        }
-                    }
-                }
-                return true;
-            }
-            
-            rotate(direction) {
-                const oldRotation = this.currentRotation;
-                let newRotation;
-                
-                if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
-                else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
-                else if (direction === '180') newRotation = (oldRotation + 2) % 4;
-                
-                const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
-                                   this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
-                const rotations = ['0', 'R', '2', 'L'];
-                const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
-                const kicks = kickTable[kickKey] || [[0, 0]];
-                
-                for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
-                    const [dx, dy] = kicks[kickIndex];
-                    if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newRotation)) {
-                        this.currentX += dx;
-                        this.currentY -= dy;
-                        this.currentRotation = newRotation;
-                        this.dcdTimer = parseInt(document.getElementById('dcd').value);
-
-                        this.lastMoveOrRotateTime = performance.now();
-                        this.lastSuccessfulRotation = direction;
-                        this.lastKickUsed = kickIndex;
-
-                        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                            this.lockDelayTimer = 0;
-                            this.lockResetCount++;
-                        }
-                        return true;
-                    }
-                }
-                return false;
-            }
-            
-            move(dx) {
-                if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
-                    this.currentX += dx;
-
-                    this.lastMoveOrRotateTime = performance.now();
-
-                    if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                        this.lockDelayTimer = 0;
-                        this.lockResetCount++;
-                    }
-                    return true;
-                }
-                return false;
-            }
-            
-            softDrop() {
-                const sdf = document.getElementById('sdf').value;
-                const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
-                
-                if (multiplier === Infinity) {
-                    this.wasManualDrop = true;
-                    this.hardDrop();
-                } else {
-                    if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                        this.currentY++;
-                        this.lastMoveOrRotateTime = performance.now();
-                        this.wasManualDrop = true;
-                        
-                        // Reset lock delay when soft dropping
-                        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                            this.lockDelayTimer = 0;
-                            this.lockResetCount++;
-                        }
-                        return true;
-                    }
-                }
-                return false;
-            }
-            
-            hardDrop() {
-                const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                if (preventMissdrop && this.hardDropCooldown > 0) return;
-                
-                while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                    this.currentY++;
-                }
-                this.wasManualDrop = true;
-                this.lockPiece();
-            }
-            
-            lockPiece() {
-                const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col]) {
-                            const boardY = this.currentY + row;
-                            const boardX = this.currentX + col;
-                            if (boardY >= 0) {
-                                this.board[boardY][boardX] = this.currentPiece;
-                            }
-                        }
-                    }
-                }
-                
-                this.piecesPlaced++;
-                this.dcdTimer = parseInt(document.getElementById('dcd').value);
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                this.clearLines();
-            }
-            
-            clearLines() {
-                const clearedRows = [];
-                
-                for (let row = 0; row < ROWS; row++) {
-                    if (this.board[row].every(cell => cell !== 0)) {
-                        clearedRows.push(row);
-                    }
-                }
-                
-                const linesCleared = clearedRows.length;
-                
-                if (linesCleared > 0) {
-                    for (let i = clearedRows.length - 1; i >= 0; i--) {
-                        this.board.splice(clearedRows[i], 1);
-                    }
-                    
-                    for (let i = 0; i < linesCleared; i++) {
-                        this.board.unshift(Array(COLS).fill(0));
-                    }
-                    
-                    const spinResult = this.checkSpin();
-                    const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                    let attack = this.calculateAttack(linesCleared, spinResult, isAllClear);
-                    
-                    const isB2BMove = linesCleared === 4 || (spinResult && spinResult.type !== 'none');
-                    if (isB2BMove) {
-                        if (this.lastClearWasB2B) {
-                            this.b2bCounter++;
-                            const b2bBonus = Math.floor(this.b2bCounter / 5);
-                            attack += b2bBonus;
-                        } else {
-                            this.b2bCounter = 1;
-                        }
-                        this.lastClearWasB2B = true;
-                    } else {
-                        this.b2bCounter = 0;
-                        this.lastClearWasB2B = false;
-                    }
-                    
-                    this.comboCounter++;
-                    if (this.comboCounter >= 4) attack += 1;
-                    
-                    if (this.pendingGarbage.length > 0) {
-                        let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
-                        
-                        if (attack >= totalPending) {
-                            attack -= totalPending;
-                            this.pendingGarbage = [];
-                            addChatMessage(`Canceled ${totalPending} garbage lines!`, 'System');
-                        } else {
-                            let remaining = attack;
-                            this.pendingGarbage = this.pendingGarbage.filter(g => {
-                                if (remaining >= g.lines) {
-                                    remaining -= g.lines;
-                                    return false;
-                                } else if (remaining > 0) {
-                                    g.lines -= remaining;
-                                    remaining = 0;
-                                    return true;
-                                }
-                                return true;
-                            });
-                            addChatMessage(`Canceled ${attack} garbage lines!`, 'System');
-                            attack = 0;
-                        }
-                    }
-                    
-                    this.attacksSent += attack;
-                    if (attack > 0) {
-                        this.sendAttack(attack);
-                    }
-                } else {
-                    this.comboCounter = -1;
-                    
-                    if (this.pendingGarbage.length > 0) {
-                        this.applyGarbage();
-                    }
-                }
-                
-                this.updateStats();
-            }
-            
-            checkSpin() {
-                if (this.currentPiece === 'T') {
-                    return this.checkTSpin();
-                }
-                return { type: 'none', isMini: false };
-            }
-            
-            checkTSpin() {
-                // Must have rotated last
-                if (!this.lastSuccessfulRotation) {
-                    return { type: 'none', isMini: false };
-                }
-
-                const corners = [
-                    [this.currentX, this.currentY],           // top-left
-                    [this.currentX + 2, this.currentY],       // top-right
-                    [this.currentX, this.currentY + 2],       // bottom-left
-                    [this.currentX + 2, this.currentY + 2]    // bottom-right
-                ];
-                
-                let filledCorners = 0;
-                let filledFrontCorners = 0;
-                
-                // Determine which corners are "front" based on rotation
-                let frontCornerIndices = [];
-                if (this.currentRotation === 0) frontCornerIndices = [2, 3]; // bottom
-                else if (this.currentRotation === 1) frontCornerIndices = [0, 2]; // left
-                else if (this.currentRotation === 2) frontCornerIndices = [0, 1]; // top
-                else if (this.currentRotation === 3) frontCornerIndices = [1, 3]; // right
-                
-                for (let i = 0; i < corners.length; i++) {
-                    const [x, y] = corners[i];
-                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
-                        filledCorners++;
-                        if (frontCornerIndices.includes(i)) {
-                            filledFrontCorners++;
-                        }
-                    }
-                }
-                
-                // Must have at least 3 corners filled
-                if (filledCorners >= 3) {
-                    // Check if it's a T-spin or T-spin mini
-                    // Full T-spin: both front corners filled OR used kick 4 (index 4)
-                    // T-spin mini: only 3 corners filled and NOT both front corners
-                    
-                    const isMini = (filledCorners === 3 && filledFrontCorners < 2 && this.lastKickUsed !== 4);
-                    
-                    return { 
-                        type: 'tspin', 
-                        isMini: isMini 
-                    };
-                }
-                
-                return { type: 'none', isMini: false };
-            }
-            
-            calculateAttack(lines, spinResult, isAllClear) {
-                let attack = 0;
-                
-                if (isAllClear) {
-                    attack = lines === 4 ? 10 : 8;
-                } else if (spinResult.type === 'tspin') {
-                    if (spinResult.isMini) {
-                        // T-spin mini
-                        if (lines === 1) attack = 0;
-                        else if (lines === 2) attack = 1;
-                    } else {
-                        // Full T-spin
-                        if (lines === 1) attack = 2;
-                        else if (lines === 2) attack = 4;
-                        else if (lines === 3) attack = 6;
-                    }
-                } else {
-                    // Regular clears
-                    if (lines === 4) attack = 4;
-                    else if (lines === 3) attack = 2;
-                    else if (lines === 2) attack = 1;
-                }
-                
-                return attack;
-            }
-            
-            sendAttack(lines) {
-                if (conn && conn.open && lines > 0) {
-                    const cappedLines = Math.min(lines, 10);
-                    conn.send({
-                        type: 'attack',
-                        lines: cappedLines
-                    });
-                }
-            }
-            
-            receiveAttack(lines) {
-                this.pendingGarbage.push({
-                    lines: lines,
-                    hole: Math.floor(Math.random() * COLS)
-                });
-            }
-            
-            applyGarbage() {
-                if (this.pendingGarbage.length === 0) return;
-                
-                let totalLines = 0;
-                
-                for (const garbage of this.pendingGarbage) {
-                    totalLines += garbage.lines;
-                }
-                
-                for (let i = 0; i < totalLines && i < ROWS; i++) {
-                    this.board.shift();
-                }
-                
-                let linesAdded = 0;
-                for (const garbage of this.pendingGarbage) {
-                    const hole = garbage.hole;
-                    
-                    for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
-                        const garbageLine = Array(COLS).fill('G');
-                        garbageLine[hole] = 0;
-                        this.board.push(garbageLine);
-                        linesAdded++;
-                    }
-                }
-                
-                addChatMessage(`Received ${totalLines} garbage lines!`, 'System');
-                this.pendingGarbage = [];
-            }
-            
-            holdCurrentPiece() {
-                if (!this.canHold) return false;
-                
-                if (this.holdPiece === null) {
-                    this.holdPiece = this.currentPiece;
-                    this.spawnPiece();
-                } else {
-                    const temp = this.holdPiece;
-                    this.holdPiece = this.currentPiece;
-                    this.currentPiece = temp;
-                    this.currentRotation = 0;
-                    this.currentX = this.getSpawnColumn(temp);
-                    this.currentY = 0;
-                    this.lastSuccessfulRotation = null;
-                    this.lastKickUsed = 0;
-                }
-                
-                this.canHold = false;
-                return true;
-            }
-            
-            updateStats() {
-                const elapsed = (Date.now() - this.gameStartTime) / 1000;
-                const pps = this.piecesPlaced / elapsed;
-                const apm = (this.attacksSent / elapsed) * 60;
-                
-                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
-                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
-                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
-                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
-            }
-            
-            getState() {
-                return {
-                    board: this.board.map(row => [...row]),
-                    currentPiece: this.currentPiece,
-                    currentX: this.currentX,
-                    currentY: this.currentY,
-                    currentRotation: this.currentRotation,
-                    holdPiece: this.holdPiece,
-                    queue: [...this.queue],
-                    piecesPlaced: this.piecesPlaced,
-                    attacksSent: this.attacksSent,
-                    b2bCounter: this.b2bCounter,
-                    comboCounter: this.comboCounter
-                };
-            }
-            
-            setState(state) {
-                this.board = state.board.map(row => [...row]);
-                this.currentPiece = state.currentPiece;
-                this.currentX = state.currentX;
-                this.currentY = state.currentY;
-                this.currentRotation = state.currentRotation;
-                this.holdPiece = state.holdPiece;
-                this.queue = [...state.queue];
-                this.piecesPlaced = state.piecesPlaced;
-                this.attacksSent = state.attacksSent;
-                this.b2bCounter = state.b2bCounter;
-                this.comboCounter = state.comboCounter;
-                
-                const elapsed = (Date.now() - this.gameStartTime) / 1000;
-                const pps = this.piecesPlaced / elapsed;
-                const apm = (this.attacksSent / elapsed) * 60;
-                
-                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
-                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
-                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
-                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
-            }
-            
-            draw() {
-                this.ctx.fillStyle = '#0a0e27';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                this.ctx.strokeStyle = 'rgba(139, 157, 195, 0.1)';
-                this.ctx.lineWidth = 1;
-                for (let i = 0; i <= COLS; i++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(i * BLOCK_SIZE, 0);
-                    this.ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-                    this.ctx.stroke();
-                }
-                for (let i = 0; i <= ROWS; i++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, i * BLOCK_SIZE);
-                    this.ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE);
-                    this.ctx.stroke();
-                }
-                
-                for (let row = 0; row < ROWS; row++) {
-                    for (let col = 0; col < COLS; col++) {
-                        if (this.board[row][col]) {
-                            const color = this.board[row][col] === 'G' ? '#666666' : 
-                                         SHAPES[this.board[row][col]].color;
-                            this.drawBlock(this.ctx, col * BLOCK_SIZE, row * BLOCK_SIZE, color);
-                        }
-                    }
-                }
-                
-                if (this.currentPiece) {
-                    let ghostY = this.currentY;
-                    while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
-                        ghostY++;
-                    }
-                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, ghostY, 
-                                  this.currentRotation, 0.3);
-                }
-                
-                if (this.currentPiece) {
-                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, 
-                                  this.currentRotation);
-                }
-                
-                this.drawHold();
-                this.drawQueue();
-            }
-            
-            drawBlock(ctx, x, y, color, alpha = 1.0) {
-                ctx.fillStyle = color;
-                ctx.globalAlpha = alpha;
-                ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, 6);
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                ctx.fillRect(x + 2, y + BLOCK_SIZE - 8, BLOCK_SIZE - 4, 6);
-                ctx.globalAlpha = 1.0;
-            }
-            
-            drawPiece(ctx, pieceType, x, y, rotation, alpha = 1.0) {
-                const shape = SHAPES[pieceType].shape[rotation];
-                const color = SHAPES[pieceType].color;
-                
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col]) {
-                            this.drawBlock(ctx, (x + col) * BLOCK_SIZE, 
-                                         (y + row) * BLOCK_SIZE, color, alpha);
-                        }
-                    }
-                }
-            }
-            
-            drawHold() {
-                this.holdCtx.fillStyle = '#0a0e27';
-                this.holdCtx.fillRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
-                
-                if (this.holdPiece) {
-                    const shape = SHAPES[this.holdPiece].shape[0];
-                    const color = SHAPES[this.holdPiece].color;
-                    const offsetX = (this.holdCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
-                    const offsetY = (this.holdCanvas.height - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
-                    for (let row = 0; row < shape.length; row++) {
-                        for (let col = 0; col < shape[row].length; col++) {
-                            if (shape[row][col]) {
-                                this.holdCtx.fillStyle = color;
-                                this.holdCtx.fillRect(
-                                    offsetX + col * PREVIEW_BLOCK_SIZE,
-                                    offsetY + row * PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE - 1,
-                                    PREVIEW_BLOCK_SIZE - 1
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            
-            drawQueue() {
-                this.queueCtx.fillStyle = '#0a0e27';
-                this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
-                
-                for (let i = 0; i < 6; i++) {
-                    const pieceType = this.queue[i];
-                    const shape = SHAPES[pieceType].shape[0];
-                    const color = SHAPES[pieceType].color;
-                    const offsetX = (this.queueCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
-                    const offsetY = i * 80 + (80 - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
-                    for (let row = 0; row < shape.length; row++) {
-                        for (let col = 0; col < shape[row].length; col++) {
-                            if (shape[row][col]) {
-                                this.queueCtx.fillStyle = color;
-                                this.queueCtx.fillRect(
-                                    offsetX + col * PREVIEW_BLOCK_SIZE,
-                                    offsetY + row * PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE - 1,
-                                    PREVIEW_BLOCK_SIZE - 1
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Game state instances
-        let gameState1 = null;
-        let gameState2 = null;
-        let gameRunning = false;
-        
-        // Key bindings
-        const keyBindings = {
-            left: 'ArrowLeft',
-            right: 'ArrowRight',
-            softDrop: 'ArrowDown',
-            hardDrop: ' ',
-            rotateCW: 'ArrowUp',
-            rotateCCW: 'z',
-            rotate180: 'x',
-            hold: 'c'
-        };
-        
-        // Key state tracking for DAS
-        const keyState = {
-            left: false,
-            right: false,
-            softDrop: false
-        };
-        
-        const keyTimers = {
-            left: 0,
-            right: 0,
-            softDrop: 0
-        };
-        
-        Object.keys(keyBindings).forEach(action => {
-            const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
-            input.addEventListener('click', () => {
-                input.value = 'Press a key...';
-                const listener = (e) => {
-                    e.preventDefault();
-                    keyBindings[action] = e.key;
-                    input.value = e.key;
-                    document.removeEventListener('keydown', listener);
-                };
-                document.addEventListener('keydown', listener);
-            });
-        });
-        
-        // Chat functions
-        function addChatMessage(message, sender = 'System') {
-            const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'chat-message';
-            messageDiv.textContent = `${sender}: ${message}`;
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function toggleChat(forceState = null) {
-            const chat = document.getElementById("chatContainer");
-            if (forceState === true) chat.classList.remove("hidden-chat");
-            else if (forceState === false) chat.classList.add("hidden-chat");
-            else chat.classList.toggle("hidden-chat");
-
-            if (!chat.classList.contains("hidden-chat")) {
-                document.getElementById("chatInput").focus();
-            }
-        }
-        
-        document.getElementById('sendChatBtn').addEventListener('click', () => {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (message && conn && conn.open) {
-                conn.send({
-                    type: 'chat',
-                    message: message
-                });
-                addChatMessage(message, 'You');
-                input.value = '';
-            }
-        });
-        
-        document.getElementById('chatInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('sendChatBtn').click();
-            }
-        });
-        
-        // PeerJS connection functions
-        function initializePeer() {
-            peer = new Peer({
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
-            
-            peer.on('open', (id) => {
-                myPeerId = id;
-                document.getElementById('peerIdDisplay').textContent = id;
-                document.getElementById('myPeerId').classList.remove('hidden');
-                addChatMessage(`Your Peer ID: ${id}`);
-                addChatMessage('Share this ID with your opponent to let them join!');
-            });
-            
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-                addChatMessage('Opponent connected!');
-                document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
-                
-                // Host generates and sends the seed
-                bagSeed = Math.floor(Math.random() * 1000000);
-                seededRNG = new SeededRandom(bagSeed);
-                sharedPieceQueue = [];
-                
-                conn.send({
-                    type: 'gameSeed',
-                    seed: bagSeed
-                });
-                
-                setTimeout(() => startGame(), 1000);
-            });
-            
-            peer.on('error', (err) => {
-                console.error('PeerJS error:', err);
-                addChatMessage(`Connection error: ${err.type}`);
-            });
-        }
-        
-        function endGame(winner) {
-            gameRunning = false;
-
-            if (winner === "me") {
-                myScore++;
-                addChatMessage("Opponent lost! You win this round!", "System");
-                document.getElementById("gameStatus").textContent = "You WIN!";
-            } else if (winner === "opponent") {
-                opponentScore++;
-                addChatMessage("You lost! Opponent wins this round!", "System");
-                document.getElementById("gameStatus").textContent = "You LOST!";
-            }
-
-            updateScoreUI();
-
-            if (conn && conn.open) {
-                conn.send({
-                    type: "gameOver",
-                    winner: winner
-                });
-            }
-
-            if (isHost) {
-                document.getElementById("restartBtn").classList.remove("hidden");
-            } else {
-                document.getElementById("restartBtn").classList.add("hidden");
-            }
-        }
-
-        function setupConnection() {
-            conn.on('data', (data) => {
-                if (data.type === 'chat') {
-                    addChatMessage(data.message, 'Opponent');
-                } else if (data.type === 'attack') {
-                    if (gameState1) {
-                        gameState1.receiveAttack(data.lines);
-                    }
-                } else if (data.type === 'start') {
-                    startGame();
-                } else if (data.type === 'gameState') {
-                    if (gameState2) {
-                        gameState2.setState(data.state);
-                    }
-                } else if (data.type === 'restart') {
-                    restartGame();
-                } else if (data.type === 'gameSeed') {
-                    bagSeed = data.seed;
-                    seededRNG = new SeededRandom(bagSeed);
-                    sharedPieceQueue = [];
-                    addChatMessage(`Received game seed: ${bagSeed}`, 'System');
-                } else if (data.type === "gameOver") {
-                    if (data.winner === "me") {
-                        opponentScore++;
-                        document.getElementById("gameStatus").textContent = "Opponent WIN!";
-                    } else {
-                        myScore++;
-                        document.getElementById("gameStatus").textContent = "Opponent LOST!";
-                    }
-                    updateScoreUI();
-                    gameRunning = false;
-
-                    if (isHost) {
-                        document.getElementById("restartBtn").classList.remove("hidden");
-                    } else {
-                        document.getElementById("restartBtn").classList.add("hidden");
-                    }
-                }
-            });
-            
-            conn.on('close', () => {
-                addChatMessage('Opponent disconnected');
-                document.getElementById('gameStatus').textContent = 'Opponent disconnected';
-                gameRunning = false;
-            });
-        }
-        
-        function copyPeerId() {
-            const peerId = document.getElementById('peerIdDisplay').textContent;
-            navigator.clipboard.writeText(peerId).then(() => {
-                addChatMessage('Peer ID copied to clipboard!');
-            });
-        }
-        
-        // Button handlers
-        document.getElementById('createGameBtn').addEventListener('click', () => {
-            if (!peer) {
-                initializePeer();
-                isHost = true;
-                document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
-                document.getElementById('createGameBtn').disabled = true;
-            }
-        });
-        
-        document.getElementById('joinGameBtn').addEventListener('click', () => {
-            const opponentId = document.getElementById('opponentPeerId').value.trim();
-            if (!opponentId) {
-                addChatMessage('Please enter an opponent Peer ID');
-                return;
-            }
-            
-            if (!peer) {
-                initializePeer();
-            }
-            
-            setTimeout(() => {
-                conn = peer.connect(opponentId);
-                
-                conn.on('open', () => {
-                    setupConnection();
-                    addChatMessage('Connected to opponent!');
-                    document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
-                    document.getElementById('joinGameBtn').disabled = true;
-                });
-                
-                conn.on('error', (err) => {
-                    addChatMessage(`Failed to connect: ${err}`);
-                });
-            }, 1000);
-        });
-        
-        document.getElementById('restartBtn').addEventListener('click', () => {
-            if (!isHost) return;
-
-            // Generate new seed
-            bagSeed = Math.floor(Math.random() * 1000000);
-            seededRNG = new SeededRandom(bagSeed);
-            sharedPieceQueue = [];
-
-            if (conn && conn.open) {
-                conn.send({ 
-                    type: 'restart'
-                });
-                conn.send({
-                    type: 'gameSeed',
-                    seed: bagSeed
-                });
-            }
-            restartGame();
-        });
-        
-        function restartGame() {
-            gameRunning = false;
-            
-            setTimeout(() => {
-                startGame();
-                addChatMessage('New round started!', 'System');
-            }, 500);
-        }
-        
-        function startGame() {
-            gameRunning = true;
-            document.getElementById('gameArea').classList.remove('hidden');
-            document.getElementById('gameStatus').textContent = 'Game in progress!';
-            
-            if (isHost) {
-                document.getElementById("restartBtn").classList.remove("hidden");
-            } else {
-                document.getElementById("restartBtn").classList.add("hidden");
-            }
-
-            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1);
-            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2);
-            
-            const startTime = Date.now();
-            gameState1.gameStartTime = startTime;
-            gameState2.gameStartTime = startTime;
-            
-            gameState1.spawnPiece();
-            gameState2.spawnPiece();
-            
-            addChatMessage('Game started! Good luck!');
-            
-            gameLoop();
-        }
-        
-        // Game loop
-        let lastTime = 0;
-        let lastStateSendTime = 0;
-        const STATE_SEND_INTERVAL = 50;
-        
-        function gameLoop(timestamp = 0) {
-            if (!gameRunning) return;
-            
-            const deltaTime = timestamp - lastTime;
-            lastTime = timestamp;
-            
-            if (gameState1) {
-                if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
-                
-                const wasTouching = gameState1.isTouchingGround;
-                gameState1.isTouchingGround = !gameState1.isValidPosition(
-                    gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
+    isValid(x, y, piece) {
+        return piece.every((row, dy) => {
+            return row.every((value, dx) => {
+                let nextX = x + dx;
+                let nextY = y + dy;
+                return (
+                    value === 0 ||
+                    (nextX >= 0 && nextX < COLS && nextY < ROWS &&
+                    (nextY < 0 || !this.board[nextY][nextX]))
                 );
-                
-                if (gameState1.isTouchingGround && !wasTouching) {
-                    gameState1.lockDelayTimer = 0;
-                }
-                
-                gameState1.lastGravityTime += deltaTime;
-                
-                // Handle DAS for held keys
-                const arr = parseInt(document.getElementById('arr').value);
-                const das = parseInt(document.getElementById('das').value);
-                
-                if (keyState.left) {
-                    keyTimers.left += deltaTime;
-                    if (keyTimers.left >= das) {
-                        if (arr === 0 || keyTimers.left >= das + arr) {
-                            if (gameState1.dcdTimer <= 0) gameState1.move(-1);
-                            if (arr > 0) keyTimers.left = das;
-                        }
-                    }
-                }
-                
-                if (keyState.right) {
-                    keyTimers.right += deltaTime;
-                    if (keyTimers.right >= das) {
-                        if (arr === 0 || keyTimers.right >= das + arr) {
-                            if (gameState1.dcdTimer <= 0) gameState1.move(1);
-                            if (arr > 0) keyTimers.right = das;
-                        }
-                    }
-                }
-                
-                if (keyState.softDrop) {
-                    const sdf = document.getElementById('sdf').value;
-                    const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
-                    const softDropInterval = multiplier === Infinity ? 0 : gameState1.gravity / multiplier;
-                    
-                    keyTimers.softDrop += deltaTime;
-                    if (keyTimers.softDrop >= softDropInterval) {
-                        gameState1.softDrop();
-                        keyTimers.softDrop = 0;
-                    }
-                }
-                
-                if (gameState1.isTouchingGround) {
-                    gameState1.lockDelayTimer += deltaTime;
-                    
-                    if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
-                        gameState1.lockResetCount >= gameState1.maxLockResets) {
+            });
+        });
+    }
 
-                        gameState1.lockPiece();
-                        
-                        const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                        if (preventMissdrop) {
-                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
-                        }
-                        
-                        if (!gameState1.spawnPiece()) {
-                            endGame("opponent");
-                            return;
-                        }
-                        gameState1.lastGravityTime = 0;
-                    }
-                } else {
-                    if (gameState1.lastGravityTime >= gameState1.gravity) {
-                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
-                                                       gameState1.currentRotation)) {
-                            gameState1.currentY++;
-                        }
-                        gameState1.lastGravityTime = 0;
-                    }
-                }
-                
-                if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
-                gameState1.draw();
-                
-                if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
-                    conn.send({
-                        type: 'gameState',
-                        state: gameState1.getState()
-                    });
-                    lastStateSendTime = timestamp;
-                }
-            }
-            
-            if (gameState2) {
-                gameState2.draw();
-            }
-            
-            requestAnimationFrame(gameLoop);
-        }
+    rotate(dir) {
+        const prevRotation = this.currentRotation;
+        const nextRotation = (this.currentRotation + (dir === 'cw' ? 1 : 3)) % 4;
+        const nextPiece = this.rotateMatrix(this.currentPiece, dir);
         
-        // Input handling
-        document.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === "t") {
-                if (document.activeElement !== document.getElementById("chatInput")) {
-                    e.preventDefault();
-                    toggleChat();
-                }
+        // SRS Kicks
+        const key = `${prevRotation}-${nextRotation}`;
+        const kicks = KICKS[key] || [[0,0]];
+
+        for (let i = 0; i < kicks.length; i++) {
+            const [kx, ky] = kicks[i];
+            if (this.isValid(this.currentX + kx, this.currentY - ky, nextPiece)) {
+                this.currentX += kx;
+                this.currentY -= ky;
+                this.currentPiece = nextPiece;
+                this.currentRotation = nextRotation;
+                this.lastMoveWasRotation = true;
+                this.lastKickIndex = i;
+                this.lockTimer = 0; // Reset lock delay on successful rotate
                 return;
             }
+        }
+    }
 
-            // if typing in chat, ignore game keys
-            if (document.activeElement === document.getElementById("chatInput")) return;
+    rotateMatrix(matrix, dir) {
+        const N = matrix.length;
+        let result = Array.from({length: N}, () => Array(N).fill(0));
+        for (let y = 0; y < N; y++) {
+            for (let x = 0; x < N; x++) {
+                if (dir === 'cw') result[x][N-1-y] = matrix[y][x];
+                else result[N-1-x][y] = matrix[y][x];
+            }
+        }
+        return result;
+    }
 
-            if (!gameRunning || !gameState1) return;
-            
-            if (e.key === keyBindings.left && !keyState.left) {
-                e.preventDefault();
-                keyState.left = true;
-                keyTimers.left = 0;
-                if (gameState1.dcdTimer <= 0) gameState1.move(-1);
-            } else if (e.key === keyBindings.right && !keyState.right) {
-                e.preventDefault();
-                keyState.right = true;
-                keyTimers.right = 0;
-                if (gameState1.dcdTimer <= 0) gameState1.move(1);
-            } else if (e.key === keyBindings.softDrop && !keyState.softDrop) {
-                e.preventDefault();
-                keyState.softDrop = true;
-                keyTimers.softDrop = 0;
-                gameState1.softDrop();
-            } else if (e.key === keyBindings.hardDrop && !e.repeat) {
-                e.preventDefault();
-                gameState1.hardDrop();
-                if (!gameState1.spawnPiece()) {
-                    endGame("opponent");
+    move(dx) {
+        if (this.isValid(this.currentX + dx, this.currentY, this.currentPiece)) {
+            this.currentX += dx;
+            this.lastMoveWasRotation = false;
+            this.lockTimer = 0; // Reset lock delay on move
+            return true;
+        }
+        return false;
+    }
+
+    softDrop() {
+        if (this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
+            this.currentY++;
+            this.lastMoveWasRotation = false;
+            return true;
+        }
+        return false;
+    }
+
+    hardDrop() {
+        while (this.softDrop()) {}
+        this.lockPiece();
+    }
+
+    hold() {
+        if (!this.canHold) return;
+        const nextType = this.holdPiece;
+        this.holdPiece = this.currentType;
+        if (nextType) this.spawnPiece(nextType);
+        else this.spawnPiece();
+        this.canHold = false;
+    }
+
+    lockPiece() {
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value && this.currentY + dy >= 0) {
+                    this.board[this.currentY + dy][this.currentX + dx] = this.currentType;
                 }
-            } else if (e.key === keyBindings.rotateCW && !e.repeat) {
-                e.preventDefault();
-                gameState1.rotate('cw');
-            } else if (e.key === keyBindings.rotateCCW && !e.repeat) {
-                e.preventDefault();
-                gameState1.rotate('ccw');
-            } else if (e.key === keyBindings.rotate180 && !e.repeat) {
-                e.preventDefault();
-                gameState1.rotate('180');
-            } else if (e.key === keyBindings.hold && !e.repeat) {
-                e.preventDefault();
-                gameState1.holdCurrentPiece();
-            }
+            });
         });
+
+        const spinResult = this.checkSpin();
+        this.clearLines(spinResult);
+        if (!this.spawnPiece()) this.isGameOver = true;
         
-        document.addEventListener('keyup', (e) => {
-            if (e.key === keyBindings.left) {
-                keyState.left = false;
-                keyTimers.left = 0;
-            } else if (e.key === keyBindings.right) {
-                keyState.right = false;
-                keyTimers.right = 0;
-            } else if (e.key === keyBindings.softDrop) {
-                keyState.softDrop = false;
-                keyTimers.softDrop = 0;
-            }
+        // Send state to opponent
+        if (conn && this.playerNum === 1) {
+            sendUpdate();
+        }
+    }
+
+    checkSpin() {
+        if (this.currentType !== 'T' || !this.lastMoveWasRotation) return { isSpin: false, isMini: false };
+
+        // 3-Corner Rule
+        const corners = [
+            [this.currentX, this.currentY], [this.currentX+2, this.currentY],
+            [this.currentX, this.currentY+2], [this.currentX+2, this.currentY+2]
+        ];
+        let filled = 0;
+        corners.forEach(([cx, cy]) => {
+            if (cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && this.board[cy][cx])) filled++;
         });
+
+        if (filled >= 3) {
+            // Check for Mini: If pointing corners (front) aren't both filled 
+            // and it wasn't a kick index 4 (standard SRS)
+            let isMini = this.lastKickIndex < 4; 
+            return { isSpin: true, isMini: isMini };
+        }
+        return { isSpin: false, isMini: false };
+    }
+
+    clearLines(spin) {
+        let cleared = 0;
+        for (let y = ROWS - 1; y >= 0; y--) {
+            if (this.board[y].every(cell => cell !== 0)) {
+                this.board.splice(y, 1);
+                this.board.unshift(Array(COLS).fill(0));
+                cleared++;
+                y++;
+            }
+        }
+
+        if (cleared > 0 || spin.isSpin) {
+            let damage = this.calculateDamage(cleared, spin);
+            this.attack += damage;
+            this.lines += cleared;
+            if (damage > 0 && conn && this.playerNum === 1) {
+                conn.send({ type: 'attack', amount: damage });
+            }
+        }
+    }
+
+    calculateDamage(lines, spin) {
+        if (spin.isSpin) {
+            if (spin.isMini) return lines + 1;
+            return lines * 2; // T-Spin Double = 4, Triple = 6
+        }
+        if (lines === 4) return 4;
+        return lines - 1 > 0 ? lines - 1 : 0;
+    }
+
+    update(deltaTime) {
+        if (this.isGameOver) return;
+
+        this.dropCounter += deltaTime;
+        if (this.dropCounter > this.dropInterval) {
+            if (!this.softDrop()) {
+                this.lockTimer += deltaTime;
+                if (this.lockTimer >= this.lockDelay) {
+                    this.lockPiece();
+                    this.lockTimer = 0;
+                }
+            } else {
+                this.lockTimer = 0;
+            }
+            this.dropCounter = 0;
+        } else if (!this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
+            // We are touching the ground
+            this.lockTimer += deltaTime;
+            if (this.lockTimer >= this.lockDelay) {
+                this.lockPiece();
+                this.lockTimer = 0;
+            }
+        }
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Initialize
-        addChatMessage('Welcome to Tetris Online Battle!');
-        addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
-        addChatMessage('Press T to open/close chat.');
-        updateScoreUI();
-    </script>
+        // Draw Board
+        this.board.forEach((row, y) => {
+            row.forEach((cell, x) => {
+                if (cell) this.drawBlock(this.ctx, x, y, COLORS[cell]);
+            });
+        });
+
+        // Draw Ghost
+        let ghostY = this.currentY;
+        while (this.isValid(this.currentX, ghostY + 1, this.currentPiece)) ghostY++;
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value) {
+                    this.ctx.globalAlpha = 0.2;
+                    this.drawBlock(this.ctx, this.currentX + dx, ghostY + dy, COLORS[this.currentType]);
+                    this.ctx.globalAlpha = 1.0;
+                }
+            });
+        });
+
+        // Draw Current
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value) this.drawBlock(this.ctx, this.currentX + dx, this.currentY + dy, COLORS[this.currentType]);
+            });
+        });
+
+        this.drawUI();
+    }
+
+    drawBlock(ctx, x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    }
+
+    drawUI() {
+        const stats = document.getElementById(`stats${this.playerNum}`);
+        stats.innerText = `Lines: ${this.lines} | Attack: ${this.attack}`;
+
+        // Hold
+        const hCtx = this.holdCanvas.getContext('2d');
+        hCtx.clearRect(0,0,80,80);
+        if (this.holdPiece) {
+            const p = PIECES[this.holdPiece];
+            p.forEach((row, y) => row.forEach((v, x) => {
+                if (v) {
+                    hCtx.fillStyle = COLORS[this.holdPiece];
+                    hCtx.fillRect(x*15+10, y*15+10, 15, 15);
+                }
+            }));
+        }
+
+        // Queue (Top 5)
+        const qCtx = this.queueCanvas.getContext('2d');
+        qCtx.clearRect(0,0,80,400);
+        this.queue.slice(0, 5).forEach((type, i) => {
+            const p = PIECES[type];
+            p.forEach((row, y) => row.forEach((v, x) => {
+                if (v) {
+                    qCtx.fillStyle = COLORS[type];
+                    qCtx.fillRect(x*15+10, (i*70) + (y*15) + 10, 15, 15);
+                }
+            }));
+        });
+    }
+}
+
+/** * NETWORKING & INPUT
+ */
+let peer = new Peer();
+let conn;
+let isHost = false;
+let gameState1, gameState2;
+let currentSeed = Math.floor(Math.random() * 1000000);
+
+const keys = {};
+window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (!keys[k]) {
+        // Trigger non-repeat actions
+        if (k === 'w' || e.key === 'ArrowUp') gameState1.rotate('cw');
+        if (k === 'q') gameState1.rotate('ccw');
+        if (k === ' ') { e.preventDefault(); gameState1.hardDrop(); }
+        if (k === 'c' || e.key === 'Shift') gameState1.hold();
+        if (k === 't') {
+            e.preventDefault();
+            document.getElementById('chat-input').focus();
+        }
+    }
+    keys[k] = true;
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// DAS/ARR Variables
+let dasTimer = 0;
+let arrTimer = 0;
+const DAS = 170; // Delayed Auto Shift
+const ARR = 30;  // Auto Repeat Rate
+
+function handleInput(dt) {
+    if (!gameState1 || gameState1.isGameOver) return;
+
+    if (keys['s'] || e.key === 'ArrowDown') {
+        gameState1.softDrop(); // Infinite SDF basically happens here if pressed
+    }
+
+    if (keys['a'] || e.key === 'ArrowLeft') {
+        if (dasTimer === 0) {
+            gameState1.move(-1);
+        }
+        dasTimer += dt;
+        if (dasTimer >= DAS) {
+            arrTimer += dt;
+            if (arrTimer >= ARR) {
+                gameState1.move(-1);
+                arrTimer = 0;
+            }
+        }
+    } else if (keys['d'] || e.key === 'ArrowRight') {
+        if (dasTimer === 0) {
+            gameState1.move(1);
+        }
+        dasTimer += dt;
+        if (dasTimer >= DAS) {
+            arrTimer += dt;
+            if (arrTimer >= ARR) {
+                gameState1.move(1);
+                arrTimer = 0;
+            }
+        }
+    } else {
+        dasTimer = 0;
+        arrTimer = 0;
+    }
+}
+
+peer.on('open', id => document.getElementById('my-id').innerText = id);
+
+document.getElementById('create-btn').onclick = () => {
+    isHost = true;
+    document.getElementById('restart-btn').style.display = 'inline-block';
+    addChatMessage("Waiting for opponent...");
+};
+
+document.getElementById('join-btn').onclick = () => {
+    const id = document.getElementById('join-id').value;
+    conn = peer.connect(id);
+    setupConnection();
+};
+
+peer.on('connection', c => {
+    conn = c;
+    isHost = true;
+    setupConnection();
+    conn.send({ type: 'init', seed: currentSeed });
+    startGame(currentSeed);
+});
+
+function setupConnection() {
+    conn.on('data', data => {
+        if (data.type === 'init') {
+            currentSeed = data.seed;
+            startGame(currentSeed);
+        }
+        if (data.type === 'update') {
+            if (gameState2) {
+                gameState2.board = data.board;
+                gameState2.holdPiece = data.holdPiece;
+                gameState2.queue = data.queue;
+                gameState2.lines = data.lines;
+                gameState2.attack = data.attack;
+            }
+        }
+        if (data.type === 'attack') {
+            receiveGarbage(data.amount);
+        }
+        if (data.type === 'restart') {
+            currentSeed = data.seed;
+            startGame(currentSeed);
+        }
+        if (data.type === 'chat') {
+            addChatMessage("Opponent: " + data.msg);
+        }
+    });
+}
+
+function startGame(seed) {
+    gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+    gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
+    requestAnimationFrame(gameLoop);
+}
+
+function sendUpdate() {
+    conn.send({
+        type: 'update',
+        board: gameState1.board,
+        holdPiece: gameState1.holdPiece,
+        queue: gameState1.queue,
+        lines: gameState1.lines,
+        attack: gameState1.attack
+    });
+}
+
+function receiveGarbage(amount) {
+    let hole = Math.floor(Math.random() * COLS);
+    for (let i = 0; i < amount; i++) {
+        gameState1.board.shift();
+        let row = Array(COLS).fill('grey');
+        row[hole] = 0;
+        gameState1.board.push(row);
+    }
+}
+
+document.getElementById('restart-btn').onclick = () => {
+    if (!isHost) return;
+    currentSeed = Math.floor(Math.random() * 1000000);
+    conn.send({ type: 'restart', seed: currentSeed });
+    startGame(currentSeed);
+};
+
+let lastTime = 0;
+function gameLoop(time) {
+    const dt = time - lastTime;
+    lastTime = time;
+
+    handleInput(dt);
+    gameState1.update(dt);
+    gameState1.draw();
+    gameState2.draw();
+
+    if (!gameState1.isGameOver) {
+        requestAnimationFrame(gameLoop);
+    } else {
+        addChatMessage("GAME OVER");
+    }
+}
+
+// Chat Logic
+const chatInput = document.getElementById('chat-input');
+chatInput.onkeydown = (e) => {
+    if (e.key === 'Enter' && chatInput.value.trim() !== "") {
+        const msg = chatInput.value;
+        addChatMessage("You: " + msg);
+        if (conn) conn.send({ type: 'chat', msg: msg });
+        chatInput.value = "";
+        chatInput.blur();
+    }
+};
+
+function addChatMessage(msg) {
+    const div = document.createElement('div');
+    div.innerText = msg;
+    const container = document.getElementById('chat-messages');
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+</script>
 </body>
 </html>
