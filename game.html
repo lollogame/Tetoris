@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - Refined</title>
+    <title>Tetris Multiplayer - Pro Edition</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
@@ -38,24 +38,34 @@
         }
 
         canvas { background: #000; display: block; border: 1px solid #333; }
-        .side-panels { display: flex; flex-direction: column; gap: 10px; }
+        .side-panels { display: flex; flex-direction: column; gap: 10px; width: 80px; text-align: center;}
         
-        .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; }
+        .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; align-items: center; }
         input, button { 
             padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; 
             color: white; border: 1px solid var(--accent-cyan); outline: none;
         }
         button:hover { background: var(--accent-cyan); color: black; cursor: pointer; }
 
+        /* Settings Modal */
+        #settings-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #111; border: 2px solid var(--accent-pink); padding: 20px; z-index: 100;
+            width: 400px; max-height: 80vh; overflow-y: auto; box-shadow: 0 0 30px rgba(255,0,255,0.3);
+        }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .key-btn { width: 120px; text-transform: uppercase; font-size: 10px; border-color: #444; }
+        .key-btn.waiting { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
         #chat-container {
             position: fixed; bottom: 10px; right: 10px; width: 280px;
             display: flex; flex-direction: column;
             background: rgba(10, 14, 39, 0.95); border: 1px solid var(--accent-cyan);
-            max-height: 300px;
+            max-height: 250px;
         }
-        #chat-messages { height: 200px; overflow-y: auto; padding: 8px; font-size: 12px; }
+        #chat-messages { height: 180px; overflow-y: auto; padding: 8px; font-size: 12px; }
         .chat-input-area { display: flex; border-top: 1px solid var(--accent-cyan); }
-        #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; }
+        #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; width: 100%; }
 
         .score-board { font-size: 24px; color: var(--accent-cyan); margin: 5px 0; }
     </style>
@@ -66,59 +76,90 @@
     <h1 style="text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
     <div class="score-board"><span id="p1-wins">0</span> - <span id="p2-wins">0</span></div>
     <div class="controls">
-        <button id="create-btn">Host Match</button>
-        <input type="text" id="join-id" placeholder="Paste ID here">
+        <button id="create-btn">Host</button>
+        <input type="text" id="join-id" placeholder="Friend's ID">
         <button id="join-btn">Join</button>
-        <button id="restart-btn" style="display:none; border-color: var(--accent-pink);">Restart</button>
+        <button id="restart-btn" style="display:none;">Restart</button>
+        <button id="open-settings" style="border-color: var(--accent-pink);">⚙️ Settings</button>
     </div>
-    <div id="my-id-label">Your ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
+    <div id="my-id-label" style="font-size: 10px;">Your ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
 </div>
 
 <div class="game-container">
     <div class="player-section">
         <div class="side-panels">
-            <p>HOLD</p>
+            <p style="font-size: 10px;">HOLD</p>
             <canvas id="hold1" width="80" height="80"></canvas>
-            <div id="stats1" style="font-size: 10px; margin-top: 20px;">LINES: 0<br>ATTACK: 0</div>
+            <div id="stats1" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
         <div>
-            <p>YOU</p>
+            <p style="font-size: 10px;">YOU</p>
             <canvas id="board1" width="300" height="600"></canvas>
         </div>
         <div class="side-panels">
-            <p>NEXT</p>
+            <p style="font-size: 10px;">NEXT</p>
             <canvas id="queue1" width="80" height="400"></canvas>
         </div>
     </div>
 
     <div class="player-section">
         <div class="side-panels">
-            <p>HOLD</p>
+            <p style="font-size: 10px;">HOLD</p>
             <canvas id="hold2" width="80" height="80"></canvas>
-            <div id="stats2" style="font-size: 10px; margin-top: 20px;">LINES: 0<br>ATTACK: 0</div>
+            <div id="stats2" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
         <div>
-            <p>ENEMY</p>
+            <p style="font-size: 10px;">ENEMY</p>
             <canvas id="board2" width="300" height="600"></canvas>
         </div>
         <div class="side-panels">
-            <p>NEXT</p>
+            <p style="font-size: 10px;">NEXT</p>
             <canvas id="queue2" width="80" height="400"></canvas>
         </div>
     </div>
 </div>
 
+<div id="settings-modal">
+    <h2 style="color: var(--accent-pink); margin-bottom: 20px;">Settings</h2>
+    <div id="keybinds-list">
+        </div>
+    <hr style="margin: 15px 0; border: 0; border-top: 1px solid #333;">
+    <div class="setting-row">
+        <span>DAS (Initial Delay)</span>
+        <input type="range" id="das-range" min="80" max="300" value="170">
+    </div>
+    <div class="setting-row">
+        <span>ARR (Repeat Speed)</span>
+        <input type="range" id="arr-range" min="0" max="100" value="30">
+    </div>
+    <button id="close-settings" style="width: 100%; margin-top: 10px;">Save & Close</button>
+</div>
+
 <div id="chat-container">
     <div id="chat-messages"></div>
     <div class="chat-input-area">
-        <input type="text" id="chat-input" placeholder="Type message...">
+        <input type="text" id="chat-input" placeholder="T to chat...">
     </div>
 </div>
 
 <script>
+/** SETTINGS & STORAGE **/
+let settings = {
+    keys: {
+        left: 'arrowleft', right: 'arrowright', softDrop: 'arrowdown', hardDrop: ' ',
+        rotateCW: 'x', rotateCCW: 'z', rotate180: 'a', hold: 'c', chat: 't'
+    },
+    das: 170,
+    arr: 30
+};
+
+// Load from LocalStorage
+const saved = localStorage.getItem('tetris_settings');
+if (saved) settings = JSON.parse(saved);
+
 /** SEEDED RNG **/
 class SeededRandom {
-    constructor(seed) { this.state = seed || Math.floor(Math.random() * 1000000); }
+    constructor(seed) { this.state = seed || Date.now(); }
     next() {
         this.state = (this.state * 1664525 + 1013904223) % 4294967296;
         return this.state / 4294967296;
@@ -132,13 +173,6 @@ const SHAPES = {
     S:[[0,1,1],[1,1,0],[0,0,0]], Z:[[1,1,0],[0,1,1],[0,0,0]], J:[[1,0,0],[1,1,1],[0,0,0]], L:[[0,0,1],[1,1,1],[0,0,0]]
 };
 
-const KICKS = {
-    "0-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "1-0":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
-    "1-2":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "2-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-    "2-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "3-2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-    "3-0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "0-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]]
-};
-
 class GameState {
     constructor(bId, hId, qId, pNum, seed) {
         this.canvas = document.getElementById(bId); this.ctx = this.canvas.getContext('2d');
@@ -147,9 +181,8 @@ class GameState {
         this.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         this.queue = []; this.holdPiece = null; this.canHold = true;
         this.lines = 0; this.attack = 0; this.isGameOver = false;
-        
         this.curr = null; this.type = ''; this.x = 0; this.y = 0; this.rot = 0;
-        this.dropTimer = 0; this.lockTimer = 0; this.lastMoveRot = false; this.lastKick = 0;
+        this.dropTimer = 0; this.lockTimer = 0; this.lastMoveRot = false;
 
         this.fillQueue(); this.spawn();
     }
@@ -186,16 +219,9 @@ class GameState {
     }
 
     rotate(dir) {
-        const nextRot = (this.rot + (dir === 'cw' ? 1 : 3)) % 4;
         const nextP = this.rotateMat(this.curr, dir);
-        const kicks = KICKS[`${this.rot}-${nextRot}`] || [[0,0]];
-        for (let i=0; i<kicks.length; i++) {
-            const [kx, ky] = kicks[i];
-            if (this.isValid(this.x + kx, this.y - ky, nextP)) {
-                this.x += kx; this.y -= ky; this.curr = nextP; this.rot = nextRot;
-                this.lastMoveRot = true; this.lastKick = i; this.lockTimer = 0;
-                return;
-            }
+        if (this.isValid(this.x, this.y, nextP)) {
+            this.curr = nextP; this.lastMoveRot = true; this.lockTimer = 0;
         }
     }
 
@@ -236,21 +262,12 @@ class GameState {
         this.curr.forEach((row, dy) => row.forEach((v, dx) => {
             if (v && this.y + dy >= 0) this.board[this.y+dy][this.x+dx] = this.type;
         }));
-        const spin = this.checkSpin();
-        this.clearLines(spin);
+        this.clearLines();
         if (!this.spawn()) this.isGameOver = true;
         if (this.pNum === 1 && conn) sendState();
     }
 
-    checkSpin() {
-        if (this.type !== 'T' || !this.lastMoveRot) return {isSpin:false};
-        const corners = [[this.x,this.y],[this.x+2,this.y],[this.x,this.y+2],[this.x+2,this.y+2]];
-        let f = 0;
-        corners.forEach(([cx,cy]) => { if(cx<0||cx>=COLS||cy>=ROWS||(cy>=0&&this.board[cy][cx])) f++; });
-        return { isSpin: f >= 3, isMini: f >= 3 && this.lastKick < 4 };
-    }
-
-    clearLines(spin) {
+    clearLines() {
         let c = 0;
         for (let y = ROWS-1; y>=0; y--) {
             if (this.board[y].every(cell => cell !== 0)) {
@@ -258,8 +275,8 @@ class GameState {
                 c++; y++;
             }
         }
-        if (c > 0 || spin.isSpin) {
-            let dmg = spin.isSpin ? (spin.isMini ? c+1 : c*2) : (c === 4 ? 4 : Math.max(0, c-1));
+        if (c > 0) {
+            let dmg = c === 4 ? 4 : Math.max(0, c-1);
             this.attack += dmg; this.lines += c;
             if (dmg > 0 && conn && this.pNum === 1) conn.send({type:'attack', amt:dmg});
         }
@@ -272,7 +289,7 @@ class GameState {
             if (!this.drop()) {
                 this.lockTimer += dt;
                 if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; }
-            } else { this.lockTimer = 0; }
+            }
             this.dropTimer = 0;
         } else if (!this.isValid(this.x, this.y + 1, this.curr)) {
             this.lockTimer += dt;
@@ -283,14 +300,10 @@ class GameState {
     draw() {
         this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
         this.board.forEach((r,y) => r.forEach((v,x) => { if(v) this.drawBlk(this.ctx,x,y,COLORS[v]); }));
-        
-        // Ghost
         let gy = this.y; while(this.isValid(this.x, gy+1, this.curr)) gy++;
         this.ctx.globalAlpha = 0.2;
         this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,gy+dy,COLORS[this.type]); }));
         this.ctx.globalAlpha = 1.0;
-
-        // Piece
         this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,this.y+dy,COLORS[this.type]); }));
         this.drawUI();
     }
@@ -302,12 +315,8 @@ class GameState {
 
     drawUI() {
         document.getElementById(`stats${this.pNum}`).innerHTML = `LINES: ${this.lines}<br>ATTACK: ${this.attack}`;
-        
-        // Hold
         const hCtx = this.holdCanvas.getContext('2d'); hCtx.clearRect(0,0,80,80);
         if (this.holdPiece) this.drawPreview(hCtx, this.holdPiece);
-
-        // Queue
         const qCtx = this.queueCanvas.getContext('2d'); qCtx.clearRect(0,0,80,400);
         this.queue.slice(0, 5).forEach((type, i) => this.drawPreview(qCtx, type, i * 70 + 10));
     }
@@ -315,58 +324,63 @@ class GameState {
     drawPreview(ctx, type, yOffset = 10) {
         const p = SHAPES[type], sz = 15;
         p.forEach((r, y) => r.forEach((v, x) => {
-            if (v) {
-                ctx.fillStyle = COLORS[type];
-                ctx.fillRect(x*sz + 10, y*sz + yOffset, sz, sz);
-            }
+            if (v) { ctx.fillStyle = COLORS[type]; ctx.fillRect(x*sz + 10, y*sz + yOffset, sz, sz); }
         }));
     }
 }
 
-/** NETWORK & INPUTS **/
-let peer = new Peer(), conn, gameState1, gameState2, isHost = false;
-let wins = [0, 0];
-const keys = {};
-let dasTimer = 0, arrTimer = 0, DAS = 170, ARR = 30;
+/** INPUT & SETTINGS LOGIC **/
+const keysActive = {};
+let dasTimer = 0, arrTimer = 0;
+let waitingForKey = null;
 
 window.addEventListener('keydown', e => {
-    let k = e.key.toLowerCase();
-    if (!keys[k]) {
-        if (k === 'w' || e.key === 'ArrowUp') gameState1.rotate('cw');
-        if (k === 'q') gameState1.rotate('ccw');
-        if (k === ' ') { e.preventDefault(); gameState1.hardDrop(); }
-        if (k === 'c' || e.key === 'Shift') gameState1.hold();
-        if (k === 't') { e.preventDefault(); document.getElementById('chat-input').focus(); }
+    const k = e.key.toLowerCase();
+    if (waitingForKey) {
+        settings.keys[waitingForKey] = k;
+        waitingForKey = null;
+        renderKeybinds();
+        return;
     }
-    keys[k] = true;
+    
+    if (!keysActive[k]) {
+        if (k === settings.keys.rotateCW) gameState1.rotate('cw');
+        if (k === settings.keys.rotateCCW) gameState1.rotate('ccw');
+        if (k === settings.keys.rotate180) { gameState1.rotate('cw'); gameState1.rotate('cw'); }
+        if (k === settings.keys.hardDrop) { e.preventDefault(); gameState1.hardDrop(); }
+        if (k === settings.keys.hold) gameState1.hold();
+        if (k === settings.keys.chat) { e.preventDefault(); document.getElementById('chat-input').focus(); }
+    }
+    keysActive[k] = true;
 });
-window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; dasTimer = 0; });
+
+window.addEventListener('keyup', e => {
+    keysActive[e.key.toLowerCase()] = false;
+    if (e.key.toLowerCase() === settings.keys.left || e.key.toLowerCase() === settings.keys.right) dasTimer = 0;
+});
 
 function handleInput(dt) {
-    if (!gameState1 || gameState1.isGameOver) return;
-    if (keys['s'] || keys['arrowdown']) gameState1.drop();
-    if (keys['a'] || keys['arrowleft']) {
-        if (dasTimer === 0) gameState1.move(-1);
+    if (!gameState1 || gameState1.isGameOver || document.activeElement.tagName === 'INPUT') return;
+    
+    if (keysActive[settings.keys.softDrop]) gameState1.drop();
+    
+    const moveDir = keysActive[settings.keys.left] ? -1 : (keysActive[settings.keys.right] ? 1 : 0);
+    if (moveDir !== 0) {
+        if (dasTimer === 0) gameState1.move(moveDir);
         dasTimer += dt;
-        if (dasTimer >= DAS) {
+        if (dasTimer >= settings.das) {
             arrTimer += dt;
-            if (arrTimer >= ARR) { gameState1.move(-1); arrTimer = 0; }
-        }
-    } else if (keys['d'] || keys['arrowright']) {
-        if (dasTimer === 0) gameState1.move(1);
-        dasTimer += dt;
-        if (dasTimer >= DAS) {
-            arrTimer += dt;
-            if (arrTimer >= ARR) { gameState1.move(1); arrTimer = 0; }
+            if (arrTimer >= settings.arr) { gameState1.move(moveDir); arrTimer = 0; }
         }
     } else { dasTimer = 0; }
 }
 
+/** PEER & GAME START **/
+let peer = new Peer(), conn, gameState1, gameState2, isHost = false, wins = [0, 0];
 peer.on('open', id => document.getElementById('my-id').innerText = id);
 
 document.getElementById('create-btn').onclick = () => {
     isHost = true; document.getElementById('restart-btn').style.display = 'inline-block';
-    addChat("System", "Waiting for someone to join...");
 };
 
 document.getElementById('join-btn').onclick = () => {
@@ -374,22 +388,21 @@ document.getElementById('join-btn').onclick = () => {
     setupConn();
 };
 
-peer.on('connection', c => { conn = c; isHost = true; setupConn(); let s = Date.now(); conn.send({type:'init', seed:s}); start(s); });
+peer.on('connection', c => {
+    conn = c; isHost = true; setupConn();
+    let s = Date.now(); conn.send({type:'init', seed:s}); start(s);
+});
 
 function setupConn() {
     conn.on('data', data => {
-        if (data.type === 'init') start(data.seed);
+        if (data.type === 'init' || data.type === 'restart') start(data.seed);
         if (data.type === 'update') {
             gameState2.board = data.board; gameState2.holdPiece = data.holdPiece;
             gameState2.queue = data.queue; gameState2.lines = data.lines; gameState2.attack = data.attack;
         }
         if (data.type === 'attack') receiveGarb(data.amt);
+        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Opponent topped out!"); }
         if (data.type === 'chat') addChat("Opponent", data.msg);
-        if (data.type === 'gameover') {
-            wins[0]++; updateWins();
-            addChat("System", "Opponent topped out! You win.");
-        }
-        if (data.type === 'restart') start(data.seed);
     });
 }
 
@@ -430,6 +443,35 @@ function loop(t) {
     else { wins[1]++; updateWins(); addChat("System", "You topped out."); }
 }
 
+/** SETTINGS UI LOGIC **/
+const openBtn = document.getElementById('open-settings');
+const modal = document.getElementById('settings-modal');
+const keyList = document.getElementById('keybinds-list');
+
+openBtn.onclick = () => { modal.style.display = 'block'; renderKeybinds(); };
+document.getElementById('close-settings').onclick = () => {
+    settings.das = parseInt(document.getElementById('das-range').value);
+    settings.arr = parseInt(document.getElementById('arr-range').value);
+    localStorage.setItem('tetris_settings', JSON.stringify(settings));
+    modal.style.display = 'none';
+};
+
+function renderKeybinds() {
+    keyList.innerHTML = '';
+    for (let action in settings.keys) {
+        const row = document.createElement('div');
+        row.className = 'setting-row';
+        row.innerHTML = `<span>${action}</span><button class="key-btn" id="key-${action}">${settings.keys[action] === ' ' ? 'SPACE' : settings.keys[action]}</button>`;
+        keyList.appendChild(row);
+        document.getElementById(`key-${action}`).onclick = (e) => {
+            waitingForKey = action;
+            e.target.innerText = '...';
+            e.target.classList.add('waiting');
+        };
+    }
+}
+
+/** CHAT LOGIC **/
 const chatIn = document.getElementById('chat-input');
 chatIn.onkeydown = e => {
     if (e.key === 'Enter' && chatIn.value.trim()) {
@@ -438,7 +480,6 @@ chatIn.onkeydown = e => {
         chatIn.value = ""; chatIn.blur();
     }
 };
-
 function addChat(who, msg) {
     const d = document.createElement('div');
     d.innerHTML = `<b style="color:var(--accent-cyan)">${who}:</b> ${msg}`;
