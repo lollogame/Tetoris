@@ -7,7 +7,6 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
-        
         :root {
             --bg-dark: #0a0e27;
             --bg-grid: #151b3d;
@@ -389,7 +388,6 @@
         <div id="gameStatus">Click "Create Game" to host or join an ID</div>
         
         <div class="game-area hidden" id="gameArea">
-            <!-- Player 1 -->
             <div class="player-container">
                 <div class="player-header">🎮 YOU</div>
                 <div class="game-wrapper">
@@ -410,7 +408,6 @@
                 </div>
             </div>
             
-            <!-- Player 2 -->
             <div class="player-container">
                 <div class="player-header">🎮 OPPONENT</div>
                 <div class="game-wrapper">
@@ -487,7 +484,6 @@
             },
             'O': { '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]], '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]] }
         };
-
         const SHAPES = {
             'I': { shape: [[[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]], [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]], [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]], color: '#00f0f0' },
             'O': { shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]], color: '#f0f000' },
@@ -497,7 +493,6 @@
             'J': { shape: [[[1,0,0], [1,1,1], [0,0,0]], [[0,1,1], [0,1,0], [0,1,0]], [[0,0,0], [1,1,1], [0,0,1]], [[0,1,0], [0,1,0], [1,1,0]]], color: '#0000f0' },
             'L': { shape: [[[0,0,1], [1,1,1], [0,0,0]], [[0,1,0], [0,1,0], [0,1,1]], [[0,0,0], [1,1,1], [1,0,0]], [[1,1,0], [0,1,0], [0,1,0]]], color: '#f0a000' }
         };
-
         class GameState {
             constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
                 this.canvas = document.getElementById(canvasId);
@@ -519,9 +514,9 @@
                 this.isTouchingGround = false; this.maxLockResets = 15; this.lockResetCount = 0;
                 this.hardDropCooldown = 0; this.piecesPlaced = 0; this.attacksSent = 0;
                 this.b2bCounter = 0; this.comboCounter = -1; this.lastClearWasB2B = false;
-                this.pendingGarbage = 0; // Changed to number for total pending lines
-                this.lastRotationKicked = false; // For T-spin detection
-                this.lastMoveBeforeLock = null; // Track last move type
+                this.pendingGarbage = 0; 
+                this.lastRotationKicked = false;
+                this.lastMoveBeforeLock = null;
                 this.initQueue();
             }
 
@@ -547,9 +542,19 @@
                 this.currentY = 0;
                 this.canHold = true;
                 this.lockDelayTimer = 0; this.lockResetCount = 0; this.isTouchingGround = false;
-                this.hardDropCooldown = 0; // Reset hard drop cooldown on spawn
+                this.hardDropCooldown = 0;
                 this.lastRotationKicked = false;
                 this.lastMoveBeforeLock = null;
+
+                // --- IRS (Initial Rotation System) ---
+                // Checks if rotation keys are currently held and rotates immediately
+                if (this.playerId === 1) { // Only do this for local player
+                    const keyBindings = getKeyBindings();
+                    if (keysHeld[keyBindings.rotateCW]) this.rotate('cw');
+                    if (keysHeld[keyBindings.rotateCCW]) this.rotate('ccw');
+                    if (keysHeld[keyBindings.rotate180]) this.rotate('180');
+                }
+
                 return this.isValidPosition(this.currentX, this.currentY, this.currentRotation);
             }
 
@@ -558,7 +563,8 @@
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
                         if (shape[row][col]) {
-                            const newX = x + col; const newY = y + row;
+                            const newX = x + col;
+                            const newY = y + row;
                             if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
                             if (newY >= 0 && this.board[newY][newX]) return false;
                         }
@@ -569,16 +575,19 @@
 
             rotate(dir) {
                 const old = this.currentRotation;
-                let next = (dir === 'cw') ? (old + 1) % 4 : (dir === 'ccw') ? (old + 3) % 4 : (old + 2) % 4;
-                const kickTable = (this.currentPiece === 'I') ? KICK_TABLE.I : (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+                let next = (dir === 'cw') ? (old + 1) % 4 : (dir === 'ccw') ?
+                (old + 3) % 4 : (old + 2) % 4;
+                const kickTable = (this.currentPiece === 'I') ?
+                KICK_TABLE.I : (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
                 const rotNames = ['0', 'R', '2', 'L'];
                 const kicks = kickTable[`${rotNames[old]}->${rotNames[next]}`] || [[0,0]];
                 
                 for (let i = 0; i < kicks.length; i++) {
                     const [dx, dy] = kicks[i];
                     if (this.isValidPosition(this.currentX + dx, this.currentY - dy, next)) {
-                        this.currentX += dx; this.currentY -= dy; this.currentRotation = next;
-                        this.lastRotationKicked = (i > 0); // Kick occurred if not first position
+                        this.currentX += dx;
+                        this.currentY -= dy; this.currentRotation = next;
+                        this.lastRotationKicked = (i > 0);
                         this.lastMoveBeforeLock = 'rotate';
                         if (this.isTouchingGround) { this.lockDelayTimer = 0; this.lockResetCount++; }
                         return true;
@@ -605,7 +614,7 @@
 
             moveDown() {
                 if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                    this.currentY++; 
+                    this.currentY++;
                     this.lastMoveBeforeLock = 'down';
                     return true;
                 }
@@ -618,27 +627,23 @@
                 this.lockPiece();
             }
 
-            // Check if a T-spin occurred
             checkTSpin() {
                 if (this.currentPiece !== 'T') return false;
                 if (this.lastMoveBeforeLock !== 'rotate' || !this.lastRotationKicked) return false;
                 
-                // Check corners around T piece center
                 const corners = [
-                    [this.currentX, this.currentY], // top-left
-                    [this.currentX + 2, this.currentY], // top-right
-                    [this.currentX, this.currentY + 2], // bottom-left
-                    [this.currentX + 2, this.currentY + 2] // bottom-right
+                    [this.currentX, this.currentY],
+                    [this.currentX + 2, this.currentY],
+                    [this.currentX, this.currentY + 2],
+                    [this.currentX + 2, this.currentY + 2]
                 ];
-                
                 let filledCorners = 0;
                 for (const [x, y] of corners) {
                     if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
                         filledCorners++;
                     }
                 }
-                
-                return filledCorners >= 3; // T-spin if 3+ corners filled
+                return filledCorners >= 3;
             }
 
             lockPiece() {
@@ -659,16 +664,16 @@
                 const linesCleared = cleared.length;
                 const isTSpin = this.checkTSpin();
                 const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                
+
                 if (linesCleared > 0) {
                     // Remove cleared lines
                     cleared.forEach(r => { this.board.splice(r, 1); this.board.unshift(Array(COLS).fill(0)); });
                     
-                    // Calculate attack
+                    // --- NEW GARBAGE LOGIC: CANCELLATION ---
                     let attack = this.calculateAttack(linesCleared, isTSpin, isAllClear);
                     
-                    // Cancel pending garbage
                     if (this.pendingGarbage > 0) {
+                        // Cancel incoming garbage with outgoing attack
                         if (attack >= this.pendingGarbage) {
                             attack -= this.pendingGarbage;
                             this.pendingGarbage = 0;
@@ -677,56 +682,53 @@
                             attack = 0;
                         }
                     }
-                    
+
                     // Send remaining attack
                     if (attack > 0) { 
-                        this.attacksSent += attack; 
+                        this.attacksSent += attack;
                         if(conn?.open) conn.send({type:'attack', lines:attack}); 
                     }
                 } else {
-                    // No lines cleared - apply pending garbage (max 8 lines per lock)
+                    // --- NEW GARBAGE LOGIC: RECEIVE ONLY ON NON-CLEAR ---
+                    // Apply garbage only if no lines were cleared this turn
                     this.applyGarbage();
                 }
                 this.updateStats();
             }
 
             calculateAttack(lines, isTSpin, isAllClear) {
+                // If All Clear, specific override based on rules
+                if (isAllClear) {
+                    // "All clear sends 8. All clear done with a tetris sends 10."
+                    // Note: This overrides standard T-spin/Line logic usually, 
+                    // or assumes the PC bonus is total. Implementing as Total.
+                    if (lines === 4) return 10;
+                    return 8;
+                }
+
                 let attack = 0;
-                
-                // T-spin attacks
                 if (isTSpin) {
                     if (lines === 1) attack = 2; // T-spin single
                     else if (lines === 2) attack = 4; // T-spin double
                     else if (lines === 3) attack = 6; // T-spin triple
                 } else {
-                    // Regular line clears
                     if (lines === 1) attack = 0;
                     else if (lines === 2) attack = 1;
                     else if (lines === 3) attack = 2;
                     else if (lines === 4) attack = 4; // Tetris
                 }
-                
-                // All clear bonus
-                if (isAllClear && lines > 0) {
-                    if (lines === 4) attack += 6; // All clear with tetris = 10 total
-                    else attack += 8; // All clear = 8 bonus
-                }
-                
                 return attack;
             }
 
             applyGarbage() {
                 if (this.pendingGarbage === 0) return;
-                
                 // Apply max 8 lines at a time
                 const linesToApply = Math.min(this.pendingGarbage, 8);
                 this.pendingGarbage -= linesToApply;
                 
                 const hole = Math.floor(this.rng() * COLS);
                 for(let i = 0; i < linesToApply; i++) {
-                    // Check if adding garbage would cause top out
                     if (this.board[0].some(cell => cell !== 0)) {
-                        // Top out condition
                         if(conn?.open) conn.send({type:'gameOver'});
                         endGame();
                         return;
@@ -739,20 +741,20 @@
             }
 
             receiveAttack(lines) { 
-                this.pendingGarbage += lines; 
+                this.pendingGarbage += lines;
             }
 
             holdCurrentPiece() {
                 if (!this.canHold) return;
                 if (!this.holdPiece) { 
-                    this.holdPiece = this.currentPiece; 
+                    this.holdPiece = this.currentPiece;
                     this.spawnPiece(); 
                 } else { 
-                    let t = this.holdPiece; 
+                    let t = this.holdPiece;
                     this.holdPiece = this.currentPiece; 
                     this.currentPiece = t; 
                     this.currentX = (t === 'O') ? 4 : 3; 
-                    this.currentY = 0; 
+                    this.currentY = 0;
                     this.currentRotation = 0; 
                 }
                 this.canHold = false;
@@ -767,12 +769,32 @@
             }
 
             draw() {
-                this.ctx.fillStyle = '#0a0e27'; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.fillStyle = '#0a0e27';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // --- ADDED GRID ---
+                this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                // Vertical lines
+                for (let x = 0; x <= COLS; x++) {
+                    this.ctx.moveTo(x * BLOCK_SIZE, 0);
+                    this.ctx.lineTo(x * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+                }
+                // Horizontal lines
+                for (let y = 0; y <= ROWS; y++) {
+                    this.ctx.moveTo(0, y * BLOCK_SIZE);
+                    this.ctx.lineTo(COLS * BLOCK_SIZE, y * BLOCK_SIZE);
+                }
+                this.ctx.stroke();
+                // ------------------
+
                 this.board.forEach((r, y) => r.forEach((v, x) => {
                     if(v) this.drawBlock(this.ctx, x * BLOCK_SIZE, y * BLOCK_SIZE, v === 'G' ? '#666' : SHAPES[v].color);
                 }));
                 if (this.currentPiece) {
-                    let gy = this.currentY; while(this.isValidPosition(this.currentX, gy+1, this.currentRotation)) gy++;
+                    let gy = this.currentY;
+                    while(this.isValidPosition(this.currentX, gy+1, this.currentRotation)) gy++;
                     this.drawPiece(this.ctx, this.currentPiece, this.currentX, gy, this.currentRotation, 0.2);
                     this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, this.currentRotation, 1);
                 }
@@ -780,7 +802,8 @@
             }
 
             drawBlock(ctx, x, y, color, alpha = 1) {
-                ctx.globalAlpha = alpha; ctx.fillStyle = color;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = color;
                 ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
                 ctx.globalAlpha = 1;
             }
@@ -793,12 +816,14 @@
             }
 
             drawHold() {
-                this.holdCtx.fillStyle = '#0a0e27'; this.holdCtx.fillRect(0,0,80,80);
+                this.holdCtx.fillStyle = '#0a0e27';
+                this.holdCtx.fillRect(0,0,80,80);
                 if(this.holdPiece) this.drawMini(this.holdCtx, this.holdPiece);
             }
 
             drawQueue() {
-                this.queueCtx.fillStyle = '#0a0e27'; this.queueCtx.fillRect(0,0,80,480);
+                this.queueCtx.fillStyle = '#0a0e27';
+                this.queueCtx.fillRect(0,0,80,480);
                 this.queue.forEach((p, i) => this.drawMini(this.queueCtx, p, i * 80));
             }
 
@@ -822,13 +847,12 @@
                     piecesPlaced: this.piecesPlaced, 
                     attacksSent: this.attacksSent,
                     pendingGarbage: this.pendingGarbage 
-                }; 
+                };
             }
             setState(s) { Object.assign(this, s); this.updateStats(); }
         }
 
         let gameState1, gameState2, gameRunning = false;
-
         // Get current key bindings from input fields
         function getKeyBindings() {
             return {
@@ -847,12 +871,21 @@
         const keysHeld = {};
         const dasTimers = {};
 
+        // --- GLOBAL SCROLL PREVENTION FOR GAME KEYS ---
+        window.addEventListener('keydown', function(e) {
+            // Prevent default scrolling for Space, Arrow Up, Arrow Down
+            // This works even if the game isn't running, as requested
+            if(["ArrowUp", "ArrowDown", " "].indexOf(e.key) > -1) {
+                e.preventDefault();
+            }
+        }, false);
+
         document.addEventListener('keydown', e => {
             if(!gameRunning || !gameState1 || keysHeld[e.key]) return;
             
             const keyBindings = getKeyBindings();
             
-            // Prevent default scrolling for game keys
+            // Prevent default scrolling for defined game keys
             if(Object.values(keyBindings).includes(e.key)) {
                 e.preventDefault();
             }
@@ -874,7 +907,8 @@
             const dasV = parseInt(document.getElementById('das').value);
             const arrV = parseInt(document.getElementById('arr').value);
             for(let k in dasTimers) {
-                let t = dasTimers[k]; t.das += dt;
+                let t = dasTimers[k];
+                t.das += dt;
                 if(t.das >= dasV) {
                     t.arr += dt;
                     if(arrV === 0 || t.arr >= arrV) { gameState1.move(t.dir); t.arr = 0; }
@@ -890,13 +924,15 @@
             if(gameState1.isTouchingGround) {
                 gameState1.lockDelayTimer += dt;
                 if(gameState1.lockDelayTimer >= gameState1.lockDelay) {
-                    gameState1.lockPiece(); if(!gameState1.spawnPiece()) endGame();
+                    gameState1.lockPiece();
+                    if(!gameState1.spawnPiece()) endGame();
                 }
             } else {
                 gameState1.lastGravityTime += dt;
                 if(gameState1.lastGravityTime >= gameState1.gravity) { gameState1.moveDown(); gameState1.lastGravityTime = 0; }
             }
-            gameState1.draw(); gameState2.draw();
+            gameState1.draw();
+            gameState2.draw();
             if(conn?.open && ts - (gameLoop.lastSend || 0) > 50) {
                 conn.send({type:'state', state: gameState1.getState()});
                 gameLoop.lastSend = ts;
@@ -905,10 +941,24 @@
         }
 
         function endGame() { 
-            gameRunning = false; 
+            gameRunning = false;
             document.getElementById('gameStatus').textContent = "GAME OVER - YOU LOST!"; 
             if(conn?.open) conn.send({type:'gameOver'}); 
+            
+            // Show restart button for host only
+            if(isHost) {
+                document.getElementById('restartBtn').classList.remove('hidden');
+            }
         }
+
+        // Restart Button Logic
+        document.getElementById('restartBtn').onclick = () => {
+            if(isHost && conn?.open) {
+                const seed = Math.floor(Math.random() * 1000000);
+                conn.send({type:'restart', seed});
+                startGame(seed);
+            }
+        };
 
         // Chat functionality
         function addChatMessage(message, isSelf = false) {
@@ -931,7 +981,6 @@
         }
 
         document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
-        
         document.getElementById('chatInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -941,7 +990,8 @@
 
         // PeerJS
         document.getElementById('createGameBtn').onclick = () => {
-            isHost = true; peer = new Peer();
+            isHost = true;
+            peer = new Peer();
             peer.on('open', id => { 
                 myPeerId = id;
                 document.getElementById('peerIdDisplay').textContent = id; 
@@ -950,7 +1000,6 @@
             });
             peer.on('connection', c => { conn = c; setupConn(); });
         };
-
         document.getElementById('joinGameBtn').onclick = () => {
             const id = document.getElementById('opponentPeerId').value.trim();
             if (!id) {
@@ -975,11 +1024,14 @@
             });
             conn.on('data', d => {
                 if(d.type === 'start') startGame(d.seed);
+                if(d.type === 'restart') startGame(d.seed); // Handle restart
                 if(d.type === 'state') gameState2.setState(d.state);
                 if(d.type === 'attack') gameState1.receiveAttack(d.lines);
                 if(d.type === 'gameOver') { 
                     gameRunning = false; 
-                    document.getElementById('gameStatus').textContent = "YOU WIN!"; 
+                    document.getElementById('gameStatus').textContent = "YOU WIN!";
+                    // If host, show restart button even on win
+                    if(isHost) document.getElementById('restartBtn').classList.remove('hidden');
                 }
                 if(d.type === 'chat') addChatMessage(d.message, false);
             });
@@ -987,6 +1039,7 @@
 
         function startGame(seed) {
             document.getElementById('gameArea').classList.remove('hidden');
+            document.getElementById('restartBtn').classList.add('hidden'); // Hide restart on start
             document.getElementById('gameStatus').textContent = "Game in progress!";
             gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
             gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
