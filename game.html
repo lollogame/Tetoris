@@ -41,7 +41,7 @@
         .side-panels { display: flex; flex-direction: column; gap: 10px; width: 80px; text-align: center;}
         
         .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; align-items: center; }
-        input, button { 
+        input[type="text"], button { 
             padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; 
             color: white; border: 1px solid var(--accent-cyan); outline: none;
         }
@@ -51,11 +51,12 @@
         #settings-modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: #111; border: 2px solid var(--accent-pink); padding: 20px; z-index: 100;
-            width: 400px; max-height: 80vh; overflow-y: auto; box-shadow: 0 0 30px rgba(255,0,255,0.3);
+            width: 450px; max-height: 90vh; overflow-y: auto; box-shadow: 0 0 30px rgba(255,0,255,0.3);
         }
-        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .key-btn { width: 120px; text-transform: uppercase; font-size: 10px; border-color: #444; }
         .key-btn.waiting { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+        .slider-val { color: var(--accent-cyan); min-width: 60px; text-align: right; font-size: 14px; }
 
         #chat-container {
             position: fixed; bottom: 10px; right: 10px; width: 280px;
@@ -68,6 +69,7 @@
         #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; width: 100%; }
 
         .score-board { font-size: 24px; color: var(--accent-cyan); margin: 5px 0; }
+        input[type="range"] { accent-color: var(--accent-cyan); cursor: pointer; }
     </style>
 </head>
 <body>
@@ -76,13 +78,13 @@
     <h1 style="text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
     <div class="score-board"><span id="p1-wins">0</span> - <span id="p2-wins">0</span></div>
     <div class="controls">
-        <button id="create-btn">Host</button>
-        <input type="text" id="join-id" placeholder="Friend's ID">
+        <button id="create-btn">Host Match</button>
+        <input type="text" id="join-id" placeholder="Paste ID">
         <button id="join-btn">Join</button>
         <button id="restart-btn" style="display:none;">Restart</button>
         <button id="open-settings" style="border-color: var(--accent-pink);">⚙️ Settings</button>
     </div>
-    <div id="my-id-label" style="font-size: 10px;">Your ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
+    <div id="my-id-label" style="font-size: 10px;">ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
 </div>
 
 <div class="game-container">
@@ -93,7 +95,6 @@
             <div id="stats1" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
         <div>
-            <p style="font-size: 10px;">YOU</p>
             <canvas id="board1" width="300" height="600"></canvas>
         </div>
         <div class="side-panels">
@@ -109,7 +110,6 @@
             <div id="stats2" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
         <div>
-            <p style="font-size: 10px;">ENEMY</p>
             <canvas id="board2" width="300" height="600"></canvas>
         </div>
         <div class="side-panels">
@@ -120,19 +120,28 @@
 </div>
 
 <div id="settings-modal">
-    <h2 style="color: var(--accent-pink); margin-bottom: 20px;">Settings</h2>
-    <div id="keybinds-list">
-        </div>
-    <hr style="margin: 15px 0; border: 0; border-top: 1px solid #333;">
+    <h2 style="color: var(--accent-pink); margin-bottom: 20px;">GAME SETTINGS</h2>
+    <div id="keybinds-list"></div>
+    
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #333;">
+    
     <div class="setting-row">
         <span>DAS (Initial Delay)</span>
         <input type="range" id="das-range" min="80" max="300" value="170">
+        <span class="slider-val" id="das-val">170ms</span>
     </div>
     <div class="setting-row">
         <span>ARR (Repeat Speed)</span>
         <input type="range" id="arr-range" min="0" max="100" value="30">
+        <span class="slider-val" id="arr-val">30ms</span>
     </div>
-    <button id="close-settings" style="width: 100%; margin-top: 10px;">Save & Close</button>
+    <div class="setting-row">
+        <span>Soft Drop Factor</span>
+        <input type="range" id="sdf-range" min="1" max="41" value="20">
+        <span class="slider-val" id="sdf-val">20x</span>
+    </div>
+    
+    <button id="close-settings" style="width: 100%; margin-top: 10px; background: var(--accent-pink); border:none;">SAVE & CLOSE</button>
 </div>
 
 <div id="chat-container">
@@ -143,21 +152,21 @@
 </div>
 
 <script>
-/** SETTINGS & STORAGE **/
+/** HANDLING CONFIG **/
 let settings = {
     keys: {
         left: 'arrowleft', right: 'arrowright', softDrop: 'arrowdown', hardDrop: ' ',
         rotateCW: 'x', rotateCCW: 'z', rotate180: 'a', hold: 'c', chat: 't'
     },
     das: 170,
-    arr: 30
+    arr: 30,
+    sdf: 20
 };
 
-// Load from LocalStorage
-const saved = localStorage.getItem('tetris_settings');
+const saved = localStorage.getItem('tetris_settings_v2');
 if (saved) settings = JSON.parse(saved);
 
-/** SEEDED RNG **/
+/** RNG & CONSTANTS **/
 class SeededRandom {
     constructor(seed) { this.state = seed || Date.now(); }
     next() {
@@ -282,13 +291,24 @@ class GameState {
         }
     }
 
-    update(dt) {
+    update(dt, isSoftDropping) {
         if (this.isGameOver) return;
-        this.dropTimer += dt;
+        
+        // Apply SDF multiplier to the time delta
+        let effectiveDt = isSoftDropping ? dt * (settings.sdf > 40 ? 1000 : settings.sdf) : dt;
+        
+        if (isSoftDropping && settings.sdf > 40) {
+            // Infinite SDF Logic: Teleport to bottom but don't lock yet
+            while(this.isValid(this.x, this.y + 1, this.curr)) { this.y++; }
+        }
+
+        this.dropTimer += effectiveDt;
         if (this.dropTimer > 800) {
             if (!this.drop()) {
-                this.lockTimer += dt;
+                this.lockTimer += dt; // Lock delay uses real time, not SDF
                 if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; }
+            } else {
+                this.lockTimer = 0;
             }
             this.dropTimer = 0;
         } else if (!this.isValid(this.x, this.y + 1, this.curr)) {
@@ -329,7 +349,7 @@ class GameState {
     }
 }
 
-/** INPUT & SETTINGS LOGIC **/
+/** INPUTS **/
 const keysActive = {};
 let dasTimer = 0, arrTimer = 0;
 let waitingForKey = null;
@@ -342,7 +362,6 @@ window.addEventListener('keydown', e => {
         renderKeybinds();
         return;
     }
-    
     if (!keysActive[k]) {
         if (k === settings.keys.rotateCW) gameState1.rotate('cw');
         if (k === settings.keys.rotateCCW) gameState1.rotate('ccw');
@@ -362,7 +381,7 @@ window.addEventListener('keyup', e => {
 function handleInput(dt) {
     if (!gameState1 || gameState1.isGameOver || document.activeElement.tagName === 'INPUT') return;
     
-    if (keysActive[settings.keys.softDrop]) gameState1.drop();
+    const softDropPressed = keysActive[settings.keys.softDrop];
     
     const moveDir = keysActive[settings.keys.left] ? -1 : (keysActive[settings.keys.right] ? 1 : 0);
     if (moveDir !== 0) {
@@ -373,6 +392,8 @@ function handleInput(dt) {
             if (arrTimer >= settings.arr) { gameState1.move(moveDir); arrTimer = 0; }
         }
     } else { dasTimer = 0; }
+
+    return softDropPressed;
 }
 
 /** PEER & GAME START **/
@@ -401,7 +422,7 @@ function setupConn() {
             gameState2.queue = data.queue; gameState2.lines = data.lines; gameState2.attack = data.attack;
         }
         if (data.type === 'attack') receiveGarb(data.amt);
-        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Opponent topped out!"); }
+        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Enemy Topped Out!"); }
         if (data.type === 'chat') addChat("Opponent", data.msg);
     });
 }
@@ -437,22 +458,42 @@ document.getElementById('restart-btn').onclick = () => {
 let last = 0;
 function loop(t) {
     const dt = t - last; last = t;
-    handleInput(dt); gameState1.update(dt);
+    const isSD = handleInput(dt); 
+    gameState1.update(dt, isSD);
     gameState1.draw(); gameState2.draw();
     if (!gameState1.isGameOver) requestAnimationFrame(loop);
-    else { wins[1]++; updateWins(); addChat("System", "You topped out."); }
+    else { wins[1]++; updateWins(); addChat("System", "You Topped Out."); }
 }
 
-/** SETTINGS UI LOGIC **/
-const openBtn = document.getElementById('open-settings');
+/** SETTINGS READOUT LOGIC **/
 const modal = document.getElementById('settings-modal');
 const keyList = document.getElementById('keybinds-list');
+const dasRange = document.getElementById('das-range');
+const arrRange = document.getElementById('arr-range');
+const sdfRange = document.getElementById('sdf-range');
 
-openBtn.onclick = () => { modal.style.display = 'block'; renderKeybinds(); };
+function updateSliderReadouts() {
+    document.getElementById('das-val').innerText = dasRange.value + 'ms';
+    document.getElementById('arr-val').innerText = arrRange.value + 'ms';
+    document.getElementById('sdf-val').innerText = sdfRange.value > 40 ? 'INF' : sdfRange.value + 'x';
+}
+
+[dasRange, arrRange, sdfRange].forEach(s => s.oninput = updateSliderReadouts);
+
+document.getElementById('open-settings').onclick = () => {
+    dasRange.value = settings.das;
+    arrRange.value = settings.arr;
+    sdfRange.value = settings.sdf;
+    updateSliderReadouts();
+    modal.style.display = 'block';
+    renderKeybinds();
+};
+
 document.getElementById('close-settings').onclick = () => {
-    settings.das = parseInt(document.getElementById('das-range').value);
-    settings.arr = parseInt(document.getElementById('arr-range').value);
-    localStorage.setItem('tetris_settings', JSON.stringify(settings));
+    settings.das = parseInt(dasRange.value);
+    settings.arr = parseInt(arrRange.value);
+    settings.sdf = parseInt(sdfRange.value);
+    localStorage.setItem('tetris_settings_v2', JSON.stringify(settings));
     modal.style.display = 'none';
 };
 
@@ -471,7 +512,7 @@ function renderKeybinds() {
     }
 }
 
-/** CHAT LOGIC **/
+/** CHAT **/
 const chatIn = document.getElementById('chat-input');
 chatIn.onkeydown = e => {
     if (e.key === 'Enter' && chatIn.value.trim()) {
