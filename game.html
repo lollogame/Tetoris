@@ -3,88 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - Pro Edition</title>
+    <title>Tetris Multiplayer - Pro</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-        
-        :root {
-            --bg-dark: #0a0e27;
-            --bg-grid: #151b3d;
-            --accent-cyan: #00ffff;
-            --accent-pink: #ff00ff;
-            --text-primary: #ffffff;
-        }
-
+        :root { --bg: #0a0e27; --grid: #151b3d; --cyan: #00ffff; --pink: #ff00ff; --text: #ffffff; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: 'Orbitron', sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-primary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
+        body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
         #ui-layer { margin: 15px; text-align: center; z-index: 10; }
         .game-container { display: flex; gap: 30px; align-items: flex-start; }
-        
-        .player-section { 
-            display: flex; gap: 10px; padding: 15px; 
-            background: rgba(255, 255, 255, 0.05); border: 2px solid var(--bg-grid);
-        }
-
+        .player-section { display: flex; gap: 10px; padding: 15px; background: rgba(255, 255, 255, 0.05); border: 2px solid var(--grid); }
         canvas { background: #000; display: block; border: 1px solid #333; }
         .side-panels { display: flex; flex-direction: column; gap: 10px; width: 80px; text-align: center;}
-        
         .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; align-items: center; }
-        input[type="text"], button { 
-            padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; 
-            color: white; border: 1px solid var(--accent-cyan); outline: none;
-        }
-        button:hover { background: var(--accent-cyan); color: black; cursor: pointer; }
-
-        /* Settings Modal */
-        #settings-modal {
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: #111; border: 2px solid var(--accent-pink); padding: 20px; z-index: 100;
-            width: 450px; max-height: 90vh; overflow-y: auto; box-shadow: 0 0 30px rgba(255,0,255,0.3);
-        }
+        input[type="text"], button { padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; color: white; border: 1px solid var(--cyan); outline: none; }
+        button:hover { background: var(--cyan); color: black; cursor: pointer; }
+        #settings-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #111; border: 2px solid var(--pink); padding: 20px; z-index: 100; width: 450px; box-shadow: 0 0 30px rgba(255,0,255,0.3); }
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .key-btn { width: 120px; text-transform: uppercase; font-size: 10px; border-color: #444; }
-        .key-btn.waiting { border-color: var(--accent-cyan); color: var(--accent-cyan); }
-        .slider-val { color: var(--accent-cyan); min-width: 60px; text-align: right; font-size: 14px; }
-
-        #chat-container {
-            position: fixed; bottom: 10px; right: 10px; width: 280px;
-            display: flex; flex-direction: column;
-            background: rgba(10, 14, 39, 0.95); border: 1px solid var(--accent-cyan);
-            max-height: 250px;
-        }
-        #chat-messages { height: 180px; overflow-y: auto; padding: 8px; font-size: 12px; }
-        .chat-input-area { display: flex; border-top: 1px solid var(--accent-cyan); }
+        .key-btn.waiting { border-color: var(--cyan); color: var(--cyan); }
+        .slider-val { color: var(--cyan); min-width: 60px; text-align: right; font-size: 14px; }
+        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 280px; display: flex; flex-direction: column; background: rgba(10, 14, 39, 0.95); border: 1px solid var(--cyan); max-height: 250px; }
+        #chat-messages { height: 180px; overflow-y: auto; padding: 8px; font-size: 11px; }
+        .chat-input-area { display: flex; border-top: 1px solid var(--cyan); }
         #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; width: 100%; }
-
-        .score-board { font-size: 24px; color: var(--accent-cyan); margin: 5px 0; }
-        input[type="range"] { accent-color: var(--accent-cyan); cursor: pointer; }
+        .score-board { font-size: 24px; color: var(--cyan); margin: 5px 0; }
+        input[type="range"] { accent-color: var(--cyan); }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <h1 style="text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
+    <h1 style="text-shadow: 0 0 10px var(--cyan);">TETR.IO CLONE</h1>
     <div class="score-board"><span id="p1-wins">0</span> - <span id="p2-wins">0</span></div>
     <div class="controls">
         <button id="create-btn">Host Match</button>
         <input type="text" id="join-id" placeholder="Paste ID">
         <button id="join-btn">Join</button>
         <button id="restart-btn" style="display:none;">Restart</button>
-        <button id="open-settings" style="border-color: var(--accent-pink);">⚙️ Settings</button>
+        <button id="open-settings" style="border-color: var(--pink);">⚙️ Settings</button>
     </div>
-    <div id="my-id-label" style="font-size: 10px;">ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
+    <div style="font-size: 10px;">ID: <span id="my-id" style="color:var(--pink)">...</span></div>
 </div>
 
 <div class="game-container">
@@ -94,24 +53,19 @@
             <canvas id="hold1" width="80" height="80"></canvas>
             <div id="stats1" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
-        <div>
-            <canvas id="board1" width="300" height="600"></canvas>
-        </div>
+        <canvas id="board1" width="300" height="600"></canvas>
         <div class="side-panels">
             <p style="font-size: 10px;">NEXT</p>
             <canvas id="queue1" width="80" height="400"></canvas>
         </div>
     </div>
-
     <div class="player-section">
         <div class="side-panels">
             <p style="font-size: 10px;">HOLD</p>
             <canvas id="hold2" width="80" height="80"></canvas>
             <div id="stats2" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
         </div>
-        <div>
-            <canvas id="board2" width="300" height="600"></canvas>
-        </div>
+        <canvas id="board2" width="300" height="600"></canvas>
         <div class="side-panels">
             <p style="font-size: 10px;">NEXT</p>
             <canvas id="queue2" width="80" height="400"></canvas>
@@ -120,59 +74,31 @@
 </div>
 
 <div id="settings-modal">
-    <h2 style="color: var(--accent-pink); margin-bottom: 20px;">GAME SETTINGS</h2>
+    <h2 style="color: var(--pink); margin-bottom: 20px;">GAME SETTINGS</h2>
     <div id="keybinds-list"></div>
-    
     <hr style="margin: 20px 0; border: 0; border-top: 1px solid #333;">
-    
-    <div class="setting-row">
-        <span>DAS (Initial Delay)</span>
-        <input type="range" id="das-range" min="80" max="300" value="170">
-        <span class="slider-val" id="das-val">170ms</span>
-    </div>
-    <div class="setting-row">
-        <span>ARR (Repeat Speed)</span>
-        <input type="range" id="arr-range" min="0" max="100" value="30">
-        <span class="slider-val" id="arr-val">30ms</span>
-    </div>
-    <div class="setting-row">
-        <span>Soft Drop Factor</span>
-        <input type="range" id="sdf-range" min="1" max="41" value="20">
-        <span class="slider-val" id="sdf-val">20x</span>
-    </div>
-    
-    <button id="close-settings" style="width: 100%; margin-top: 10px; background: var(--accent-pink); border:none;">SAVE & CLOSE</button>
+    <div class="setting-row"><span>DAS (Initial Delay)</span><input type="range" id="das-range" min="80" max="300" value="170"><span class="slider-val" id="das-val">170ms</span></div>
+    <div class="setting-row"><span>ARR (Repeat Speed)</span><input type="range" id="arr-range" min="0" max="100" value="30"><span class="slider-val" id="arr-val">30ms</span></div>
+    <div class="setting-row"><span>Soft Drop Factor</span><input type="range" id="sdf-range" min="1" max="41" value="20"><span class="slider-val" id="sdf-val">20x</span></div>
+    <button id="close-settings" style="width: 100%; margin-top: 10px; background: var(--pink); border:none;">SAVE & CLOSE</button>
 </div>
 
 <div id="chat-container">
     <div id="chat-messages"></div>
-    <div class="chat-input-area">
-        <input type="text" id="chat-input" placeholder="T to chat...">
-    </div>
+    <div class="chat-input-area"><input type="text" id="chat-input" placeholder="Press T to chat..."></div>
 </div>
 
 <script>
-/** HANDLING CONFIG **/
 let settings = {
-    keys: {
-        left: 'arrowleft', right: 'arrowright', softDrop: 'arrowdown', hardDrop: ' ',
-        rotateCW: 'x', rotateCCW: 'z', rotate180: 'a', hold: 'c', chat: 't'
-    },
-    das: 170,
-    arr: 30,
-    sdf: 20
+    keys: { left:'arrowleft', right:'arrowright', softDrop:'arrowdown', hardDrop:' ', rotateCW:'x', rotateCCW:'z', rotate180:'a', hold:'c', chat:'t' },
+    das: 170, arr: 30, sdf: 20
 };
-
-const saved = localStorage.getItem('tetris_settings_v2');
+const saved = localStorage.getItem('tetris_settings_v3');
 if (saved) settings = JSON.parse(saved);
 
-/** RNG & CONSTANTS **/
 class SeededRandom {
     constructor(seed) { this.state = seed || Date.now(); }
-    next() {
-        this.state = (this.state * 1664525 + 1013904223) % 4294967296;
-        return this.state / 4294967296;
-    }
+    next() { this.state = (this.state * 1664525 + 1013904223) % 4294967296; return this.state / 4294967296; }
 }
 
 const COLS = 10, ROWS = 20, BLOCK = 30;
@@ -192,7 +118,6 @@ class GameState {
         this.lines = 0; this.attack = 0; this.isGameOver = false;
         this.curr = null; this.type = ''; this.x = 0; this.y = 0; this.rot = 0;
         this.dropTimer = 0; this.lockTimer = 0; this.lastMoveRot = false;
-
         this.fillQueue(); this.spawn();
     }
 
@@ -210,7 +135,10 @@ class GameState {
     spawn(type = null) {
         this.type = type || this.queue.shift(); this.fillQueue();
         this.curr = SHAPES[this.type]; this.rot = 0;
-        this.x = Math.floor(COLS/2) - Math.floor(this.curr[0].length/2); this.y = 0;
+        // Correct Spawn Columns (SRS Style / User Requested)
+        // O at index 4 (5,6), I at index 3 (4,5,6,7), others at index 3 (4,5,6)
+        this.x = (this.type === 'O') ? 4 : 3;
+        this.y = (this.type === 'I') ? -1 : 0;
         this.canHold = true; this.lastMoveRot = false;
         if (!this.isValid(this.x, this.y, this.curr)) {
             this.isGameOver = true;
@@ -228,49 +156,23 @@ class GameState {
     }
 
     rotate(dir) {
-        const nextP = this.rotateMat(this.curr, dir);
-        if (this.isValid(this.x, this.y, nextP)) {
-            this.curr = nextP; this.lastMoveRot = true; this.lockTimer = 0;
-        }
+        const rotateMat = (m, d) => {
+            let n = m.length, res = Array.from({length:n},()=>Array(n).fill(0));
+            for(let y=0; y<n; y++) for(let x=0; x<n; x++)
+                if(d==='cw') res[x][n-1-y] = m[y][x]; else res[n-1-x][y] = m[y][x];
+            return res;
+        };
+        const nextP = rotateMat(this.curr, dir);
+        if (this.isValid(this.x, this.y, nextP)) { this.curr = nextP; this.lastMoveRot = true; this.lockTimer = 0; }
     }
 
-    rotateMat(m, dir) {
-        let n = m.length, res = Array.from({length:n},()=>Array(n).fill(0));
-        for(let y=0; y<n; y++) for(let x=0; x<n; x++)
-            if(dir==='cw') res[x][n-1-y] = m[y][x]; else res[n-1-x][y] = m[y][x];
-        return res;
-    }
-
-    move(dx) {
-        if (this.isValid(this.x + dx, this.y, this.curr)) {
-            this.x += dx; this.lastMoveRot = false; this.lockTimer = 0;
-            return true;
-        }
-        return false;
-    }
-
-    drop() {
-        if (this.isValid(this.x, this.y + 1, this.curr)) {
-            this.y++; this.lastMoveRot = false; return true;
-        }
-        return false;
-    }
-
-    hardDrop() {
-        while(this.drop()){}
-        this.lock();
-    }
-
-    hold() {
-        if (!this.canHold) return;
-        const t = this.holdPiece; this.holdPiece = this.type;
-        this.spawn(t); this.canHold = false;
-    }
+    move(dx) { if (this.isValid(this.x + dx, this.y, this.curr)) { this.x += dx; this.lastMoveRot = false; this.lockTimer = 0; return true; } return false; }
+    drop() { if (this.isValid(this.x, this.y + 1, this.curr)) { this.y++; this.lastMoveRot = false; return true; } return false; }
+    hardDrop() { while(this.drop()){} this.lock(); }
+    hold() { if (!this.canHold) return; const t = this.holdPiece; this.holdPiece = this.type; this.spawn(t); this.canHold = false; }
 
     lock() {
-        this.curr.forEach((row, dy) => row.forEach((v, dx) => {
-            if (v && this.y + dy >= 0) this.board[this.y+dy][this.x+dx] = this.type;
-        }));
+        this.curr.forEach((row, dy) => row.forEach((v, dx) => { if (v && this.y + dy >= 0) this.board[this.y+dy][this.x+dx] = this.type; }));
         this.clearLines();
         if (!this.spawn()) this.isGameOver = true;
         if (this.pNum === 1 && conn) sendState();
@@ -278,12 +180,7 @@ class GameState {
 
     clearLines() {
         let c = 0;
-        for (let y = ROWS-1; y>=0; y--) {
-            if (this.board[y].every(cell => cell !== 0)) {
-                this.board.splice(y, 1); this.board.unshift(Array(COLS).fill(0));
-                c++; y++;
-            }
-        }
+        for (let y = ROWS-1; y>=0; y--) { if (this.board[y].every(cell => cell !== 0)) { this.board.splice(y, 1); this.board.unshift(Array(COLS).fill(0)); c++; y++; } }
         if (c > 0) {
             let dmg = c === 4 ? 4 : Math.max(0, c-1);
             this.attack += dmg; this.lines += c;
@@ -291,29 +188,17 @@ class GameState {
         }
     }
 
-    update(dt, isSoftDropping) {
+    update(dt, isSD) {
         if (this.isGameOver) return;
-        
-        // Apply SDF multiplier to the time delta
-        let effectiveDt = isSoftDropping ? dt * (settings.sdf > 40 ? 1000 : settings.sdf) : dt;
-        
-        if (isSoftDropping && settings.sdf > 40) {
-            // Infinite SDF Logic: Teleport to bottom but don't lock yet
-            while(this.isValid(this.x, this.y + 1, this.curr)) { this.y++; }
-        }
-
-        this.dropTimer += effectiveDt;
+        let effDt = isSD ? dt * (settings.sdf > 40 ? 1000 : settings.sdf) : dt;
+        if (isSD && settings.sdf > 40) while(this.isValid(this.x, this.y + 1, this.curr)) this.y++;
+        this.dropTimer += effDt;
         if (this.dropTimer > 800) {
-            if (!this.drop()) {
-                this.lockTimer += dt; // Lock delay uses real time, not SDF
-                if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; }
-            } else {
-                this.lockTimer = 0;
-            }
+            if (!this.drop()) { this.lockTimer += dt; if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; } }
+            else this.lockTimer = 0;
             this.dropTimer = 0;
         } else if (!this.isValid(this.x, this.y + 1, this.curr)) {
-            this.lockTimer += dt;
-            if (this.lockTimer >= 500) this.lock();
+            this.lockTimer += dt; if (this.lockTimer >= 500) this.lock();
         }
     }
 
@@ -328,10 +213,7 @@ class GameState {
         this.drawUI();
     }
 
-    drawBlk(ctx, x, y, col, sz = BLOCK) {
-        ctx.fillStyle = col; ctx.fillRect(x*sz, y*sz, sz, sz);
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.strokeRect(x*sz, y*sz, sz, sz);
-    }
+    drawBlk(ctx, x, y, col, sz = BLOCK) { ctx.fillStyle = col; ctx.fillRect(x*sz, y*sz, sz, sz); ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.strokeRect(x*sz, y*sz, sz, sz); }
 
     drawUI() {
         document.getElementById(`stats${this.pNum}`).innerHTML = `LINES: ${this.lines}<br>ATTACK: ${this.attack}`;
@@ -343,25 +225,16 @@ class GameState {
 
     drawPreview(ctx, type, yOffset = 10) {
         const p = SHAPES[type], sz = 15;
-        p.forEach((r, y) => r.forEach((v, x) => {
-            if (v) { ctx.fillStyle = COLORS[type]; ctx.fillRect(x*sz + 10, y*sz + yOffset, sz, sz); }
-        }));
+        p.forEach((r, y) => r.forEach((v, x) => { if (v) { ctx.fillStyle = COLORS[type]; ctx.fillRect(x*sz+10, y*sz+yOffset, sz, sz); } }));
     }
 }
 
 /** INPUTS **/
 const keysActive = {};
-let dasTimer = 0, arrTimer = 0;
-let waitingForKey = null;
-
+let dasTimer = 0, arrTimer = 0, waitingForKey = null;
 window.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if (waitingForKey) {
-        settings.keys[waitingForKey] = k;
-        waitingForKey = null;
-        renderKeybinds();
-        return;
-    }
+    if (waitingForKey) { settings.keys[waitingForKey] = k; waitingForKey = null; renderKeybinds(); return; }
     if (!keysActive[k]) {
         if (k === settings.keys.rotateCW) gameState1.rotate('cw');
         if (k === settings.keys.rotateCCW) gameState1.rotate('ccw');
@@ -372,57 +245,40 @@ window.addEventListener('keydown', e => {
     }
     keysActive[k] = true;
 });
-
-window.addEventListener('keyup', e => {
-    keysActive[e.key.toLowerCase()] = false;
-    if (e.key.toLowerCase() === settings.keys.left || e.key.toLowerCase() === settings.keys.right) dasTimer = 0;
-});
+window.addEventListener('keyup', e => { keysActive[e.key.toLowerCase()] = false; if (e.key.toLowerCase() === settings.keys.left || e.key.toLowerCase() === settings.keys.right) dasTimer = 0; });
 
 function handleInput(dt) {
-    if (!gameState1 || gameState1.isGameOver || document.activeElement.tagName === 'INPUT') return;
-    
-    const softDropPressed = keysActive[settings.keys.softDrop];
-    
+    if (!gameState1 || gameState1.isGameOver || document.activeElement.tagName === 'INPUT') return false;
     const moveDir = keysActive[settings.keys.left] ? -1 : (keysActive[settings.keys.right] ? 1 : 0);
     if (moveDir !== 0) {
         if (dasTimer === 0) gameState1.move(moveDir);
         dasTimer += dt;
-        if (dasTimer >= settings.das) {
-            arrTimer += dt;
-            if (arrTimer >= settings.arr) { gameState1.move(moveDir); arrTimer = 0; }
-        }
-    } else { dasTimer = 0; }
-
-    return softDropPressed;
+        if (dasTimer >= settings.das) { arrTimer += dt; if (arrTimer >= settings.arr) { gameState1.move(moveDir); arrTimer = 0; } }
+    } else dasTimer = 0;
+    return keysActive[settings.keys.softDrop];
 }
 
-/** PEER & GAME START **/
-let peer = new Peer(), conn, gameState1, gameState2, isHost = false, wins = [0, 0];
+/** NETWORK **/
+let peer = new Peer(), conn, gameState1, gameState2, wins = [0, 0];
 peer.on('open', id => document.getElementById('my-id').innerText = id);
 
-document.getElementById('create-btn').onclick = () => {
-    isHost = true; document.getElementById('restart-btn').style.display = 'inline-block';
-};
-
-document.getElementById('join-btn').onclick = () => {
-    conn = peer.connect(document.getElementById('join-id').value);
-    setupConn();
-};
-
-peer.on('connection', c => {
-    conn = c; isHost = true; setupConn();
-    let s = Date.now(); conn.send({type:'init', seed:s}); start(s);
-});
+document.getElementById('create-btn').onclick = () => { document.getElementById('restart-btn').style.display = 'inline-block'; addChat("System", "Hosting... waiting for join."); };
+document.getElementById('join-btn').onclick = () => { conn = peer.connect(document.getElementById('join-id').value); setupConn(); };
+peer.on('connection', c => { conn = c; setupConn(); });
 
 function setupConn() {
+    conn.on('open', () => {
+        addChat("System", "Connected!");
+        if (!gameState1) { let s = Date.now(); conn.send({type:'init', seed:s}); start(s); }
+    });
     conn.on('data', data => {
         if (data.type === 'init' || data.type === 'restart') start(data.seed);
-        if (data.type === 'update') {
+        if (data.type === 'update' && gameState2) {
             gameState2.board = data.board; gameState2.holdPiece = data.holdPiece;
             gameState2.queue = data.queue; gameState2.lines = data.lines; gameState2.attack = data.attack;
         }
         if (data.type === 'attack') receiveGarb(data.amt);
-        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Enemy Topped Out!"); }
+        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Opponent topped out!"); }
         if (data.type === 'chat') addChat("Opponent", data.msg);
     });
 }
@@ -433,27 +289,13 @@ function start(seed) {
     requestAnimationFrame(loop);
 }
 
-function updateWins() {
-    document.getElementById('p1-wins').innerText = wins[0];
-    document.getElementById('p2-wins').innerText = wins[1];
-}
-
-function sendState() {
-    conn.send({ type:'update', board:gameState1.board, holdPiece:gameState1.holdPiece, queue:gameState1.queue, lines:gameState1.lines, attack:gameState1.attack });
-}
-
+function updateWins() { document.getElementById('p1-wins').innerText = wins[0]; document.getElementById('p2-wins').innerText = wins[1]; }
+function sendState() { conn.send({ type:'update', board:gameState1.board, holdPiece:gameState1.holdPiece, queue:gameState1.queue, lines:gameState1.lines, attack:gameState1.attack }); }
 function receiveGarb(amt) {
     let hole = Math.floor(Math.random()*COLS);
-    for(let i=0; i<amt; i++) {
-        gameState1.board.shift();
-        let r = Array(COLS).fill('grey'); r[hole] = 0;
-        gameState1.board.push(r);
-    }
+    for(let i=0; i<amt; i++) { gameState1.board.shift(); let r = Array(COLS).fill('grey'); r[hole] = 0; gameState1.board.push(r); }
 }
-
-document.getElementById('restart-btn').onclick = () => {
-    let s = Date.now(); conn.send({type:'restart', seed:s}); start(s);
-};
+document.getElementById('restart-btn').onclick = () => { let s = Date.now(); conn.send({type:'restart', seed:s}); start(s); };
 
 let last = 0;
 function loop(t) {
@@ -462,71 +304,32 @@ function loop(t) {
     gameState1.update(dt, isSD);
     gameState1.draw(); gameState2.draw();
     if (!gameState1.isGameOver) requestAnimationFrame(loop);
-    else { wins[1]++; updateWins(); addChat("System", "You Topped Out."); }
+    else { wins[1]++; updateWins(); addChat("System", "You topped out."); }
 }
 
-/** SETTINGS READOUT LOGIC **/
+/** SETTINGS & UI **/
 const modal = document.getElementById('settings-modal');
-const keyList = document.getElementById('keybinds-list');
-const dasRange = document.getElementById('das-range');
-const arrRange = document.getElementById('arr-range');
-const sdfRange = document.getElementById('sdf-range');
-
-function updateSliderReadouts() {
+const dasRange = document.getElementById('das-range'), arrRange = document.getElementById('arr-range'), sdfRange = document.getElementById('sdf-range');
+function updateReadouts() {
     document.getElementById('das-val').innerText = dasRange.value + 'ms';
     document.getElementById('arr-val').innerText = arrRange.value + 'ms';
     document.getElementById('sdf-val').innerText = sdfRange.value > 40 ? 'INF' : sdfRange.value + 'x';
 }
-
-[dasRange, arrRange, sdfRange].forEach(s => s.oninput = updateSliderReadouts);
-
-document.getElementById('open-settings').onclick = () => {
-    dasRange.value = settings.das;
-    arrRange.value = settings.arr;
-    sdfRange.value = settings.sdf;
-    updateSliderReadouts();
-    modal.style.display = 'block';
-    renderKeybinds();
-};
-
-document.getElementById('close-settings').onclick = () => {
-    settings.das = parseInt(dasRange.value);
-    settings.arr = parseInt(arrRange.value);
-    settings.sdf = parseInt(sdfRange.value);
-    localStorage.setItem('tetris_settings_v2', JSON.stringify(settings));
-    modal.style.display = 'none';
-};
-
+[dasRange, arrRange, sdfRange].forEach(s => s.oninput = updateReadouts);
+document.getElementById('open-settings').onclick = () => { dasRange.value = settings.das; arrRange.value = settings.arr; sdfRange.value = settings.sdf; updateReadouts(); modal.style.display = 'block'; renderKeybinds(); };
+document.getElementById('close-settings').onclick = () => { settings.das = parseInt(dasRange.value); settings.arr = parseInt(arrRange.value); settings.sdf = parseInt(sdfRange.value); localStorage.setItem('tetris_settings_v3', JSON.stringify(settings)); modal.style.display = 'none'; };
 function renderKeybinds() {
-    keyList.innerHTML = '';
-    for (let action in settings.keys) {
-        const row = document.createElement('div');
-        row.className = 'setting-row';
-        row.innerHTML = `<span>${action}</span><button class="key-btn" id="key-${action}">${settings.keys[action] === ' ' ? 'SPACE' : settings.keys[action]}</button>`;
-        keyList.appendChild(row);
-        document.getElementById(`key-${action}`).onclick = (e) => {
-            waitingForKey = action;
-            e.target.innerText = '...';
-            e.target.classList.add('waiting');
-        };
+    const list = document.getElementById('keybinds-list'); list.innerHTML = '';
+    for (let a in settings.keys) {
+        const r = document.createElement('div'); r.className = 'setting-row';
+        r.innerHTML = `<span>${a}</span><button class="key-btn" id="key-${a}">${settings.keys[a]===' '?'SPACE':settings.keys[a]}</button>`;
+        list.appendChild(r);
+        document.getElementById(`key-${a}`).onclick = (e) => { waitingForKey = a; e.target.innerText = '...'; e.target.classList.add('waiting'); };
     }
 }
-
-/** CHAT **/
 const chatIn = document.getElementById('chat-input');
-chatIn.onkeydown = e => {
-    if (e.key === 'Enter' && chatIn.value.trim()) {
-        addChat("You", chatIn.value);
-        if(conn) conn.send({type:'chat', msg:chatIn.value});
-        chatIn.value = ""; chatIn.blur();
-    }
-};
-function addChat(who, msg) {
-    const d = document.createElement('div');
-    d.innerHTML = `<b style="color:var(--accent-cyan)">${who}:</b> ${msg}`;
-    const c = document.getElementById('chat-messages');
-    c.appendChild(d); c.scrollTop = c.scrollHeight;
-}
+chatIn.onkeydown = e => { if (e.key === 'Enter' && chatIn.value.trim()) { addChat("You", chatIn.value); if(conn) conn.send({type:'chat', msg:chatIn.value}); chatIn.value = ""; chatIn.blur(); } };
+function addChat(who, msg) { const d = document.createElement('div'); d.innerHTML = `<b style="color:var(--cyan)">${who}:</b> ${msg}`; const c = document.getElementById('chat-messages'); c.appendChild(d); c.scrollTop = c.scrollHeight; }
 </script>
 </body>
 </html>
