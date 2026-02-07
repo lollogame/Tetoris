@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Battle</title>
+    <title>Tetris Multiplayer - GitHub Pages</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
         
         :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --border-color: #475569;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-            --player-1: #3b82f6;
-            --player-2: #ef4444;
+            --bg-dark: #0a0e27;
+            --bg-grid: #151b3d;
+            --border-glow: #00ffff;
+            --text-primary: #ffffff;
+            --text-secondary: #8b9dc3;
+            --accent-cyan: #00ffff;
+            --accent-pink: #ff00ff;
+            --accent-yellow: #ffff00;
+            --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.5);
         }
         
         * {
@@ -28,204 +27,207 @@
         }
         
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-primary);
+            font-family: 'Orbitron', monospace;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
             color: var(--text-primary);
             min-height: 100vh;
             overflow-x: hidden;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 0, 255, 0.03) 2px, rgba(255, 0, 255, 0.03) 4px);
+            pointer-events: none;
+            animation: scanlines 8s linear infinite;
+        }
+        
+        @keyframes scanlines {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(4px); }
         }
         
         .container {
             max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
+            position: relative;
+            z-index: 1;
         }
         
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .header-left h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        h1 {
+            font-family: 'Press Start 2P', cursive;
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
+            animation: glow-pulse 2s ease-in-out infinite;
         }
         
-        .header-right {
-            display: flex;
-            gap: 12px;
+        @keyframes glow-pulse {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5)); }
+            50% { filter: drop-shadow(0 0 20px rgba(255, 0, 255, 0.8)); }
         }
         
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-family: inherit;
-            font-weight: 600;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
-        }
-        
-        .btn:hover {
-            background-color: var(--bg-tertiary);
-            transform: translateY(-1px);
-        }
-        
-        .btn-primary {
-            background-color: var(--accent-blue);
-            border-color: var(--accent-blue);
-        }
-        
-        .btn-primary:hover {
-            background-color: #2563eb;
-        }
-        
-        .btn-danger {
-            background-color: #ef4444;
-            border-color: #ef4444;
-        }
-        
-        .btn-danger:hover {
-            background-color: #dc2626;
-        }
-        
-        .status-bar {
-            background-color: var(--bg-secondary);
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            text-align: center;
-            border: 1px solid var(--border-color);
-        }
-        
-        .status-text {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .game-layout {
-            display: flex;
-            gap: 32px;
-            margin-bottom: 32px;
-        }
-        
-        .game-board {
-            flex: 1;
-            background-color: var(--bg-secondary);
-            border-radius: 12px;
+        .controls-panel {
+            background: rgba(21, 27, 61, 0.8);
+            border: 2px solid var(--border-glow);
+            border-radius: 10px;
             padding: 20px;
-            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-glow);
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-item label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+        
+        .control-item input, .control-item select {
+            background: rgba(10, 14, 39, 0.9);
+            border: 1px solid var(--accent-cyan);
+            color: var(--text-primary);
+            padding: 8px;
+            border-radius: 5px;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .control-item input:focus, .control-item select:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        
+        button {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+            border: none;
+            color: var(--bg-dark);
+            padding: 12px 24px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.7rem;
+            border-radius: 5px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .game-area {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .player-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
         }
         
         .player-header {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1rem;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px var(--accent-cyan);
+        }
+        
+        .game-wrapper {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .player-name {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            font-size: 1.125rem;
-        }
-        
-        .player-1 .player-name {
-            color: var(--player-1);
-        }
-        
-        .player-2 .player-name {
-            color: var(--player-2);
-        }
-        
-        .player-status {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-        
-        .game-container {
-            display: flex;
-            gap: 16px;
+            gap: 20px;
+            align-items: flex-start;
         }
         
         .side-panel {
             display: flex;
             flex-direction: column;
-            gap: 16px;
-            width: 120px;
+            gap: 15px;
         }
         
         .info-box {
-            background-color: var(--bg-primary);
+            background: rgba(21, 27, 61, 0.9);
+            border: 2px solid var(--accent-cyan);
             border-radius: 8px;
-            padding: 16px;
-            border: 1px solid var(--border-color);
+            padding: 15px;
+            min-width: 150px;
+            box-shadow: var(--shadow-glow);
         }
         
         .info-box h3 {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.6rem;
+            margin-bottom: 10px;
+            color: var(--accent-yellow);
+            text-align: center;
         }
         
         .stat {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            margin: 5px 0;
+            font-size: 0.9rem;
         }
         
         .stat-label {
-            font-size: 0.75rem;
             color: var(--text-secondary);
+            font-size: 0.75rem;
         }
         
         .stat-value {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--text-primary);
+            color: var(--accent-cyan);
+            font-weight: bold;
         }
         
-        .preview-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: var(--bg-primary);
-            border-radius: 8px;
-            padding: 12px;
-            min-height: 80px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .main-canvas-container {
-            flex: 1;
-            background-color: var(--bg-primary);
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            overflow: hidden;
+        .canvas-container {
+            position: relative;
+            border: 3px solid var(--border-glow);
+            border-radius: 5px;
+            box-shadow: 
+                var(--shadow-glow),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+            background: rgba(10, 14, 39, 0.95);
         }
         
         canvas {
@@ -234,333 +236,257 @@
             image-rendering: crisp-edges;
         }
         
-        .connection-panel {
-            background-color: var(--bg-secondary);
-            padding: 24px;
-            border-radius: 12px;
-            margin-bottom: 24px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .peer-id-display {
-            background-color: var(--bg-primary);
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .peer-id-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-        
-        .peer-id-value {
-            font-family: monospace;
-            font-size: 0.875rem;
-            color: var(--text-primary);
-            word-break: break-all;
-            padding: 8px;
-            background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        
-        .connection-controls {
+        .mini-canvas-container {
+            background: rgba(10, 14, 39, 0.9);
+            border: 2px solid var(--accent-pink);
+            border-radius: 5px;
+            padding: 10px;
             display: flex;
-            gap: 12px;
+            justify-content: center;
             align-items: center;
-            flex-wrap: wrap;
+            min-height: 100px;
         }
         
-        .connection-controls input {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px 16px;
-            background-color: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 0.875rem;
-        }
-        
-        .connection-controls input:focus {
-            outline: none;
-            border-color: var(--accent-blue);
-        }
-        
-        .chat-panel {
-            background-color: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 24px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .chat-panel h3 {
-            font-size: 1rem;
-            margin-bottom: 16px;
-            color: var(--text-primary);
+        .chat-container {
+            background: rgba(21, 27, 61, 0.9);
+            border: 2px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            box-shadow: var(--shadow-glow);
         }
         
         .chat-messages {
-            height: 200px;
+            height: 150px;
             overflow-y: auto;
-            background-color: var(--bg-primary);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-            border: 1px solid var(--border-color);
+            background: rgba(10, 14, 39, 0.8);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
         }
         
         .chat-message {
-            margin-bottom: 8px;
-            font-size: 0.875rem;
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 2px solid var(--accent-pink);
+            padding-left: 8px;
         }
         
         .chat-input-container {
             display: flex;
-            gap: 12px;
+            gap: 10px;
         }
         
         .chat-input {
             flex: 1;
-            padding: 10px 16px;
-            background-color: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            background: rgba(10, 14, 39, 0.9);
+            border: 1px solid var(--accent-cyan);
             color: var(--text-primary);
-            font-family: inherit;
-            font-size: 0.875rem;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Orbitron', monospace;
         }
         
-        .chat-input:focus {
-            outline: none;
-            border-color: var(--accent-blue);
-        }
-        
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.8);
+        .connection-panel {
             display: flex;
+            gap: 10px;
             justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s;
-        }
-        
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-        
-        .modal {
-            background-color: var(--bg-secondary);
-            border-radius: 12px;
-            width: 90%;
-            max-width: 600px;
-            max-height: 90vh;
-            overflow-y: auto;
-            border: 1px solid var(--border-color);
-        }
-        
-        .modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
             align-items: center;
         }
         
-        .modal-title {
-            font-size: 1.25rem;
-            font-weight: 600;
+        .connection-panel input {
+            background: rgba(10, 14, 39, 0.9);
+            border: 1px solid var(--accent-cyan);
             color: var(--text-primary);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Orbitron', monospace;
+            width: 300px;
         }
         
-        .modal-close {
-            background: none;
-            border: none;
+        #gameStatus {
+            text-align: center;
+            margin-top: 20px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8rem;
+            color: var(--accent-yellow);
+            text-shadow: 0 0 10px var(--accent-yellow);
+        }
+        
+        #myPeerId {
+            background: rgba(21, 27, 61, 0.9);
+            border: 2px solid var(--accent-cyan);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-glow);
+        }
+        
+        #myPeerId .peer-id-label {
+            font-size: 0.7rem;
             color: var(--text-secondary);
-            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        
+        #myPeerId .peer-id-value {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.9rem;
+            color: var(--accent-cyan);
+            word-break: break-all;
+            user-select: all;
             cursor: pointer;
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-        }
-        
-        .modal-close:hover {
-            background-color: var(--bg-tertiary);
-        }
-        
-        .modal-content {
-            padding: 24px;
-        }
-        
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .control-item {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        
-        .control-item label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-        
-        .control-item input,
-        .control-item select {
-            padding: 10px 12px;
-            background-color: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 0.875rem;
-        }
-        
-        .control-item input:focus,
-        .control-item select:focus {
-            outline: none;
-            border-color: var(--accent-blue);
-        }
-        
-        .key-binding {
-            cursor: pointer;
-            user-select: none;
+            padding: 10px;
+            background: rgba(10, 14, 39, 0.8);
+            border-radius: 5px;
+            border: 1px solid var(--accent-pink);
         }
         
         .hidden {
             display: none !important;
         }
-        
-        @media (max-width: 1200px) {
-            .game-layout {
-                flex-direction: column;
-            }
-            
-            .game-board {
-                width: 100%;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .header-right {
-                flex-direction: column;
-                width: 100%;
-            }
-            
-            .header-right .btn {
-                width: 100%;
-            }
-            
-            .game-container {
-                flex-direction: column;
-            }
-            
-            .side-panel {
-                width: 100%;
-                flex-direction: row;
-                flex-wrap: wrap;
-            }
-            
-            .info-box {
-                flex: 1;
-                min-width: 150px;
-            }
+
+        .copy-btn {
+            margin-top: 10px;
+            font-size: 0.6rem;
+            padding: 8px 16px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <div class="header-left">
-                <h1>Tetris Battle</h1>
-            </div>
-            <div class="header-right">
-                <button class="btn" id="settingsBtn">Settings</button>
-                <button class="btn" id="restartBtn" style="display: none;">Restart</button>
-                <button class="btn btn-primary" id="createGameBtn">Create Game</button>
-            </div>
-        </header>
+        <h1>⬛ Tetris Online Battle ⬛</h1>
         
-        <div class="status-bar">
-            <div class="status-text" id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
+        <div class="controls-panel">
+            <h2 style="font-family: 'Press Start 2P', cursive; font-size: 1rem; margin-bottom: 15px; text-align: center;">Game Settings</h2>
+            
+            <div class="controls-grid">
+                <div class="control-item">
+                    <label>Move Left</label>
+                    <input type="text" id="keyLeft" value="ArrowLeft" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Move Right</label>
+                    <input type="text" id="keyRight" value="ArrowRight" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Soft Drop</label>
+                    <input type="text" id="keySoftDrop" value="ArrowDown" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Hard Drop</label>
+                    <input type="text" id="keyHardDrop" value=" " readonly>
+                </div>
+                <div class="control-item">
+                    <label>Rotate CW</label>
+                    <input type="text" id="keyRotateCW" value="ArrowUp" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Rotate CCW</label>
+                    <input type="text" id="keyRotateCCW" value="z" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Rotate 180</label>
+                    <input type="text" id="keyRotate180" value="x" readonly>
+                </div>
+                <div class="control-item">
+                    <label>Hold Piece</label>
+                    <input type="text" id="keyHold" value="c" readonly>
+                </div>
+                <div class="control-item">
+                    <label>ARR (ms)</label>
+                    <input type="number" id="arr" value="0" min="0" max="200">
+                </div>
+                <div class="control-item">
+                    <label>DAS (ms)</label>
+                    <input type="number" id="das" value="167" min="0" max="500">
+                </div>
+                <div class="control-item">
+                    <label>DCD (ms)</label>
+                    <input type="number" id="dcd" value="0" min="0" max="100">
+                </div>
+                <div class="control-item">
+                    <label>SDF (multiplier)</label>
+                    <select id="sdf">
+                        <option value="1">1x</option>
+                        <option value="2">2x</option>
+                        <option value="6" selected>6x</option>
+                        <option value="10">10x</option>
+                        <option value="20">20x</option>
+                        <option value="inf">Infinite</option>
+                    </select>
+                </div>
+                <div class="control-item">
+                    <label>Prevent Missdrop</label>
+                    <select id="preventMissdrop">
+                        <option value="true" selected>On</option>
+                        <option value="false">Off</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 15px; color: var(--text-secondary); font-size: 0.75rem;">
+                Click on any key binding to change it
+            </div>
+        </div>
+        
+        <div id="myPeerId" class="hidden">
+            <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
+            <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
+            <button class="copy-btn" onclick="copyPeerId()">📋 Copy ID</button>
         </div>
         
         <div class="connection-panel">
-            <div class="peer-id-display hidden" id="myPeerId">
-                <div class="peer-id-label">Your Peer ID (share with opponent):</div>
-                <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
-            </div>
-            <div class="connection-controls">
-                <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID">
-                <button class="btn btn-primary" id="joinGameBtn">Join Game</button>
-            </div>
+            <button id="createGameBtn">Create Game</button>
+            <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
+            <button id="joinGameBtn">Join Game</button>
+            <button id="restartBtn" class="hidden">Restart Game</button>
         </div>
         
-        <div class="game-layout hidden" id="gameArea">
-            <div class="game-board player-1">
-                <div class="player-header">
-                    <div class="player-name">
-                        <span>👤</span>
-                        <span>YOU</span>
-                    </div>
-                    <div class="player-status">
-                        <span id="pps1">0.00</span> PPS
-                    </div>
-                </div>
-                <div class="game-container">
+        <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
+        
+        <div class="game-area hidden" id="gameArea">
+            <div class="player-container">
+                <div class="player-header">🎮 YOU</div>
+                <div class="game-wrapper">
                     <div class="side-panel">
                         <div class="info-box">
                             <h3>HOLD</h3>
-                            <div class="preview-container">
+                            <div class="mini-canvas-container">
                                 <canvas id="holdCanvas1" width="80" height="80"></canvas>
                             </div>
                         </div>
                         <div class="info-box">
                             <h3>STATS</h3>
-                            <div class="stats-grid">
-                                <div class="stat">
-                                    <span class="stat-label">APM</span>
-                                    <span class="stat-value" id="apm1">0.00</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-label">B2B</span>
-                                    <span class="stat-value" id="b2b1">0</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-label">Combo</span>
-                                    <span class="stat-value" id="combo1">0</span>
-                                </div>
+                            <div class="stat">
+                                <span class="stat-label">PPS:</span>
+                                <span class="stat-value" id="pps1">0.00</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">APM:</span>
+                                <span class="stat-value" id="apm1">0.00</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">B2B:</span>
+                                <span class="stat-value" id="b2b1">0</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Combo:</span>
+                                <span class="stat-value" id="combo1">0</span>
                             </div>
                         </div>
                     </div>
-                    <div class="main-canvas-container">
+                    <div class="canvas-container">
                         <canvas id="gameCanvas1" width="320" height="640"></canvas>
                     </div>
                     <div class="side-panel">
                         <div class="info-box">
                             <h3>NEXT</h3>
-                            <div class="preview-container">
+                            <div class="mini-canvas-container">
                                 <canvas id="queueCanvas1" width="80" height="480"></canvas>
                             </div>
                         </div>
@@ -568,49 +494,43 @@
                 </div>
             </div>
             
-            <div class="game-board player-2">
-                <div class="player-header">
-                    <div class="player-name">
-                        <span>👤</span>
-                        <span>OPPONENT</span>
-                    </div>
-                    <div class="player-status">
-                        <span id="pps2">0.00</span> PPS
-                    </div>
-                </div>
-                <div class="game-container">
+            <div class="player-container">
+                <div class="player-header">🎮 OPPONENT</div>
+                <div class="game-wrapper">
                     <div class="side-panel">
                         <div class="info-box">
                             <h3>HOLD</h3>
-                            <div class="preview-container">
+                            <div class="mini-canvas-container">
                                 <canvas id="holdCanvas2" width="80" height="80"></canvas>
                             </div>
                         </div>
                         <div class="info-box">
                             <h3>STATS</h3>
-                            <div class="stats-grid">
-                                <div class="stat">
-                                    <span class="stat-label">APM</span>
-                                    <span class="stat-value" id="apm2">0.00</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-label">B2B</span>
-                                    <span class="stat-value" id="b2b2">0</span>
-                                </div>
-                                <div class="stat">
-                                    <span class="stat-label">Combo</span>
-                                    <span class="stat-value" id="combo2">0</span>
-                                </div>
+                            <div class="stat">
+                                <span class="stat-label">PPS:</span>
+                                <span class="stat-value" id="pps2">0.00</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">APM:</span>
+                                <span class="stat-value" id="apm2">0.00</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">B2B:</span>
+                                <span class="stat-value" id="b2b2">0</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Combo:</span>
+                                <span class="stat-value" id="combo2">0</span>
                             </div>
                         </div>
                     </div>
-                    <div class="main-canvas-container">
+                    <div class="canvas-container">
                         <canvas id="gameCanvas2" width="320" height="640"></canvas>
                     </div>
                     <div class="side-panel">
                         <div class="info-box">
                             <h3>NEXT</h3>
-                            <div class="preview-container">
+                            <div class="mini-canvas-container">
                                 <canvas id="queueCanvas2" width="80" height="480"></canvas>
                             </div>
                         </div>
@@ -619,104 +539,17 @@
             </div>
         </div>
         
-        <div class="chat-panel">
-            <h3>Chat</h3>
+        <div class="chat-container">
+            <h3 style="font-family: 'Press Start 2P', cursive; font-size: 0.8rem; margin-bottom: 10px; text-align: center; color: var(--accent-yellow);">💬 CHAT</h3>
             <div class="chat-messages" id="chatMessages"></div>
             <div class="chat-input-container">
                 <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
-                <button class="btn" id="sendChatBtn">Send</button>
+                <button id="sendChatBtn">Send</button>
             </div>
         </div>
     </div>
     
-    <!-- Settings Modal -->
-    <div class="modal-overlay" id="settingsModal">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">Game Settings & Controls</div>
-                <button class="modal-close" id="closeSettings">&times;</button>
-            </div>
-            <div class="modal-content">
-                <h4 style="margin-bottom: 16px; color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase;">Controls</h4>
-                <div class="controls-grid">
-                    <div class="control-item">
-                        <label>Move Left</label>
-                        <input type="text" class="key-binding" id="keyLeft" value="ArrowLeft" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Move Right</label>
-                        <input type="text" class="key-binding" id="keyRight" value="ArrowRight" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Soft Drop</label>
-                        <input type="text" class="key-binding" id="keySoftDrop" value="ArrowDown" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Hard Drop</label>
-                        <input type="text" class="key-binding" id="keyHardDrop" value=" " readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Rotate CW</label>
-                        <input type="text" class="key-binding" id="keyRotateCW" value="ArrowUp" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Rotate CCW</label>
-                        <input type="text" class="key-binding" id="keyRotateCCW" value="z" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Rotate 180</label>
-                        <input type="text" class="key-binding" id="keyRotate180" value="x" readonly>
-                    </div>
-                    <div class="control-item">
-                        <label>Hold Piece</label>
-                        <input type="text" class="key-binding" id="keyHold" value="c" readonly>
-                    </div>
-                </div>
-                
-                <h4 style="margin: 24px 0 16px; color: var(--text-secondary); font-size: 0.875rem; text-transform: uppercase;">Game Settings</h4>
-                <div class="controls-grid">
-                    <div class="control-item">
-                        <label>ARR (ms)</label>
-                        <input type="number" id="arr" value="0" min="0" max="200">
-                    </div>
-                    <div class="control-item">
-                        <label>DAS (ms)</label>
-                        <input type="number" id="das" value="167" min="0" max="500">
-                    </div>
-                    <div class="control-item">
-                        <label>DCD (ms)</label>
-                        <input type="number" id="dcd" value="0" min="0" max="100">
-                    </div>
-                    <div class="control-item">
-                        <label>SDF (multiplier)</label>
-                        <select id="sdf">
-                            <option value="1">1x</option>
-                            <option value="2">2x</option>
-                            <option value="6" selected>6x</option>
-                            <option value="10">10x</option>
-                            <option value="20">20x</option>
-                            <option value="inf">Infinite</option>
-                        </select>
-                    </div>
-                    <div class="control-item">
-                        <label>Prevent Missdrop</label>
-                        <select id="preventMissdrop">
-                            <option value="true" selected>On</option>
-                            <option value="false">Off</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 0.75rem;">
-                    <p>Click on any key binding to change it</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- The rest of the JavaScript remains exactly the same -->
     <script>
-        // [All the JavaScript from the original remains unchanged]
         // Game Constants
         const COLS = 10;
         const ROWS = 20;
@@ -728,6 +561,28 @@
         let conn = null;
         let isHost = false;
         let myPeerId = null;
+        let gameSeed = null; // Shared seed for RNG synchronization
+        
+        // Seeded Random Number Generator
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+            
+            shuffle(array) {
+                const arr = [...array];
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(this.next() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr;
+            }
+        }
         
         // SRS Kick Table from https://harddrop.com/wiki/SRS
         const KICK_TABLE = {
@@ -821,7 +676,7 @@
         
         // Game State
         class GameState {
-            constructor(canvasId, holdCanvasId, queueCanvasId, playerId) {
+            constructor(canvasId, holdCanvasId, queueCanvasId, playerId, rng) {
                 this.canvas = document.getElementById(canvasId);
                 this.ctx = this.canvas.getContext('2d');
                 this.holdCanvas = document.getElementById(holdCanvasId);
@@ -829,6 +684,7 @@
                 this.queueCanvas = document.getElementById(queueCanvasId);
                 this.queueCtx = this.queueCanvas.getContext('2d');
                 this.playerId = playerId;
+                this.rng = rng; // Seeded RNG
                 
                 this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
                 this.currentPiece = null;
@@ -878,11 +734,8 @@
             
             getNextPiece() {
                 if (this.bag.length === 0) {
-                    this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-                    for (let i = this.bag.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
-                    }
+                    const pieces = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+                    this.bag = this.rng.shuffle(pieces);
                 }
                 return this.bag.pop();
             }
@@ -954,7 +807,6 @@
                         this.currentX += dx;
                         this.currentY -= dy;
                         this.currentRotation = newRotation;
-                        // Don't apply DCD for rotation - only for hard drop
                         if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
                             this.lockResetCount++;
@@ -1188,10 +1040,10 @@
             }
             
             receiveAttack(lines) {
-                // Add to pending garbage queue
+                // Add to pending garbage queue - use seeded RNG for hole position
                 this.pendingGarbage.push({
                     lines: lines,
-                    hole: Math.floor(Math.random() * COLS)
+                    hole: Math.floor(this.rng.next() * COLS)
                 });
             }
             
@@ -1220,7 +1072,7 @@
                 let linesAdded = 0;
                 for (const garbage of this.pendingGarbage) {
                     const useAlignedHole = garbage.lines >= 2;
-                    const hole = useAlignedHole ? garbage.hole : Math.floor(Math.random() * COLS);
+                    const hole = useAlignedHole ? garbage.hole : garbage.hole;
                     
                     for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
                         const garbageLine = Array(COLS).fill('G');
@@ -1493,21 +1345,6 @@
             }
         });
         
-        // Settings modal functions
-        document.getElementById('settingsBtn').addEventListener('click', () => {
-            document.getElementById('settingsModal').classList.add('active');
-        });
-        
-        document.getElementById('closeSettings').addEventListener('click', () => {
-            document.getElementById('settingsModal').classList.remove('active');
-        });
-        
-        document.getElementById('settingsModal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('settingsModal')) {
-                document.getElementById('settingsModal').classList.remove('active');
-            }
-        });
-        
         // PeerJS connection functions
         function initializePeer() {
             // Using public PeerJS cloud server
@@ -1533,6 +1370,11 @@
                 setupConnection();
                 addChatMessage('Opponent connected!');
                 document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                
+                // Host generates and sends seed
+                gameSeed = Date.now();
+                conn.send({ type: 'seed', seed: gameSeed });
+                
                 setTimeout(() => startGame(), 1000);
             });
             
@@ -1550,6 +1392,9 @@
                     if (gameState1) {
                         gameState1.receiveAttack(data.lines);
                     }
+                } else if (data.type === 'seed') {
+                    gameSeed = data.seed;
+                    addChatMessage(`Game seed synchronized: ${gameSeed}`, 'System');
                 } else if (data.type === 'start') {
                     startGame();
                 } else if (data.type === 'gameState') {
@@ -1608,12 +1453,11 @@
                 conn.on('open', () => {
                     setupConnection();
                     addChatMessage('Connected to opponent!');
-                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                    document.getElementById('gameStatus').textContent = 'Connected! Waiting for seed...';
                     document.getElementById('joinGameBtn').disabled = true;
                     
                     // Send start signal
                     conn.send({ type: 'start' });
-                    setTimeout(() => startGame(), 1000);
                 });
                 
                 conn.on('error', (err) => {
@@ -1624,6 +1468,11 @@
         
         document.getElementById('restartBtn').addEventListener('click', () => {
             if (conn && conn.open) {
+                // If host, generate new seed
+                if (isHost) {
+                    gameSeed = Date.now();
+                    conn.send({ type: 'seed', seed: gameSeed });
+                }
                 conn.send({ type: 'restart' });
             }
             restartGame();
@@ -1640,13 +1489,22 @@
         }
         
         function startGame() {
+            if (!gameSeed) {
+                addChatMessage('Waiting for game seed...', 'System');
+                return;
+            }
+            
             gameRunning = true;
             document.getElementById('gameArea').classList.remove('hidden');
-            document.getElementById('restartBtn').style.display = 'block';
+            document.getElementById('restartBtn').classList.remove('hidden');
             document.getElementById('gameStatus').textContent = 'Game in progress!';
             
-            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1);
-            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2);
+            // Create seeded RNGs - both players use same seed
+            const rng1 = new SeededRandom(gameSeed);
+            const rng2 = new SeededRandom(gameSeed); // Same seed for display sync
+            
+            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, rng1);
+            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, rng2);
             
             // Sync start time for both boards
             const startTime = Date.now();
@@ -1657,6 +1515,7 @@
             gameState2.spawnPiece();
             
             addChatMessage('Game started! Good luck!');
+            addChatMessage(`Using seed: ${gameSeed}`, 'System');
             
             gameLoop();
         }
@@ -1820,7 +1679,7 @@
         });
         
         // Initialize
-        addChatMessage('Welcome to Tetris Battle!');
+        addChatMessage('Welcome to Tetris Online Battle!');
         addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
     </script>
 </body>
