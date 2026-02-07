@@ -787,7 +787,7 @@
                         this.currentX += dx;
                         this.currentY -= dy;
                         this.currentRotation = newRotation;
-                        this.dcdTimer = parseInt(document.getElementById('dcd').value);
+                        // Don't apply DCD for rotation - only for hard drop
                         if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
                             this.lockResetCount++;
@@ -1513,6 +1513,27 @@
                 }
                 
                 if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
+                
+                // Process DAS/ARR for held movement keys
+                const dasDelay = parseInt(document.getElementById('das').value);
+                const arrDelay = parseInt(document.getElementById('arr').value);
+                
+                for (const key in dasTimers) {
+                    const timer = dasTimers[key];
+                    timer.das += deltaTime;
+                    
+                    if (timer.das >= dasDelay) {
+                        timer.arr += deltaTime;
+                        
+                        if (arrDelay === 0 || timer.arr >= arrDelay) {
+                            if (timer.direction) {
+                                gameState1.move(timer.direction);
+                            }
+                            timer.arr = 0;
+                        }
+                    }
+                }
+                
                 gameState1.draw();
                 
                 // Send game state to opponent periodically
@@ -1533,16 +1554,25 @@
             requestAnimationFrame(gameLoop);
         }
         
-        // Input handling
+        // Input handling with DAS/ARR
+        const keysHeld = {};
+        const dasTimers = {};
+        
         document.addEventListener('keydown', (e) => {
             if (!gameRunning || !gameState1) return;
             
+            // Prevent key repeat from triggering multiple times
+            if (keysHeld[e.key]) return;
+            keysHeld[e.key] = true;
+            
             if (e.key === keyBindings.left) {
                 e.preventDefault();
-                if (gameState1.dcdTimer <= 0) gameState1.move(-1);
+                gameState1.move(-1);
+                dasTimers[e.key] = { das: 0, arr: 0, direction: -1 };
             } else if (e.key === keyBindings.right) {
                 e.preventDefault();
-                if (gameState1.dcdTimer <= 0) gameState1.move(1);
+                gameState1.move(1);
+                dasTimers[e.key] = { das: 0, arr: 0, direction: 1 };
             } else if (e.key === keyBindings.softDrop) {
                 e.preventDefault();
                 gameState1.softDrop();
@@ -1566,6 +1596,11 @@
                 e.preventDefault();
                 gameState1.holdCurrentPiece();
             }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            delete keysHeld[e.key];
+            delete dasTimers[e.key];
         });
         
         // Initialize
