@@ -1,711 +1,211 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - GitHub Pages</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tetris Multiplayer - Fixed</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
-        
-        :root {
-            --bg-dark: #0a0e27;
-            --bg-grid: #151b3d;
-            --border-glow: #00ffff;
-            --text-primary: #ffffff;
-            --text-secondary: #8b9dc3;
-            --accent-cyan: #00ffff;
-            --accent-pink: #ff00ff;
-            --accent-yellow: #ffff00;
-            --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.5);
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Orbitron', monospace;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
-            color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
-            position: relative;
-        }
-        
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
-                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 0, 255, 0.03) 2px, rgba(255, 0, 255, 0.03) 4px);
-            pointer-events: none;
-            animation: scanlines 8s linear infinite;
-        }
-        
-        @keyframes scanlines {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(4px); }
-        }
-        
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-            position: relative;
-            z-index: 1;
-        }
-        
-        h1 {
-            font-family: 'Press Start 2P', cursive;
-            text-align: center;
-            font-size: 2rem;
-            margin-bottom: 30px;
-            text-transform: uppercase;
-            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
-            animation: glow-pulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes glow-pulse {
-            0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5)); }
-            50% { filter: drop-shadow(0 0 20px rgba(255, 0, 255, 0.8)); }
-        }
-        
-        .controls-panel {
-            background: rgba(21, 27, 61, 0.8);
-            border: 2px solid var(--border-glow);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .control-item {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        
-        .control-item label {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-        }
-        
-        .control-item input, .control-item select {
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-            font-size: 0.9rem;
-        }
-        
-        .control-item input:focus, .control-item select:focus {
-            outline: none;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
-        }
-        
-        button {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
-            border: none;
-            color: var(--bg-dark);
-            padding: 12px 24px;
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.7rem;
-            border-radius: 5px;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
-        }
-        
-        button:active {
-            transform: translateY(0);
-        }
-        
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .game-area {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-        
-        .player-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .player-header {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 1rem;
-            color: var(--accent-cyan);
-            text-shadow: 0 0 10px var(--accent-cyan);
-        }
-        
-        .game-wrapper {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-        }
-        
-        .side-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        
-        .info-box {
-            background: rgba(21, 27, 61, 0.9);
-            border: 2px solid var(--accent-cyan);
-            border-radius: 8px;
-            padding: 15px;
-            min-width: 150px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        .info-box h3 {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.6rem;
-            margin-bottom: 10px;
-            color: var(--accent-yellow);
-            text-align: center;
-        }
-        
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            margin: 5px 0;
-            font-size: 0.9rem;
-        }
-        
-        .stat-label {
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-        }
-        
-        .stat-value {
-            color: var(--accent-cyan);
-            font-weight: bold;
-        }
-        
-        .canvas-container {
-            position: relative;
-            border: 3px solid var(--border-glow);
-            border-radius: 5px;
-            box-shadow: 
-                var(--shadow-glow),
-                inset 0 0 20px rgba(0, 255, 255, 0.1);
-            background: rgba(10, 14, 39, 0.95);
-        }
-        
-        canvas {
-            display: block;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-        
-        .mini-canvas-container {
-            background: rgba(10, 14, 39, 0.9);
-            border: 2px solid var(--accent-pink);
-            border-radius: 5px;
-            padding: 10px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100px;
+
+        :root{
+            --bg-dark:#0a0e27;--bg-grid:#151b3d;--border-glow:#00ffff;
+            --text-primary:#ffffff;--text-secondary:#8b9dc3;--accent-cyan:#00ffff;
+            --accent-pink:#ff00ff;--accent-yellow:#ffff00;--shadow-glow:0 0 20px rgba(0,255,255,0.5);
         }
 
-        /* CHAT MOVED TO SIDE */
-        .chat-container {
-            position: fixed;
-            right: 20px;
-            top: 120px;
-            width: 320px;
-            background: rgba(21, 27, 61, 0.95);
-            border: 2px solid var(--border-glow);
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: var(--shadow-glow);
-            z-index: 5;
-            transition: transform 0.25s ease;
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{
+            font-family:'Orbitron',monospace;background:linear-gradient(135deg,#0a0e27 0%,#1a1f4d 100%);
+            color:var(--text-primary);min-height:100vh;position:relative;overflow-x:hidden;
         }
-
-        .chat-container.hidden-chat {
-            transform: translateX(120%);
-        }
-        
-        .chat-messages {
-            height: 200px;
-            overflow-y: auto;
-            background: rgba(10, 14, 39, 0.8);
-            border: 1px solid var(--accent-cyan);
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-            font-size: 0.85rem;
-        }
-        
-        .chat-message {
-            margin: 5px 0;
-            padding: 5px;
-            border-left: 2px solid var(--accent-pink);
-            padding-left: 8px;
-        }
-        
-        .chat-input-container {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .chat-input {
-            flex: 1;
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 10px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-        }
-        
-        .connection-panel {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .connection-panel input {
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 10px;
-            border-radius: 5px;
-            font-family: 'Orbitron', monospace;
-            width: 300px;
-        }
-        
-        #gameStatus {
-            text-align: center;
-            margin-top: 20px;
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.8rem;
-            color: var(--accent-yellow);
-            text-shadow: 0 0 10px var(--accent-yellow);
-        }
-        
-        #myPeerId {
-            background: rgba(21, 27, 61, 0.9);
-            border: 2px solid var(--accent-cyan);
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-glow);
-        }
-        
-        #myPeerId .peer-id-label {
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            margin-bottom: 10px;
-        }
-        
-        #myPeerId .peer-id-value {
-            font-family: 'Press Start 2P', cursive;
-            font-size: 0.9rem;
-            color: var(--accent-cyan);
-            word-break: break-all;
-            user-select: all;
-            cursor: pointer;
-            padding: 10px;
-            background: rgba(10, 14, 39, 0.8);
-            border-radius: 5px;
-            border: 1px solid var(--accent-pink);
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-
-        .copy-btn {
-            margin-top: 10px;
-            font-size: 0.6rem;
-            padding: 8px 16px;
-        }
+        .container{max-width:1600px;margin:0 auto;padding:20px;z-index:1;position:relative}
+        h1{font-family:'Press Start 2P',cursive;text-align:center;font-size:2rem;margin-bottom:30px;
+            background:linear-gradient(45deg,var(--accent-cyan),var(--accent-pink),var(--accent-yellow));
+            -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+            filter:drop-shadow(0 0 10px rgba(0,255,255,0.5))}
+        .controls-panel{background:rgba(21,27,61,0.8);border:2px solid var(--border-glow);border-radius:10px;padding:20px;margin-bottom:20px;box-shadow:var(--shadow-glow)}
+        .controls-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:15px}
+        .control-item{display:flex;flex-direction:column;gap:5px}
+        .control-item label{font-size:0.8rem;color:var(--text-secondary);text-transform:uppercase}
+        .control-item input,.control-item select{background:rgba(10,14,39,0.9);border:1px solid var(--accent-cyan);color:var(--text-primary);padding:8px;border-radius:5px;font-family:'Orbitron',monospace;font-size:0.9rem}
+        button{background:linear-gradient(135deg,var(--accent-cyan),var(--accent-pink));border:none;color:var(--bg-dark);padding:12px 24px;font-family:'Press Start 2P',cursive;font-size:0.7rem;border-radius:5px;cursor:pointer;text-transform:uppercase}
+        .game-area{display:flex;justify-content:center;gap:40px;margin-top:30px;flex-wrap:wrap}
+        .player-container{display:flex;flex-direction:column;align-items:center;gap:15px}
+        .player-header{font-family:'Press Start 2P',cursive;font-size:1rem;color:var(--accent-cyan)}
+        .game-wrapper{display:flex;gap:20px;align-items:flex-start}
+        .side-panel{display:flex;flex-direction:column;gap:15px}
+        .info-box{background:rgba(21,27,61,0.9);border:2px solid var(--accent-cyan);border-radius:8px;padding:15px;min-width:150px;box-shadow:var(--shadow-glow)}
+        .mini-canvas-container{background:rgba(10,14,39,0.9);border:2px solid var(--accent-pink);border-radius:5px;padding:10px;display:flex;justify-content:center;align-items:center;min-height:100px}
+        .canvas-container{position:relative;border:3px solid var(--border-glow);border-radius:5px;box-shadow:var(--shadow-glow),inset 0 0 20px rgba(0,255,255,0.1);background:rgba(10,14,39,0.95)}
+        canvas{display:block;image-rendering:pixelated}
+        .chat-container{position:fixed;right:20px;top:120px;width:320px;background:rgba(21,27,61,0.95);border:2px solid var(--border-glow);border-radius:10px;padding:15px;box-shadow:var(--shadow-glow);z-index:5;transition:transform .25s ease}
+        .chat-container.hidden-chat{transform:translateX(120%)}
+        .chat-messages{height:200px;overflow-y:auto;background:rgba(10,14,39,0.8);border:1px solid var(--accent-cyan);border-radius:5px;padding:10px;margin-bottom:10px;font-size:0.85rem}
+        .chat-message{margin:5px 0;padding:5px;border-left:2px solid var(--accent-pink);padding-left:8px}
+        .chat-input-container{display:flex;gap:10px}
+        .chat-input{flex:1;background:rgba(10,14,39,0.9);border:1px solid var(--accent-cyan);color:var(--text-primary);padding:10px;border-radius:5px;font-family:'Orbitron',monospace}
+        #gameStatus{text-align:center;margin-top:20px;font-family:'Press Start 2P',cursive;font-size:0.8rem;color:var(--accent-yellow)}
+        #myPeerId{background:rgba(21,27,61,0.9);border:2px solid var(--accent-cyan);padding:15px;border-radius:10px;text-align:center;margin-bottom:20px;box-shadow:var(--shadow-glow)}
+        .hidden{display:none!important}
+        .copy-btn{margin-top:10px;font-size:0.6rem;padding:8px 16px}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>⬛ Tetris Online Battle ⬛</h1>
-        
+
         <div class="controls-panel">
-            <h2 style="font-family: 'Press Start 2P', cursive; font-size: 1rem; margin-bottom: 15px; text-align: center;">Game Settings</h2>
-            
+            <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Game Settings</h2>
             <div class="controls-grid">
-                <div class="control-item">
-                    <label>Move Left</label>
-                    <input type="text" id="keyLeft" value="ArrowLeft" readonly>
+                <div class="control-item"><label>Move Left</label><input id="keyLeft" value="ArrowLeft" readonly></div>
+                <div class="control-item"><label>Move Right</label><input id="keyRight" value="ArrowRight" readonly></div>
+                <div class="control-item"><label>Soft Drop</label><input id="keySoftDrop" value="ArrowDown" readonly></div>
+                <div class="control-item"><label>Hard Drop</label><input id="keyHardDrop" value=" " readonly></div>
+                <div class="control-item"><label>Rotate CW</label><input id="keyRotateCW" value="ArrowUp" readonly></div>
+                <div class="control-item"><label>Rotate CCW</label><input id="keyRotateCCW" value="z" readonly></div>
+                <div class="control-item"><label>Rotate 180</label><input id="keyRotate180" value="x" readonly></div>
+                <div class="control-item"><label>Hold Piece</label><input id="keyHold" value="c" readonly></div>
+                <div class="control-item"><label>ARR (ms)</label><input id="arr" type="number" value="0" min="0" max="200"></div>
+                <div class="control-item"><label>DAS (ms)</label><input id="das" type="number" value="167" min="0" max="500"></div>
+                <div class="control-item"><label>DCD (ms)</label><input id="dcd" type="number" value="0" min="0" max="100"></div>
+                <div class="control-item"><label>SDF (multiplier)</label>
+                    <select id="sdf"><option value="1">1x</option><option value="2">2x</option><option value="6">6x</option><option value="10">10x</option><option value="20">20x</option><option value="inf" selected>Infinite</option></select>
                 </div>
-                <div class="control-item">
-                    <label>Move Right</label>
-                    <input type="text" id="keyRight" value="ArrowRight" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Soft Drop</label>
-                    <input type="text" id="keySoftDrop" value="ArrowDown" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Hard Drop</label>
-                    <input type="text" id="keyHardDrop" value=" " readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate CW</label>
-                    <input type="text" id="keyRotateCW" value="ArrowUp" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate CCW</label>
-                    <input type="text" id="keyRotateCCW" value="z" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Rotate 180</label>
-                    <input type="text" id="keyRotate180" value="x" readonly>
-                </div>
-                <div class="control-item">
-                    <label>Hold Piece</label>
-                    <input type="text" id="keyHold" value="c" readonly>
-                </div>
-                <div class="control-item">
-                    <label>ARR (ms)</label>
-                    <input type="number" id="arr" value="0" min="0" max="200">
-                </div>
-                <div class="control-item">
-                    <label>DAS (ms)</label>
-                    <input type="number" id="das" value="167" min="0" max="500">
-                </div>
-                <div class="control-item">
-                    <label>DCD (ms)</label>
-                    <input type="number" id="dcd" value="0" min="0" max="100">
-                </div>
-                <div class="control-item">
-                    <label>SDF (multiplier)</label>
-                    <select id="sdf">
-                        <option value="1">1x</option>
-                        <option value="2">2x</option>
-                        <option value="6" selected>6x</option>
-                        <option value="10">10x</option>
-                        <option value="20">20x</option>
-                        <option value="inf">Infinite</option>
-                    </select>
-                </div>
-                <div class="control-item">
-                    <label>Prevent Missdrop</label>
-                    <select id="preventMissdrop">
-                        <option value="true" selected>On</option>
-                        <option value="false">Off</option>
-                    </select>
+                <div class="control-item"><label>Prevent Missdrop</label>
+                    <select id="preventMissdrop"><option value="true" selected>On</option><option value="false">Off</option></select>
                 </div>
             </div>
-            
-            <div style="text-align: center; margin-top: 15px; color: var(--text-secondary); font-size: 0.75rem;">
-                Click on any key binding to change it
-            </div>
+            <div style="text-align:center;margin-top:15px;color:var(--text-secondary);font-size:0.75rem;">Click on any key binding to change it</div>
         </div>
-        
+
         <div id="myPeerId" class="hidden">
             <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
             <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
             <button class="copy-btn" onclick="copyPeerId()">📋 Copy ID</button>
         </div>
-        
+
         <div class="connection-panel">
             <button id="createGameBtn">Create Game</button>
-            <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
+            <input id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
             <button id="joinGameBtn">Join Game</button>
             <button id="restartBtn" class="hidden">Restart Game</button>
         </div>
-        
+
         <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
 
-        <div id="scoreDisplay" style="text-align:center;margin-top:10px;font-family:'Press Start 2P',cursive;font-size:0.7rem;color:var(--accent-cyan);">
-            Score: 0 - 0
-        </div>
-        
+        <div id="scoreDisplay" style="text-align:center;margin-top:10px;font-family:'Press Start 2P',cursive;font-size:0.7rem;color:var(--accent-cyan);">Score: 0 - 0</div>
+
         <div class="game-area hidden" id="gameArea">
             <div class="player-container">
                 <div class="player-header">🎮 YOU</div>
                 <div class="game-wrapper">
                     <div class="side-panel">
-                        <div class="info-box">
-                            <h3>HOLD</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="holdCanvas1" width="80" height="80"></canvas>
-                            </div>
-                        </div>
-                        <div class="info-box">
-                            <h3>STATS</h3>
-                            <div class="stat">
-                                <span class="stat-label">PPS:</span>
-                                <span class="stat-value" id="pps1">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">APM:</span>
-                                <span class="stat-value" id="apm1">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">B2B:</span>
-                                <span class="stat-value" id="b2b1">0</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Combo:</span>
-                                <span class="stat-value" id="combo1">0</span>
-                            </div>
+                        <div class="info-box"><h3>HOLD</h3><div class="mini-canvas-container"><canvas id="holdCanvas1" width="80" height="80"></canvas></div></div>
+                        <div class="info-box"><h3>STATS</h3>
+                            <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps1">0.00</span></div>
+                            <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm1">0.00</span></div>
+                            <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b1">0</span></div>
+                            <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo1">0</span></div>
                         </div>
                     </div>
-                    <div class="canvas-container">
-                        <canvas id="gameCanvas1" width="320" height="640"></canvas>
-                    </div>
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>NEXT</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="queueCanvas1" width="80" height="480"></canvas>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="canvas-container"><canvas id="gameCanvas1" width="320" height="640"></canvas></div>
+                    <div class="side-panel"><div class="info-box"><h3>NEXT</h3><div class="mini-canvas-container"><canvas id="queueCanvas1" width="80" height="480"></canvas></div></div></div>
                 </div>
             </div>
-            
+
             <div class="player-container">
                 <div class="player-header">🎮 OPPONENT</div>
                 <div class="game-wrapper">
                     <div class="side-panel">
-                        <div class="info-box">
-                            <h3>HOLD</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="holdCanvas2" width="80" height="80"></canvas>
-                            </div>
-                        </div>
-                        <div class="info-box">
-                            <h3>STATS</h3>
-                            <div class="stat">
-                                <span class="stat-label">PPS:</span>
-                                <span class="stat-value" id="pps2">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">APM:</span>
-                                <span class="stat-value" id="apm2">0.00</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">B2B:</span>
-                                <span class="stat-value" id="b2b2">0</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Combo:</span>
-                                <span class="stat-value" id="combo2">0</span>
-                            </div>
+                        <div class="info-box"><h3>HOLD</h3><div class="mini-canvas-container"><canvas id="holdCanvas2" width="80" height="80"></canvas></div></div>
+                        <div class="info-box"><h3>STATS</h3>
+                            <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps2">0.00</span></div>
+                            <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm2">0.00</span></div>
+                            <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b2">0</span></div>
+                            <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo2">0</span></div>
                         </div>
                     </div>
-                    <div class="canvas-container">
-                        <canvas id="gameCanvas2" width="320" height="640"></canvas>
-                    </div>
-                    <div class="side-panel">
-                        <div class="info-box">
-                            <h3>NEXT</h3>
-                            <div class="mini-canvas-container">
-                                <canvas id="queueCanvas2" width="80" height="480"></canvas>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="canvas-container"><canvas id="gameCanvas2" width="320" height="640"></canvas></div>
+                    <div class="side-panel"><div class="info-box"><h3>NEXT</h3><div class="mini-canvas-container"><canvas id="queueCanvas2" width="80" height="480"></canvas></div></div></div>
                 </div>
             </div>
         </div>
-        
+
         <div class="chat-container hidden-chat" id="chatContainer">
-            <h3 style="font-family: 'Press Start 2P', cursive; font-size: 0.8rem; margin-bottom: 10px; text-align: center; color: var(--accent-yellow);">
-                💬 CHAT (Press T)
-            </h3>
+            <h3 style="font-family:'Press Start 2P',cursive;font-size:0.8rem;margin-bottom:10px;text-align:center;color:var(--accent-yellow);">💬 CHAT (Press T)</h3>
             <div class="chat-messages" id="chatMessages"></div>
             <div class="chat-input-container">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
+                <input class="chat-input" id="chatInput" placeholder="Type a message...">
                 <button id="sendChatBtn">Send</button>
             </div>
         </div>
     </div>
-    
+
     <script>
-        // Game Constants
-        const COLS = 10;
-        const ROWS = 20;
-        const BLOCK_SIZE = 32;
-        const PREVIEW_BLOCK_SIZE = 16;
+        // ---- Constants ----
+        const COLS = 10, ROWS = 20, BLOCK_SIZE = 32, PREVIEW_BLOCK_SIZE = 16;
 
-        // Multiplayer shared bag system
-        let sharedPieceQueue = [];
-        let roundSeedCounter = 0;
+        // ---- PeerJS / Multiplayer ----
+        let peer = null, conn = null, isHost = false, myPeerId = null;
 
-        // Score system
-        let myScore = 0;
-        let opponentScore = 0;
+        // Scores
+        let myScore = 0, opponentScore = 0;
+        function updateScoreUI(){ document.getElementById('scoreDisplay').textContent = `Score: ${myScore} - ${opponentScore}`; }
 
-        function updateScoreUI() {
-            document.getElementById("scoreDisplay").textContent = `Score: ${myScore} - ${opponentScore}`;
+        // ---- Seeded RNG ----
+        // Mulberry32
+        function mulberry32(seed) {
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
         }
-        
-        // PeerJS connection
-        let peer = null;
-        let conn = null;
-        let isHost = false;
-        let myPeerId = null;
-        
-        // SRS Kick Table from https://harddrop.com/wiki/SRS
+        let sharedSeed = null;
+        let rng = null;
+
+        // ---- SRS Kick Table ----
         const KICK_TABLE = {
             'JLSTZ': {
-                '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-                'R->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-                'R->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
-                '2->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
-                '2->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-                'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-                'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
+                '0->R': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+                'R->0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+                'R->2': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+                '2->R': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+                '2->L': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+                'L->2': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+                'L->0': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+                '0->L': [[0,0],[1,0],[1,1],[0,-2],[1,-2]]
             },
             'I': {
-                '0->R': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-                'R->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-                'R->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-                '2->R': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-                '2->L': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
-                'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
-                'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
+                '0->R': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+                'R->0': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+                'R->2': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+                '2->R': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+                '2->L': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+                'L->2': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+                'L->0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+                '0->L': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
             },
             'O': {
-                '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]],
-                '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
+                '0->R': [[0,0]],'R->0': [[0,0]],'R->2': [[0,0]],'2->R': [[0,0]],
+                '2->L': [[0,0]],'L->2': [[0,0]],'L->0': [[0,0]],'0->L': [[0,0]]
             }
         };
-        
-        // Tetromino shapes and colors
+
+        // ---- Shapes ----
         const SHAPES = {
-            'I': {
-                shape: [
-                    [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
-                    [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]],
-                    [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]],
-                    [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]
-                ],
-                color: '#00f0f0'
-            },
-            'O': {
-                shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]],
-                color: '#f0f000'
-            },
-            'T': {
-                shape: [
-                    [[0,1,0], [1,1,1], [0,0,0]],
-                    [[0,1,0], [0,1,1], [0,1,0]],
-                    [[0,0,0], [1,1,1], [0,1,0]],
-                    [[0,1,0], [1,1,0], [0,1,0]]
-                ],
-                color: '#a000f0'
-            },
-            'S': {
-                shape: [
-                    [[0,1,1], [1,1,0], [0,0,0]],
-                    [[0,1,0], [0,1,1], [0,0,1]],
-                    [[0,0,0], [0,1,1], [1,1,0]],
-                    [[1,0,0], [1,1,0], [0,1,0]]
-                ],
-                color: '#00f000'
-            },
-            'Z': {
-                shape: [
-                    [[1,1,0], [0,1,1], [0,0,0]],
-                    [[0,0,1], [0,1,1], [0,1,0]],
-                    [[0,0,0], [1,1,0], [0,1,1]],
-                    [[0,1,0], [1,1,0], [1,0,0]]
-                ],
-                color: '#f00000'
-            },
-            'J': {
-                shape: [
-                    [[1,0,0], [1,1,1], [0,0,0]],
-                    [[0,1,1], [0,1,0], [0,1,0]],
-                    [[0,0,0], [1,1,1], [0,0,1]],
-                    [[0,1,0], [0,1,0], [1,1,0]]
-                ],
-                color: '#0000f0'
-            },
-            'L': {
-                shape: [
-                    [[0,0,1], [1,1,1], [0,0,0]],
-                    [[0,1,0], [0,1,0], [0,1,1]],
-                    [[0,0,0], [1,1,1], [1,0,0]],
-                    [[1,1,0], [0,1,0], [0,1,0]]
-                ],
-                color: '#f0a000'
-            }
+            'I': { shape: [ [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], [[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]], [[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]], [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]] ], color:'#00f0f0' },
+            'O': { shape: [ [[1,1],[1,1]], [[1,1],[1,1]], [[1,1],[1,1]], [[1,1],[1,1]] ], color:'#f0f000' },
+            'T': { shape: [ [[0,1,0],[1,1,1],[0,0,0]], [[0,1,0],[0,1,1],[0,1,0]], [[0,0,0],[1,1,1],[0,1,0]], [[0,1,0],[1,1,0],[0,1,0]] ], color:'#a000f0' },
+            'S': { shape: [ [[0,1,1],[1,1,0],[0,0,0]], [[0,1,0],[0,1,1],[0,0,1]], [[0,0,0],[0,1,1],[1,1,0]], [[1,0,0],[1,1,0],[0,1,0]] ], color:'#00f000' },
+            'Z': { shape: [ [[1,1,0],[0,1,1],[0,0,0]], [[0,0,1],[0,1,1],[0,1,0]], [[0,0,0],[1,1,0],[0,1,1]], [[0,1,0],[1,1,0],[1,0,0]] ], color:'#f00000' },
+            'J': { shape: [ [[1,0,0],[1,1,1],[0,0,0]], [[0,1,1],[0,1,0],[0,1,0]], [[0,0,0],[1,1,1],[0,0,1]], [[0,1,0],[0,1,0],[1,1,0]] ], color:'#0000f0' },
+            'L': { shape: [ [[0,0,1],[1,1,1],[0,0,0]], [[0,1,0],[0,1,0],[0,1,1]], [[0,0,0],[1,1,1],[1,0,0]], [[1,1,0],[0,1,0],[0,1,0]] ], color:'#f0a000' }
         };
 
-        function generateBag() {
-            const bag = ['I','O','T','S','Z','J','L'];
-            for (let i = bag.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [bag[i], bag[j]] = [bag[j], bag[i]];
-            }
-            return bag;
-        }
-
-        function getSharedNextPiece() {
-            if (sharedPieceQueue.length === 0) {
-                const newBag = generateBag();
-                sharedPieceQueue.push(...newBag);
-
-                // Host syncs bag to opponent
-                if (isHost && conn && conn.open) {
-                    conn.send({
-                        type: "bagSync",
-                        bag: newBag
-                    });
-                }
-            }
-            return sharedPieceQueue.shift();
-        }
-        
-        // Game State
+        // ---- GameState class ----
         class GameState {
             constructor(canvasId, holdCanvasId, queueCanvasId, playerId) {
                 this.canvas = document.getElementById(canvasId);
@@ -715,90 +215,80 @@
                 this.queueCanvas = document.getElementById(queueCanvasId);
                 this.queueCtx = this.queueCanvas.getContext('2d');
                 this.playerId = playerId;
-                
+
                 this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-                this.currentPiece = null;
-                this.currentX = 0;
-                this.currentY = 0;
-                this.currentRotation = 0;
-                this.holdPiece = null;
-                this.canHold = true;
+                this.currentPiece = null; this.currentX = 0; this.currentY = 0; this.currentRotation = 0;
+                this.holdPiece = null; this.canHold = true;
 
+                this.bag = [];
                 this.queue = [];
-                this.gravity = 1000;
-                this.lastGravityTime = 0;
-                this.gameStartTime = Date.now();
-                
-                this.lockDelay = 500;
-                this.lockDelayTimer = 0;
-                this.isTouchingGround = false;
-                this.maxLockResets = 15;
-                this.lockResetCount = 0;
-                this.hardDropCooldown = 0;
-                this.hardDropCooldownFrames = 10;
+                this.rng = rng; // seeded RNG (global variable must be set before creating GameState)
+                this.gravity = 1000; this.lastGravityTime = 0; this.gameStartTime = Date.now();
 
-                this.lastMoveOrRotateTime = 0;
-                this.lockDelayMovementGrace = 50; // allows tiny movement even when touching
-                
-                this.piecesPlaced = 0;
-                this.attacksSent = 0;
-                this.b2bCounter = 0;
-                this.comboCounter = -1;
-                this.lastClearWasB2B = false;
-                
+                this.lockDelay = 500; this.lockDelayTimer = 0; this.isTouchingGround = false;
+                this.maxLockResets = 15; this.lockResetCount = 0;
+                this.hardDropCooldown = 0; this.hardDropCooldownFrames = 10;
+
+                this.lastMoveOrRotateTime = 0; // used to prevent immediate lock after a move/rotate
+                this.lockDelayMovementGrace = 80; // ms of grace after move/rotation while grounded
+
+                this.piecesPlaced = 0; this.attacksSent = 0; this.b2bCounter = 0; this.comboCounter = -1; this.lastClearWasB2B = false;
+
                 this.dcdTimer = 0;
-
-                // Garbage queue system
                 this.pendingGarbage = [];
-                
+
+                // for spin detection
+                this.lastMoveWasRotation = false;
+
                 this.initQueue();
             }
-            
+
             initQueue() {
-                for (let i = 0; i < 6; i++) {
-                    this.queue.push(getSharedNextPiece());
-                }
+                for (let i = 0; i < 6; i++) this.queue.push(this.getNextPiece());
             }
-            
+
+            getNextPiece() {
+                if (!this.rng) {
+                    // fallback: random if rng not set (shouldn't happen)
+                    this.rng = Math.random;
+                }
+                if (this.bag.length === 0) {
+                    this.bag = ['I','O','T','S','Z','J','L'];
+                    for (let i = this.bag.length - 1; i > 0; i--) {
+                        const j = Math.floor(this.rng() * (i + 1));
+                        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
+                    }
+                }
+                return this.bag.pop();
+            }
+
             getSpawnColumn(pieceType) {
-                const spawnColumns = {
-                    'O': 4,
-                    'T': 3,
-                    'Z': 3,
-                    'I': 3,
-                    'L': 3,
-                    'J': 3,
-                    'S': 3
-                };
+                const spawnColumns = { 'O':4, 'T':3, 'Z':3, 'I':3, 'L':3, 'J':3, 'S':3 };
                 return spawnColumns[pieceType] || 3;
             }
-            
+
             spawnPiece() {
                 const pieceType = this.queue.shift();
-                this.queue.push(getSharedNextPiece());
+                this.queue.push(this.getNextPiece());
                 this.currentPiece = pieceType;
                 this.currentRotation = 0;
                 this.currentX = this.getSpawnColumn(pieceType);
                 this.currentY = 0;
                 this.canHold = true;
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                this.hardDropCooldown = 0;
-                
+                this.lockDelayTimer = 0; this.lockResetCount = 0; this.isTouchingGround = false; this.hardDropCooldown = 0;
+                this.lastMoveWasRotation = false;
                 if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
                     return false;
                 }
                 return true;
             }
-            
-            isValidPosition(x, y, rotation) {
+
+            isValidPosition(x,y,rotation) {
                 const shape = SHAPES[this.currentPiece].shape[rotation];
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
                         if (shape[row][col]) {
-                            const newX = x + col;
-                            const newY = y + row;
+                            const newX = x + col, newY = y + row;
                             if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
                             if (newY >= 0 && this.board[newY][newX]) return false;
                         }
@@ -806,127 +296,128 @@
                 }
                 return true;
             }
-            
+
             rotate(direction) {
                 const oldRotation = this.currentRotation;
-                let newRotation;
-                
+                let newRotation = oldRotation;
                 if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
                 else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
                 else if (direction === '180') newRotation = (oldRotation + 2) % 4;
-                
-                const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
-                                   this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
-                const rotations = ['0', 'R', '2', 'L'];
+
+                const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : (this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ);
+                const rotations = ['0','R','2','L'];
                 const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
-                const kicks = kickTable[kickKey] || [[0, 0]];
-                
-                for (const [dx, dy] of kicks) {
+                const kicks = kickTable[kickKey] || [[0,0]];
+
+                for (const [dx,dy] of kicks) {
                     if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newRotation)) {
-                        this.currentX += dx;
-                        this.currentY -= dy;
-                        this.currentRotation = newRotation;
-                        this.dcdTimer = parseInt(document.getElementById('dcd').value);
-
+                        this.currentX += dx; this.currentY -= dy; this.currentRotation = newRotation;
+                        this.dcdTimer = parseInt(document.getElementById('dcd').value) || 0;
                         this.lastMoveOrRotateTime = performance.now();
-
+                        this.lastMoveWasRotation = true;
                         if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                            this.lockDelayTimer = 0;
-                            this.lockResetCount++;
+                            this.lockDelayTimer = 0; this.lockResetCount++;
                         }
                         return true;
                     }
                 }
                 return false;
             }
-            
+
             move(dx) {
                 if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
                     this.currentX += dx;
-
                     this.lastMoveOrRotateTime = performance.now();
-
+                    this.lastMoveWasRotation = false;
                     if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                        this.lockDelayTimer = 0;
-                        this.lockResetCount++;
+                        this.lockDelayTimer = 0; this.lockResetCount++;
                     }
                     return true;
                 }
                 return false;
             }
-            
+
             softDrop() {
                 const sdf = document.getElementById('sdf').value;
-                const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
-                
-                if (multiplier === Infinity) {
-                    this.hardDrop();
-                } else {
+                const multiplier = sdf === 'inf' ? 20 : parseFloat(sdf) || 1;
+                let moved = false;
+                for (let i = 0; i < multiplier; i++) {
                     if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                         this.currentY++;
+                        moved = true;
                         this.lastMoveOrRotateTime = performance.now();
-                        return true;
-                    }
+                        this.lastMoveWasRotation = false;
+                    } else break;
                 }
-                return false;
+                return moved;
             }
-            
+
             hardDrop() {
                 const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
                 if (preventMissdrop && this.hardDropCooldown > 0) return;
-                
-                while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                    this.currentY++;
-                }
+                while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
+                this.lastMoveWasRotation = false;
                 this.lockPiece();
             }
-            
+
+            // Before placing, detect spin type based on current piece/position/rotation and lastMoveWasRotation
+            detectSpinType() {
+                if (this.currentPiece !== 'T') return null;
+                if (!this.lastMoveWasRotation) return null;
+                // corner coordinates relative to piece top-left
+                const corners = [
+                    [this.currentX, this.currentY],
+                    [this.currentX + 2, this.currentY],
+                    [this.currentX, this.currentY + 2],
+                    [this.currentX + 2, this.currentY + 2]
+                ];
+                let filled = 0;
+                for (const [x,y] of corners) {
+                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) filled++;
+                }
+                if (filled >= 3) return 'TSPIN';
+                // T-Spin Mini heuristic: exactly 2 filled corners but last action was rotation
+                if (filled === 2) return 'TSPIN_MINI';
+                return null;
+            }
+
             lockPiece() {
+                // detect spin BEFORE placing blocks into board
+                const spinType = this.detectSpinType();
+
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
                         if (shape[row][col]) {
-                            const boardY = this.currentY + row;
-                            const boardX = this.currentX + col;
-                            if (boardY >= 0) {
-                                this.board[boardY][boardX] = this.currentPiece;
-                            }
+                            const boardY = this.currentY + row, boardX = this.currentX + col;
+                            if (boardY >= 0) this.board[boardY][boardX] = this.currentPiece;
                         }
                     }
                 }
-                
+
                 this.piecesPlaced++;
-                this.dcdTimer = parseInt(document.getElementById('dcd').value);
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                this.clearLines();
+                this.dcdTimer = parseInt(document.getElementById('dcd').value) || 0;
+                this.lockDelayTimer = 0; this.lockResetCount = 0; this.isTouchingGround = false;
+                // pass spinType into clearLines so attacks consider T-spins
+                this.clearLines(spinType);
+                this.lastMoveWasRotation = false;
             }
-            
-            clearLines() {
+
+            clearLines(spinType = null) {
                 const clearedRows = [];
-                
                 for (let row = 0; row < ROWS; row++) {
-                    if (this.board[row].every(cell => cell !== 0)) {
-                        clearedRows.push(row);
-                    }
+                    if (this.board[row].every(cell => cell !== 0)) clearedRows.push(row);
                 }
-                
                 const linesCleared = clearedRows.length;
-                
                 if (linesCleared > 0) {
-                    for (let i = clearedRows.length - 1; i >= 0; i--) {
-                        this.board.splice(clearedRows[i], 1);
-                    }
-                    
-                    for (let i = 0; i < linesCleared; i++) {
-                        this.board.unshift(Array(COLS).fill(0));
-                    }
-                    
-                    const isSpin = this.checkSpin();
-                    const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear);
-                    
+                    for (let i = clearedRows.length - 1; i >= 0; i--) this.board.splice(clearedRows[i], 1);
+                    for (let i = 0; i < linesCleared; i++) this.board.unshift(Array(COLS).fill(0));
+
+                    const isSpin = (spinType && spinType !== null);
+                    const isAllClear = this.board.every(r => r.every(c => c === 0));
+                    let attack = this.calculateAttack(linesCleared, spinType, isAllClear);
+
+                    // B2B
                     const isB2BMove = linesCleared === 4 || isSpin;
                     if (isB2BMove) {
                         if (this.lastClearWasB2B) {
@@ -941,13 +432,14 @@
                         this.b2bCounter = 0;
                         this.lastClearWasB2B = false;
                     }
-                    
+
+                    // Combo
                     this.comboCounter++;
                     if (this.comboCounter >= 4) attack += 1;
-                    
+
+                    // Garbage canceling
                     if (this.pendingGarbage.length > 0) {
-                        let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
-                        
+                        let totalPending = this.pendingGarbage.reduce((s,g) => s + g.lines, 0);
                         if (attack >= totalPending) {
                             attack -= totalPending;
                             this.pendingGarbage = [];
@@ -955,128 +447,81 @@
                         } else {
                             let remaining = attack;
                             this.pendingGarbage = this.pendingGarbage.filter(g => {
-                                if (remaining >= g.lines) {
-                                    remaining -= g.lines;
-                                    return false;
-                                } else if (remaining > 0) {
-                                    g.lines -= remaining;
-                                    remaining = 0;
-                                    return true;
-                                }
+                                if (remaining >= g.lines) { remaining -= g.lines; return false; }
+                                else if (remaining > 0) { g.lines -= remaining; remaining = 0; return true; }
                                 return true;
                             });
                             addChatMessage(`Canceled ${attack} garbage lines!`, 'System');
                             attack = 0;
                         }
                     }
-                    
+
                     this.attacksSent += attack;
-                    if (attack > 0) {
-                        this.sendAttack(attack);
-                    }
+                    if (attack > 0) this.sendAttack(attack);
                 } else {
                     this.comboCounter = -1;
-                    
-                    if (this.pendingGarbage.length > 0) {
-                        this.applyGarbage();
-                    }
+                    if (this.pendingGarbage.length > 0) this.applyGarbage();
                 }
-                
                 this.updateStats();
             }
-            
-            checkSpin() {
-                if (this.currentPiece === 'T') return this.checkTSpin();
-                return false;
-            }
-            
+
             checkTSpin() {
-                const corners = [
-                    [this.currentX, this.currentY],
-                    [this.currentX + 2, this.currentY],
-                    [this.currentX, this.currentY + 2],
-                    [this.currentX + 2, this.currentY + 2]
-                ];
-                
-                let filledCorners = 0;
-                for (const [x, y] of corners) {
-                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
-                        filledCorners++;
-                    }
-                }
-                
-                return filledCorners >= 3;
+                // kept for compatibility: return boolean (true if any T-spin)
+                const type = this.detectSpinType();
+                return type !== null;
             }
-            
-            calculateAttack(lines, isSpin, isAllClear) {
+
+            calculateAttack(lines, spinType, isAllClear) {
                 let attack = 0;
-                
-                if (isAllClear) {
-                    attack = lines === 4 ? 10 : 8;
-                } else if (this.currentPiece === 'T' && isSpin) {
+                if (isAllClear) attack = lines === 4 ? 10 : 8;
+                else if (spinType === 'TSPIN') {
                     if (lines === 1) attack = 2;
                     else if (lines === 2) attack = 4;
                     else if (lines === 3) attack = 6;
-                } else if (isSpin) {
-                    attack = lines;
+                } else if (spinType === 'TSPIN_MINI') {
+                    // mini is weaker: single -> 1, double -> 2 (heuristic)
+                    if (lines === 1) attack = 1;
+                    else if (lines === 2) attack = 2;
+                } else if (spinType) {
+                    attack = lines; // fallback
                 } else {
                     if (lines === 4) attack = 4;
                     else if (lines === 3) attack = 2;
                     else if (lines === 2) attack = 1;
                 }
-                
                 return attack;
             }
-            
+
             sendAttack(lines) {
                 if (conn && conn.open && lines > 0) {
                     const cappedLines = Math.min(lines, 10);
-                    conn.send({
-                        type: 'attack',
-                        lines: cappedLines
-                    });
+                    conn.send({ type:'attack', lines: cappedLines });
                 }
             }
-            
+
             receiveAttack(lines) {
-                this.pendingGarbage.push({
-                    lines: lines,
-                    hole: Math.floor(Math.random() * COLS)
-                });
+                this.pendingGarbage.push({ lines: lines, hole: Math.floor(Math.random()*COLS) });
             }
-            
+
             applyGarbage() {
                 if (this.pendingGarbage.length === 0) return;
-                
-                let totalLines = 0;
-                
-                for (const garbage of this.pendingGarbage) {
-                    totalLines += garbage.lines;
-                }
-                
-                for (let i = 0; i < totalLines && i < ROWS; i++) {
-                    this.board.shift();
-                }
-                
+                let totalLines = this.pendingGarbage.reduce((s,g)=>s+g.lines,0);
+                for (let i=0;i<totalLines && i<ROWS;i++) this.board.shift();
                 let linesAdded = 0;
-                for (const garbage of this.pendingGarbage) {
-                    const hole = garbage.hole;
-                    
-                    for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
+                for (const g of this.pendingGarbage) {
+                    const hole = g.hole;
+                    for (let i=0;i<g.lines && linesAdded<totalLines;i++) {
                         const garbageLine = Array(COLS).fill('G');
                         garbageLine[hole] = 0;
-                        this.board.push(garbageLine);
-                        linesAdded++;
+                        this.board.push(garbageLine); linesAdded++;
                     }
                 }
-                
                 addChatMessage(`Received ${totalLines} garbage lines!`, 'System');
                 this.pendingGarbage = [];
             }
-            
+
             holdCurrentPiece() {
                 if (!this.canHold) return false;
-                
                 if (this.holdPiece === null) {
                     this.holdPiece = this.currentPiece;
                     this.spawnPiece();
@@ -1085,556 +530,403 @@
                     this.holdPiece = this.currentPiece;
                     this.currentPiece = temp;
                     this.currentRotation = 0;
-                    this.currentX = this.getSpawnColumn(temp);
-                    this.currentY = 0;
+                    this.currentX = this.getSpawnColumn(temp); this.currentY = 0;
                 }
-                
-                this.canHold = false;
-                return true;
+                this.canHold = false; return true;
             }
-            
+
             updateStats() {
-                const elapsed = (Date.now() - this.gameStartTime) / 1000;
+                const elapsed = (Date.now() - this.gameStartTime)/1000;
                 const pps = this.piecesPlaced / elapsed;
                 const apm = (this.attacksSent / elapsed) * 60;
-                
                 document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
                 document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
                 document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
-                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0,this.comboCounter);
             }
-            
+
             getState() {
                 return {
-                    board: this.board.map(row => [...row]),
-                    currentPiece: this.currentPiece,
-                    currentX: this.currentX,
-                    currentY: this.currentY,
-                    currentRotation: this.currentRotation,
-                    holdPiece: this.holdPiece,
-                    queue: [...this.queue],
-                    piecesPlaced: this.piecesPlaced,
-                    attacksSent: this.attacksSent,
-                    b2bCounter: this.b2bCounter,
-                    comboCounter: this.comboCounter
+                    board: this.board.map(r=>[...r]),
+                    currentPiece:this.currentPiece,currentX:this.currentX,currentY:this.currentY,currentRotation:this.currentRotation,
+                    holdPiece:this.holdPiece,queue:[...this.queue],piecesPlaced:this.piecesPlaced,attacksSent:this.attacksSent,
+                    b2bCounter:this.b2bCounter,comboCounter:this.comboCounter
                 };
             }
-            
+
             setState(state) {
-                this.board = state.board.map(row => [...row]);
-                this.currentPiece = state.currentPiece;
-                this.currentX = state.currentX;
-                this.currentY = state.currentY;
-                this.currentRotation = state.currentRotation;
-                this.holdPiece = state.holdPiece;
-                this.queue = [...state.queue];
-                this.piecesPlaced = state.piecesPlaced;
-                this.attacksSent = state.attacksSent;
-                this.b2bCounter = state.b2bCounter;
-                this.comboCounter = state.comboCounter;
-                
-                const elapsed = (Date.now() - this.gameStartTime) / 1000;
-                const pps = this.piecesPlaced / elapsed;
-                const apm = (this.attacksSent / elapsed) * 60;
-                
+                this.board = state.board.map(r=>[...r]);
+                this.currentPiece = state.currentPiece; this.currentX = state.currentX; this.currentY = state.currentY; this.currentRotation = state.currentRotation;
+                this.holdPiece = state.holdPiece; this.queue = [...state.queue]; this.piecesPlaced = state.piecesPlaced; this.attacksSent = state.attacksSent;
+                this.b2bCounter = state.b2bCounter; this.comboCounter = state.comboCounter;
+                const elapsed = (Date.now() - this.gameStartTime)/1000;
+                const pps = this.piecesPlaced / elapsed; const apm = (this.attacksSent / elapsed) * 60;
                 document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
                 document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
                 document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
-                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0,this.comboCounter);
             }
-            
+
             draw() {
-                this.ctx.fillStyle = '#0a0e27';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                this.ctx.strokeStyle = 'rgba(139, 157, 195, 0.1)';
-                this.ctx.lineWidth = 1;
-                for (let i = 0; i <= COLS; i++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(i * BLOCK_SIZE, 0);
-                    this.ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-                    this.ctx.stroke();
-                }
-                for (let i = 0; i <= ROWS; i++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, i * BLOCK_SIZE);
-                    this.ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE);
-                    this.ctx.stroke();
-                }
-                
-                for (let row = 0; row < ROWS; row++) {
-                    for (let col = 0; col < COLS; col++) {
-                        if (this.board[row][col]) {
-                            const color = this.board[row][col] === 'G' ? '#666666' : 
-                                         SHAPES[this.board[row][col]].color;
-                            this.drawBlock(this.ctx, col * BLOCK_SIZE, row * BLOCK_SIZE, color);
+                // background
+                this.ctx.fillStyle = '#0a0e27'; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+                // grid
+                this.ctx.strokeStyle = 'rgba(139,157,195,0.1)'; this.ctx.lineWidth = 1;
+                for (let i=0;i<=COLS;i++){ this.ctx.beginPath(); this.ctx.moveTo(i*BLOCK_SIZE,0); this.ctx.lineTo(i*BLOCK_SIZE,ROWS*BLOCK_SIZE); this.ctx.stroke(); }
+                for (let i=0;i<=ROWS;i++){ this.ctx.beginPath(); this.ctx.moveTo(0,i*BLOCK_SIZE); this.ctx.lineTo(COLS*BLOCK_SIZE,i*BLOCK_SIZE); this.ctx.stroke(); }
+
+                // board blocks
+                for (let r=0;r<ROWS;r++){
+                    for (let c=0;c<COLS;c++){
+                        if (this.board[r][c]) {
+                            const color = this.board[r][c] === 'G' ? '#666666' : SHAPES[this.board[r][c]].color;
+                            this.drawBlock(this.ctx, c*BLOCK_SIZE, r*BLOCK_SIZE, color);
                         }
                     }
                 }
-                
+
+                // ghost
                 if (this.currentPiece) {
                     let ghostY = this.currentY;
-                    while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
-                        ghostY++;
-                    }
-                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, ghostY, 
-                                  this.currentRotation, 0.3);
+                    while (this.isValidPosition(this.currentX, ghostY+1, this.currentRotation)) ghostY++;
+                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, ghostY, this.currentRotation, 0.3);
                 }
-                
-                if (this.currentPiece) {
-                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, 
-                                  this.currentRotation);
-                }
-                
-                this.drawHold();
-                this.drawQueue();
+
+                // current
+                if (this.currentPiece) this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, this.currentRotation);
+
+                this.drawHold(); this.drawQueue();
             }
-            
-            drawBlock(ctx, x, y, color, alpha = 1.0) {
-                ctx.fillStyle = color;
-                ctx.globalAlpha = alpha;
-                ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, 6);
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                ctx.fillRect(x + 2, y + BLOCK_SIZE - 8, BLOCK_SIZE - 4, 6);
+
+            drawBlock(ctx,x,y,color,alpha=1.0){
+                ctx.fillStyle = color; ctx.globalAlpha = alpha;
+                ctx.fillRect(x+1,y+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(x+2,y+2,BLOCK_SIZE-4,6);
+                ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x+2,y+BLOCK_SIZE-8,BLOCK_SIZE-4,6);
                 ctx.globalAlpha = 1.0;
             }
-            
-            drawPiece(ctx, pieceType, x, y, rotation, alpha = 1.0) {
-                const shape = SHAPES[pieceType].shape[rotation];
-                const color = SHAPES[pieceType].color;
-                
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col]) {
-                            this.drawBlock(ctx, (x + col) * BLOCK_SIZE, 
-                                         (y + row) * BLOCK_SIZE, color, alpha);
-                        }
-                    }
-                }
+
+            drawPiece(ctx,pieceType,x,y,rotation,alpha=1.0){
+                const shape = SHAPES[pieceType].shape[rotation]; const color = SHAPES[pieceType].color;
+                for (let r=0;r<shape.length;r++) for (let c=0;c<shape[r].length;c++)
+                    if (shape[r][c]) this.drawBlock(ctx,(x+c)*BLOCK_SIZE,(y+r)*BLOCK_SIZE,color,alpha);
             }
-            
-            drawHold() {
-                this.holdCtx.fillStyle = '#0a0e27';
-                this.holdCtx.fillRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
-                
+
+            drawHold(){
+                this.holdCtx.fillStyle = '#0a0e27'; this.holdCtx.fillRect(0,0,this.holdCanvas.width,this.holdCanvas.height);
                 if (this.holdPiece) {
-                    const shape = SHAPES[this.holdPiece].shape[0];
-                    const color = SHAPES[this.holdPiece].color;
+                    const shape = SHAPES[this.holdPiece].shape[0]; const color = SHAPES[this.holdPiece].color;
                     const offsetX = (this.holdCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
                     const offsetY = (this.holdCanvas.height - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
-                    for (let row = 0; row < shape.length; row++) {
-                        for (let col = 0; col < shape[row].length; col++) {
-                            if (shape[row][col]) {
-                                this.holdCtx.fillStyle = color;
-                                this.holdCtx.fillRect(
-                                    offsetX + col * PREVIEW_BLOCK_SIZE,
-                                    offsetY + row * PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE - 1,
-                                    PREVIEW_BLOCK_SIZE - 1
-                                );
-                            }
+                    for (let r=0;r<shape.length;r++) for (let c=0;c<shape[r].length;c++)
+                        if (shape[r][c]) {
+                            this.holdCtx.fillStyle = color;
+                            this.holdCtx.fillRect(offsetX + c*PREVIEW_BLOCK_SIZE, offsetY + r*PREVIEW_BLOCK_SIZE, PREVIEW_BLOCK_SIZE - 1, PREVIEW_BLOCK_SIZE - 1);
                         }
-                    }
                 }
             }
-            
-            drawQueue() {
-                this.queueCtx.fillStyle = '#0a0e27';
-                this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
-                
-                for (let i = 0; i < 6; i++) {
-                    const pieceType = this.queue[i];
-                    const shape = SHAPES[pieceType].shape[0];
-                    const color = SHAPES[pieceType].color;
+
+            drawQueue(){
+                this.queueCtx.fillStyle = '#0a0e27'; this.queueCtx.fillRect(0,0,this.queueCanvas.width,this.queueCanvas.height);
+                for (let i=0;i<6;i++){
+                    const pieceType = this.queue[i]; const shape = SHAPES[pieceType].shape[0]; const color = SHAPES[pieceType].color;
                     const offsetX = (this.queueCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
-                    const offsetY = i * 80 + (80 - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
-                    for (let row = 0; row < shape.length; row++) {
-                        for (let col = 0; col < shape[row].length; col++) {
-                            if (shape[row][col]) {
-                                this.queueCtx.fillStyle = color;
-                                this.queueCtx.fillRect(
-                                    offsetX + col * PREVIEW_BLOCK_SIZE,
-                                    offsetY + row * PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE - 1,
-                                    PREVIEW_BLOCK_SIZE - 1
-                                );
-                            }
-                        }
-                    }
+                    const offsetY = i*80 + (80 - shape.length * PREVIEW_BLOCK_SIZE) / 2;
+                    for (let r=0;r<shape.length;r++) for (let c=0;c<shape[r].length;c++)
+                        if (shape[r][c]) this.queueCtx.fillRect(offsetX + c*PREVIEW_BLOCK_SIZE, offsetY + r*PREVIEW_BLOCK_SIZE, PREVIEW_BLOCK_SIZE - 1, PREVIEW_BLOCK_SIZE - 1);
                 }
             }
         }
-        
-        // Game state instances
-        let gameState1 = null;
-        let gameState2 = null;
-        let gameRunning = false;
-        
-        // Key bindings
-        const keyBindings = {
-            left: 'ArrowLeft',
-            right: 'ArrowRight',
-            softDrop: 'ArrowDown',
-            hardDrop: ' ',
-            rotateCW: 'ArrowUp',
-            rotateCCW: 'z',
-            rotate180: 'x',
-            hold: 'c'
-        };
-        
+
+        // ---- Global game instances ----
+        let gameState1 = null, gameState2 = null, gameRunning = false;
+        let lastTime = 0, lastStateSendTime = 0; const STATE_SEND_INTERVAL = 50;
+
+        // ---- Key bindings ----
+        const keyBindings = { left:'ArrowLeft', right:'ArrowRight', softDrop:'ArrowDown', hardDrop:' ', rotateCW:'ArrowUp', rotateCCW:'z', rotate180:'x', hold:'c' };
+
+        // allow changing key bindings UI
         Object.keys(keyBindings).forEach(action => {
-            const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
-            input.addEventListener('click', () => {
-                input.value = 'Press a key...';
+            const el = document.getElementById('key' + action.charAt(0).toUpperCase() + action.slice(1));
+            if (!el) return;
+            el.addEventListener('click', () => {
+                el.value = 'Press a key...';
                 const listener = (e) => {
                     e.preventDefault();
                     keyBindings[action] = e.key;
-                    input.value = e.key;
+                    el.value = e.key;
                     document.removeEventListener('keydown', listener);
                 };
                 document.addEventListener('keydown', listener);
             });
         });
-        
-        // Chat functions
-        function addChatMessage(message, sender = 'System') {
+
+        // ---- Chat ----
+        function addChatMessage(message, sender='System') {
             const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'chat-message';
-            messageDiv.textContent = `${sender}: ${message}`;
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            const div = document.createElement('div'); div.className = 'chat-message';
+            div.textContent = `${sender}: ${message}`; chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        function toggleChat(force = null) {
+            const chat = document.getElementById('chatContainer');
+            if (force === true) chat.classList.remove('hidden-chat');
+            else if (force === false) chat.classList.add('hidden-chat');
+            else chat.classList.toggle('hidden-chat');
+            if (!chat.classList.contains('hidden-chat')) document.getElementById('chatInput').focus();
         }
 
-        function toggleChat(forceState = null) {
-            const chat = document.getElementById("chatContainer");
-            if (forceState === true) chat.classList.remove("hidden-chat");
-            else if (forceState === false) chat.classList.add("hidden-chat");
-            else chat.classList.toggle("hidden-chat");
-
-            if (!chat.classList.contains("hidden-chat")) {
-                document.getElementById("chatInput").focus();
-            }
-        }
-        
         document.getElementById('sendChatBtn').addEventListener('click', () => {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (message && conn && conn.open) {
-                conn.send({
-                    type: 'chat',
-                    message: message
-                });
-                addChatMessage(message, 'You');
-                input.value = '';
-            }
+            const input = document.getElementById('chatInput'); const msg = input.value.trim();
+            if (msg && conn && conn.open) { conn.send({ type:'chat', message: msg }); addChatMessage(msg,'You'); input.value = ''; }
         });
-        
-        document.getElementById('chatInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('sendChatBtn').click();
-            }
-        });
-        
-        // PeerJS connection functions
+        document.getElementById('chatInput').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('sendChatBtn').click(); });
+
+        // ---- Peer functions ----
         function initializePeer() {
-            peer = new Peer({
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
+            peer = new Peer({ config: { iceServers: [{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun1.l.google.com:19302'}] }});
+            peer.on('open', id => {
+                myPeerId = id; document.getElementById('peerIdDisplay').textContent = id; document.getElementById('myPeerId').classList.remove('hidden');
+                addChatMessage(`Your Peer ID: ${id}`); addChatMessage('Share this ID with your opponent to join!');
             });
-            
-            peer.on('open', (id) => {
-                myPeerId = id;
-                document.getElementById('peerIdDisplay').textContent = id;
-                document.getElementById('myPeerId').classList.remove('hidden');
-                addChatMessage(`Your Peer ID: ${id}`);
-                addChatMessage('Share this ID with your opponent to let them join!');
-            });
-            
-            peer.on('connection', (connection) => {
+
+            peer.on('connection', connection => {
+                // host receives inbound connection from joiner
                 conn = connection;
-                setupConnection();
-                addChatMessage('Opponent connected!');
-                document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
-                setTimeout(() => startGame(), 1000);
-            });
-            
-            peer.on('error', (err) => {
-                console.error('PeerJS error:', err);
-                addChatMessage(`Connection error: ${err.type}`);
-            });
-        }
-        
-        function endGame(winner) {
-            gameRunning = false;
-
-            if (winner === "me") {
-                myScore++;
-                addChatMessage("Opponent lost! You win this round!", "System");
-                document.getElementById("gameStatus").textContent = "You WIN!";
-            } else if (winner === "opponent") {
-                opponentScore++;
-                addChatMessage("You lost! Opponent wins this round!", "System");
-                document.getElementById("gameStatus").textContent = "You LOST!";
-            }
-
-            updateScoreUI();
-
-            if (conn && conn.open) {
-                conn.send({
-                    type: "gameOver",
-                    winner: winner
+                conn.on('open', () => {
+                    setupConnection();
+                    addChatMessage('Opponent connected!');
+                    document.getElementById('gameStatus').textContent = 'Connected! Preparing game...';
+                    // Host generates seed and starts the round
+                    if (isHost) {
+                        sharedSeed = Math.floor(Math.random() * 2147483647);
+                        conn.send({ type:'start', seed: sharedSeed });
+                        // start locally as well
+                        startGame(sharedSeed);
+                    }
                 });
-            }
+            });
 
-            if (!isHost) {
-                document.getElementById("restartBtn").classList.add("hidden");
-            } else {
-                document.getElementById("restartBtn").classList.remove("hidden");
-            }
+            peer.on('error', err => { console.error('Peer error', err); addChatMessage('Peer error: ' + (err && err.type ? err.type : err)); });
         }
 
         function setupConnection() {
-            conn.on('data', (data) => {
+            if (!conn) return;
+            conn.on('data', data => {
+                if (!data || !data.type) return;
                 if (data.type === 'chat') {
                     addChatMessage(data.message, 'Opponent');
                 } else if (data.type === 'attack') {
-                    if (gameState1) {
-                        gameState1.receiveAttack(data.lines);
-                    }
+                    if (gameState1) gameState1.receiveAttack(data.lines);
                 } else if (data.type === 'start') {
-                    startGame();
+                    // client receives start seed from host
+                    sharedSeed = data.seed;
+                    startGame(sharedSeed);
                 } else if (data.type === 'gameState') {
-                    if (gameState2) {
-                        gameState2.setState(data.state);
-                    }
+                    if (gameState2) gameState2.setState(data.state);
                 } else if (data.type === 'restart') {
-                    restartGame();
-                } else if (data.type === "bagSync") {
-                    sharedPieceQueue.push(...data.bag);
-                } else if (data.type === "gameOver") {
-                    if (data.winner === "me") {
-                        opponentScore++;
-                        document.getElementById("gameStatus").textContent = "Opponent WIN!";
+                    sharedSeed = data.seed;
+                    restartGame(sharedSeed);
+                } else if (data.type === 'gameOver') {
+                    // opponent reported gameover: data.winner is 'me'|'opponent'
+                    // If opponent reports winner === 'me', that means they claim they won -> you lost
+                    if (data.winner === 'me') {
+                        opponentScore++; document.getElementById('gameStatus').textContent = 'You LOST!'; addChatMessage('Opponent reports they won', 'System');
                     } else {
-                        myScore++;
-                        document.getElementById("gameStatus").textContent = "Opponent LOST!";
+                        myScore++; document.getElementById('gameStatus').textContent = 'You WIN!'; addChatMessage('Opponent reports you lost', 'System');
                     }
-                    updateScoreUI();
-                    gameRunning = false;
-
-                    if (!isHost) {
-                        document.getElementById("restartBtn").classList.add("hidden");
-                    }
+                    updateScoreUI(); gameRunning = false;
+                    // show restart for host only
+                    if (isHost) document.getElementById('restartBtn').classList.remove('hidden'); else document.getElementById('restartBtn').classList.add('hidden');
                 }
             });
-            
-            conn.on('close', () => {
-                addChatMessage('Opponent disconnected');
-                document.getElementById('gameStatus').textContent = 'Opponent disconnected';
-                gameRunning = false;
-            });
+
+            conn.on('close', () => { addChatMessage('Opponent disconnected'); document.getElementById('gameStatus').textContent = 'Opponent disconnected'; gameRunning = false; });
         }
-        
-        function copyPeerId() {
-            const peerId = document.getElementById('peerIdDisplay').textContent;
-            navigator.clipboard.writeText(peerId).then(() => {
-                addChatMessage('Peer ID copied to clipboard!');
-            });
-        }
-        
-        // Button handlers
+
+        function copyPeerId() { const id = document.getElementById('peerIdDisplay').textContent; navigator.clipboard.writeText(id).then(()=>addChatMessage('Peer ID copied to clipboard!')); }
+
+        // ---- Buttons ----
         document.getElementById('createGameBtn').addEventListener('click', () => {
-            if (!peer) {
-                initializePeer();
-                isHost = true;
-                document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
-                document.getElementById('createGameBtn').disabled = true;
-            }
+            if (!peer) initializePeer();
+            isHost = true;
+            document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
+            document.getElementById('createGameBtn').disabled = true;
         });
-        
+
         document.getElementById('joinGameBtn').addEventListener('click', () => {
-            const opponentId = document.getElementById('opponentPeerId').value.trim();
-            if (!opponentId) {
-                addChatMessage('Please enter an opponent Peer ID');
-                return;
-            }
-            
-            if (!peer) {
-                initializePeer();
-            }
-            
-            setTimeout(() => {
-                conn = peer.connect(opponentId);
-                
-                conn.on('open', () => {
-                    setupConnection();
-                    addChatMessage('Connected to opponent!');
-                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
-                    document.getElementById('joinGameBtn').disabled = true;
-                    
-                    conn.send({ type: 'start' });
-                    setTimeout(() => startGame(), 1000);
-                });
-                
-                conn.on('error', (err) => {
-                    addChatMessage(`Failed to connect: ${err}`);
-                });
-            }, 1000);
+            const id = document.getElementById('opponentPeerId').value.trim();
+            if (!id) { addChatMessage('Please enter an opponent Peer ID'); return; }
+            if (!peer) initializePeer();
+            // Connect to host
+            conn = peer.connect(id);
+            conn.on('open', () => {
+                setupConnection();
+                addChatMessage('Connected to opponent!');
+                document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
+                document.getElementById('joinGameBtn').disabled = true;
+                // Do NOT send a start message; host will send 'start' with seed
+            });
+            conn.on('error', err => addChatMessage('Failed to connect: ' + err));
         });
-        
+
         document.getElementById('restartBtn').addEventListener('click', () => {
-            if (!isHost) return;
-
+            if (!isHost) { addChatMessage('Only the host can restart the game.', 'System'); return; }
             if (conn && conn.open) {
-                conn.send({ type: 'restart' });
+                const newSeed = Math.floor(Math.random() * 2147483647);
+                conn.send({ type:'restart', seed: newSeed });
+                restartGame(newSeed);
+            } else {
+                // host alone: restart locally
+                const newSeed = Math.floor(Math.random() * 2147483647);
+                restartGame(newSeed);
             }
-            restartGame();
         });
-        
-        function restartGame() {
-            if (!isHost) {
-                addChatMessage("Only the host can restart the game.", "System");
-                return;
-            }
 
+        function restartGame(seed) {
             gameRunning = false;
-            sharedPieceQueue = [];
-            roundSeedCounter++;
-
-            setTimeout(() => {
-                startGame();
+            // reset global RNG, then restart after short delay
+            setTimeout(()=> {
+                startGame(seed);
                 addChatMessage('New round started!', 'System');
-            }, 500);
+            }, 300);
         }
-        
-        function startGame() {
+
+        // ---- Start / end game logic ----
+        function startGame(seed=null) {
+            // seed must be provided by host (or restart)
+            if (seed === null) {
+                // if host started without seed (edge case), generate one and if conn open send it
+                if (isHost) {
+                    seed = Math.floor(Math.random() * 2147483647);
+                    if (conn && conn.open) conn.send({ type:'start', seed });
+                } else {
+                    console.warn('No seed provided to startGame on client side.');
+                }
+            }
+            sharedSeed = seed;
+            rng = mulberry32(sharedSeed);
+
             gameRunning = true;
             document.getElementById('gameArea').classList.remove('hidden');
             document.getElementById('gameStatus').textContent = 'Game in progress!';
-            
-            if (!isHost) {
-                document.getElementById("restartBtn").classList.add("hidden");
-            } else {
-                document.getElementById("restartBtn").classList.remove("hidden");
-            }
+            if (isHost) document.getElementById('restartBtn').classList.remove('hidden'); else document.getElementById('restartBtn').classList.add('hidden');
 
-            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1);
-            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2);
-            
-            const startTime = Date.now();
-            gameState1.gameStartTime = startTime;
-            gameState2.gameStartTime = startTime;
-            
-            gameState1.spawnPiece();
-            gameState2.spawnPiece();
-            
+            // create game states AFTER rng is set
+            gameState1 = new GameState('gameCanvas1','holdCanvas1','queueCanvas1',1);
+            gameState2 = new GameState('gameCanvas2','holdCanvas2','queueCanvas2',2);
+
+            // sync start time
+            const startTime = Date.now(); gameState1.gameStartTime = startTime; gameState2.gameStartTime = startTime;
+
+            // initial spawn
+            const ok1 = gameState1.spawnPiece();
+            const ok2 = gameState2.spawnPiece();
+
+            if (!ok1) { addChatMessage('You lost! (spawn)'); gameRunning=false; }
+            if (!ok2) { /* opponent visual spawn failure is local only */ }
+
             addChatMessage('Game started! Good luck!');
-            
-            gameLoop();
+            lastTime = performance.now();
+            lastStateSendTime = 0;
+            requestAnimationFrame(gameLoop);
         }
-        
-        // Game loop
-        let lastTime = 0;
-        let lastStateSendTime = 0;
-        const STATE_SEND_INTERVAL = 50;
-        
+
+        function endGame(winner) {
+            // winner: "me" (you win) or "opponent" (they win)
+            gameRunning = false;
+            if (winner === 'me') { myScore++; document.getElementById('gameStatus').textContent = 'You WIN!'; addChatMessage('You win this round!', 'System'); }
+            else { opponentScore++; document.getElementById('gameStatus').textContent = 'You LOST!'; addChatMessage('You lost this round!', 'System'); }
+
+            updateScoreUI();
+            // inform opponent
+            if (conn && conn.open) conn.send({ type:'gameOver', winner: winner === 'me' ? 'opponent' : 'me' });
+
+            // show restart only to host
+            if (isHost) document.getElementById('restartBtn').classList.remove('hidden'); else document.getElementById('restartBtn').classList.add('hidden');
+        }
+
+        // ---- Game loop ----
         function gameLoop(timestamp = 0) {
             if (!gameRunning) return;
-            
             const deltaTime = timestamp - lastTime;
             lastTime = timestamp;
-            
+
+            // Player 1 physics and lock logic (local player)
             if (gameState1) {
                 if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
-                
+
                 const wasTouching = gameState1.isTouchingGround;
-                gameState1.isTouchingGround = !gameState1.isValidPosition(
-                    gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
-                );
-                
-                if (gameState1.isTouchingGround && !wasTouching) {
-                    gameState1.lockDelayTimer = 0;
-                }
-                
+                gameState1.isTouchingGround = !gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation);
+
+                if (gameState1.isTouchingGround && !wasTouching) gameState1.lockDelayTimer = 0;
+
                 gameState1.lastGravityTime += deltaTime;
-                
+
+                // If grounded: accumulate lock delay
                 if (gameState1.isTouchingGround) {
                     gameState1.lockDelayTimer += deltaTime;
 
-                    // if the player moved/rotated recently, don't lock instantly
+                    // if moved/rotated recently, give short grace before locking
                     if (performance.now() - gameState1.lastMoveOrRotateTime < gameState1.lockDelayMovementGrace) {
+                        // keep lockDelayTimer low so it doesn't hit lock immediately
                         gameState1.lockDelayTimer = 0;
                     }
-                    
-                    if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
-                        gameState1.lockResetCount >= gameState1.maxLockResets) {
 
+                    if (gameState1.lockDelayTimer >= gameState1.lockDelay || gameState1.lockResetCount >= gameState1.maxLockResets) {
+                        // place piece
                         gameState1.lockPiece();
-                        
+
                         const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                        if (preventMissdrop) {
-                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
-                        }
-                        
+                        if (preventMissdrop) gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
+
                         if (!gameState1.spawnPiece()) {
-                            endGame("opponent");
+                            // game over: local player couldn't spawn -> lost
+                            endGame('opponent'); // opponent wins
                             return;
                         }
                         gameState1.lastGravityTime = 0;
                     }
                 } else {
+                    // falling by gravity
                     if (gameState1.lastGravityTime >= gameState1.gravity) {
-                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
-                                                       gameState1.currentRotation)) {
+                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation)) {
                             gameState1.currentY++;
                         }
                         gameState1.lastGravityTime = 0;
                     }
                 }
-                
+
                 if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
                 gameState1.draw();
-                
+
+                // send state periodically
                 if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
-                    conn.send({
-                        type: 'gameState',
-                        state: gameState1.getState()
-                    });
+                    conn.send({ type:'gameState', state: gameState1.getState() });
                     lastStateSendTime = timestamp;
                 }
             }
-            
-            if (gameState2) {
-                gameState2.draw();
-            }
-            
+
+            // opponent board drawing (state comes from network)
+            if (gameState2) gameState2.draw();
+
             requestAnimationFrame(gameLoop);
         }
-        
-        // Input handling
+
+        // ---- Input handling ----
         document.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === "t") {
-                if (document.activeElement !== document.getElementById("chatInput")) {
+            // toggle chat with T (but only if not typing in chat)
+            if (e.key.toLowerCase() === 't') {
+                if (document.activeElement !== document.getElementById('chatInput')) {
                     e.preventDefault();
                     toggleChat();
                 }
                 return;
             }
-
-            // if typing in chat, ignore game keys
-            if (document.activeElement === document.getElementById("chatInput")) return;
+            // if typing in chat, don't handle game keys
+            if (document.activeElement === document.getElementById('chatInput')) return;
 
             if (!gameRunning || !gameState1) return;
-            
+
             if (e.key === keyBindings.left) {
                 e.preventDefault();
                 if (gameState1.dcdTimer <= 0) gameState1.move(-1);
@@ -1647,9 +939,7 @@
             } else if (e.key === keyBindings.hardDrop) {
                 e.preventDefault();
                 gameState1.hardDrop();
-                if (!gameState1.spawnPiece()) {
-                    endGame("opponent");
-                }
+                if (!gameState1.spawnPiece()) { endGame('opponent'); }
             } else if (e.key === keyBindings.rotateCW) {
                 e.preventDefault();
                 gameState1.rotate('cw');
@@ -1664,8 +954,8 @@
                 gameState1.holdCurrentPiece();
             }
         });
-        
-        // Initialize
+
+        // ---- Initialization messages ----
         addChatMessage('Welcome to Tetris Online Battle!');
         addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
         addChatMessage('Press T to open/close chat.');
