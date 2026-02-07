@@ -305,7 +305,6 @@
         let isHost = false;
         let myPeerId = null;
         
-        // [FIXED] Added 180 rotation kicks (0->2, 2->0, etc) to ensure rotation doesn't "lock" near walls
         const KICK_TABLE = {
             'JLSTZ': {
                 '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
@@ -315,12 +314,7 @@
                 '2->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
                 'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
                 'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
-                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-                // 180 Kicks (Added)
-                '0->2': [[0, 0], [0, 1], [1, 1], [-1, 1]],
-                '2->0': [[0, 0], [0, 1], [-1, 1], [1, 1]],
-                'R->L': [[0, 0], [0, 1], [1, 1], [-1, 1]],
-                'L->R': [[0, 0], [0, 1], [1, 1], [-1, 1]]
+                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
             },
             'I': {
                 '0->R': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
@@ -330,20 +324,10 @@
                 '2->L': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
                 'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
                 'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
-                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-                // 180 Kicks (Added)
-                '0->2': [[0, 0], [-1, 0], [-2, 0], [1, 0], [2, 0]],
-                '2->0': [[0, 0], [1, 0], [2, 0], [-1, 0], [-2, 0]],
-                'R->L': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2]],
-                'L->R': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2]]
+                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
             },
-            'O': { 
-                '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]], 
-                '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]],
-                '0->2': [[0, 0]], '2->0': [[0, 0]], 'R->L': [[0, 0]], 'L->R': [[0, 0]]
-            }
+            'O': { '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]], '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]] }
         };
-
         const SHAPES = {
             'I': { shape: [[[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]], [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]], [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]], color: '#00f0f0' },
             'O': { shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]], color: '#f0f000' },
@@ -375,7 +359,7 @@
                 this.isTouchingGround = false; this.maxLockResets = 15; this.lockResetCount = 0;
                 this.hardDropCooldown = 0; this.piecesPlaced = 0; this.attacksSent = 0;
                 this.b2bCounter = 0; this.comboCounter = -1; 
-                this.pendingGarbage = 0;
+                this.pendingGarbage = 0; 
                 this.lastRotationKicked = false;
                 this.lastMoveBeforeLock = null;
                 this.initQueue();
@@ -394,6 +378,7 @@
                 return this.bag.pop();
             }
 
+            // Normal spawn from queue
             spawnPiece() {
                 const pieceType = this.queue.shift();
                 this.queue.push(this.getNextPiece());
@@ -401,27 +386,31 @@
                 return this.resetAndSpawnPiece();
             }
 
+            // Common logic for spawning new or holding (reset pos + IRS)
             resetAndSpawnPiece() {
                 this.currentRotation = 0;
                 this.currentX = (this.currentPiece === 'O') ? 4 : 3;
                 this.currentY = 0;
                 this.canHold = true;
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0; this.isTouchingGround = false;
+                this.lockDelayTimer = 0; this.lockResetCount = 0; this.isTouchingGround = false;
                 this.hardDropCooldown = 0;
                 this.lastRotationKicked = false;
                 this.lastMoveBeforeLock = null;
-                
-                // IRS
+
+                // --- IRS (Initial Rotation System) ---
+                // Applies IMMEDIATELY before the first draw/validity check
                 if (this.playerId === 1) { 
                     const keyBindings = getKeyBindings();
+                    
+                    // Note: Hold IRS is handled before calling this, or here.
+                    // But if we just spawned, we check rotation keys:
                     if (keysHeld[keyBindings.rotateCW]) this.rotate('cw');
                     else if (keysHeld[keyBindings.rotateCCW]) this.rotate('ccw');
                     else if (keysHeld[keyBindings.rotate180]) this.rotate('180');
                 }
 
                 if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
-                    return false;
+                    return false; // Block out
                 }
                 return true;
             }
@@ -443,8 +432,10 @@
 
             rotate(dir) {
                 const old = this.currentRotation;
-                let next = (dir === 'cw') ? (old + 1) % 4 : (dir === 'ccw') ? (old + 3) % 4 : (old + 2) % 4;
-                const kickTable = (this.currentPiece === 'I') ? KICK_TABLE.I : (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+                let next = (dir === 'cw') ? (old + 1) % 4 : (dir === 'ccw') ?
+                (old + 3) % 4 : (old + 2) % 4;
+                const kickTable = (this.currentPiece === 'I') ?
+                KICK_TABLE.I : (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
                 const rotNames = ['0', 'R', '2', 'L'];
                 const kicks = kickTable[`${rotNames[old]}->${rotNames[next]}`] || [[0,0]];
                 
@@ -455,14 +446,7 @@
                         this.currentY -= dy; this.currentRotation = next;
                         this.lastRotationKicked = (i > 0);
                         this.lastMoveBeforeLock = 'rotate';
-                        
-                        // [FIXED] Infinity Rule: Check maxLockResets
-                        if (this.isTouchingGround) { 
-                            if (this.lockResetCount < this.maxLockResets) {
-                                this.lockDelayTimer = 0;
-                                this.lockResetCount++; 
-                            }
-                        }
+                        if (this.isTouchingGround) { this.lockDelayTimer = 0; this.lockResetCount++; }
                         return true;
                     }
                 }
@@ -473,14 +457,7 @@
                 if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
                     this.currentX += dx;
                     this.lastMoveBeforeLock = 'move';
-                    
-                    // [FIXED] Infinity Rule: Check maxLockResets
-                    if (this.isTouchingGround) { 
-                        if (this.lockResetCount < this.maxLockResets) {
-                            this.lockDelayTimer = 0;
-                            this.lockResetCount++;
-                        }
-                    }
+                    if (this.isTouchingGround) { this.lockDelayTimer = 0; this.lockResetCount++; }
                     return true;
                 }
                 return false;
@@ -531,18 +508,26 @@
                 const linesCleared = cleared.length;
                 const isTSpin = this.checkTSpin();
                 const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                
+
                 if (linesCleared > 0) {
+                    // --- B2B Logic ---
+                    // T-Spin or Tetris (4 lines) maintains/increments B2B
                     if (isTSpin || linesCleared === 4) {
                         this.b2bCounter++;
                     } else {
+                        // Single/Double/Triple resets B2B
                         this.b2bCounter = 0;
                     }
                     
+                    // --- Combo Logic ---
                     this.comboCounter++;
+
+                    // Remove cleared lines
                     cleared.forEach(r => { this.board.splice(r, 1); this.board.unshift(Array(COLS).fill(0)); });
                     
+                    // --- Calculate Attack ---
                     let attack = this.calculateAttack(linesCleared, isTSpin, isAllClear);
+                    
                     if (this.pendingGarbage > 0) {
                         if (attack >= this.pendingGarbage) {
                             attack -= this.pendingGarbage;
@@ -558,8 +543,11 @@
                         if(conn?.open) conn.send({type:'attack', lines:attack}); 
                     }
                 } else {
-                    this.comboCounter = -1;
-                    this.applyGarbage();
+                    // No lines cleared
+                    this.comboCounter = -1; // Reset Combo
+                    // Note: B2B is NOT reset on placement without clears (Standard guideline)
+                    
+                    this.applyGarbage(); // Tanking
                 }
                 this.updateStats();
             }
@@ -568,8 +556,9 @@
                 if (isAllClear) return (lines === 4) ? 10 : 8;
 
                 let attack = 0;
+                // Base
                 if (isTSpin) {
-                    if (lines === 1) attack = 2;
+                    if (lines === 1) attack = 2; 
                     else if (lines === 2) attack = 4;
                     else if (lines === 3) attack = 6;
                 } else {
@@ -579,11 +568,16 @@
                     else if (lines === 4) attack = 4;
                 }
 
+                // B2B Bonus
+                // Usually if b2b > 1 (meaning consecutive), add 1 line
                 if (this.b2bCounter > 1 && attack > 0) {
-                    attack += 1;
+                    attack += 1; 
                 }
 
+                // Combo Bonus (Simple table scaling)
                 if (this.comboCounter > 1) {
+                    // e.g. 2 combo -> +1, 3 combo -> +1, 4 -> +2, etc.
+                    // Using simple: max(0, combo - 1)
                     attack += Math.max(0, this.comboCounter - 1);
                 }
 
@@ -592,10 +586,12 @@
 
             applyGarbage() {
                 if (this.pendingGarbage <= 0) return;
+                
                 const linesToApply = Math.min(this.pendingGarbage, 8);
                 this.pendingGarbage -= linesToApply;
                 
                 const hole = Math.floor(this.rng() * COLS);
+                
                 for(let i = 0; i < linesToApply; i++) {
                     if (this.board[0].some(cell => cell !== 0)) {
                         if(conn?.open) conn.send({type:'gameOver'});
@@ -616,15 +612,20 @@
 
             holdCurrentPiece() {
                 if (!this.canHold) return;
+                
+                // Store current temporarily
                 const pieceToHold = this.currentPiece;
+                
                 if (this.holdPiece === null) {
+                    // First time hold: Move active to hold, spawn NEXT from queue
                     this.holdPiece = pieceToHold;
                     this.spawnPiece(); 
                 } else {
+                    // Swap: Active goes to hold, Hold goes to Active
                     const pieceFromHold = this.holdPiece;
                     this.holdPiece = pieceToHold;
                     this.currentPiece = pieceFromHold;
-                    this.resetAndSpawnPiece();
+                    this.resetAndSpawnPiece(); // Reset position & apply IRS for the swapped piece
                 }
                 
                 this.canHold = false;
@@ -635,6 +636,8 @@
                 document.getElementById(`pps${this.playerId}`).textContent = (this.piecesPlaced / el).toFixed(2);
                 document.getElementById(`apm${this.playerId}`).textContent = ((this.attacksSent / el) * 60).toFixed(2);
                 document.getElementById(`garbage${this.playerId}`).textContent = this.pendingGarbage;
+                // B2B/Combo Display
+                // Subtract 1 from B2B because counter 1 = "B2B Active", counter 2 = "B2B x1"
                 const b2bDisplay = this.b2bCounter > 0 ? (this.b2bCounter - 1) : 0;
                 const comboDisplay = this.comboCounter > 0 ? this.comboCounter : 0;
                 document.getElementById(`b2b${this.playerId}`).textContent = b2bDisplay > 0 ? `x${b2bDisplay}` : "0";
@@ -645,18 +648,18 @@
                 this.ctx.fillStyle = '#0a0e27';
                 this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+                // Grid
                 this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
                 this.ctx.lineWidth = 1;
                 this.ctx.beginPath();
                 for (let x = 0; x <= COLS; x++) {
-                    this.ctx.moveTo(x * BLOCK_SIZE, 0);
-                    this.ctx.lineTo(x * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+                    this.ctx.moveTo(x * BLOCK_SIZE, 0); this.ctx.lineTo(x * BLOCK_SIZE, ROWS * BLOCK_SIZE);
                 }
                 for (let y = 0; y <= ROWS; y++) {
-                    this.ctx.moveTo(0, y * BLOCK_SIZE);
-                    this.ctx.lineTo(COLS * BLOCK_SIZE, y * BLOCK_SIZE);
+                    this.ctx.moveTo(0, y * BLOCK_SIZE); this.ctx.lineTo(COLS * BLOCK_SIZE, y * BLOCK_SIZE);
                 }
                 this.ctx.stroke();
+
                 this.board.forEach((r, y) => r.forEach((v, x) => {
                     if(v) this.drawBlock(this.ctx, x * BLOCK_SIZE, y * BLOCK_SIZE, v === 'G' ? '#666' : SHAPES[v].color);
                 }));
@@ -670,8 +673,7 @@
             }
 
             drawBlock(ctx, x, y, color, alpha = 1) {
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = color;
+                ctx.globalAlpha = alpha; ctx.fillStyle = color;
                 ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
                 ctx.globalAlpha = 1;
             }
@@ -684,14 +686,12 @@
             }
 
             drawHold() {
-                this.holdCtx.fillStyle = '#0a0e27';
-                this.holdCtx.fillRect(0,0,80,80);
+                this.holdCtx.fillStyle = '#0a0e27'; this.holdCtx.fillRect(0,0,80,80);
                 if(this.holdPiece) this.drawMini(this.holdCtx, this.holdPiece);
             }
 
             drawQueue() {
-                this.queueCtx.fillStyle = '#0a0e27';
-                this.queueCtx.fillRect(0,0,80,480);
+                this.queueCtx.fillStyle = '#0a0e27'; this.queueCtx.fillRect(0,0,80,480);
                 this.queue.forEach((p, i) => this.drawMini(this.queueCtx, p, i * 80));
             }
 
@@ -712,7 +712,8 @@
                 };
             }
             setState(s) { 
-                Object.assign(this, s);
+                Object.assign(this, s); 
+                // Restore counters for UI
                 this.b2bCounter = s.b2b || 0;
                 this.comboCounter = s.combo || -1;
                 this.updateStats(); 
@@ -720,6 +721,7 @@
         }
 
         let gameState1, gameState2, gameRunning = false;
+        
         function getKeyBindings() {
             return {
                 left: document.getElementById('keyLeft').value,
@@ -741,10 +743,11 @@
             arrTimer: 0,
             isSoftDropping: false
         };
+
         window.addEventListener('keydown', function(e) {
             if(["ArrowUp", "ArrowDown", " "].indexOf(e.key) > -1) e.preventDefault();
         }, false);
-        
+
         document.addEventListener('keydown', e => {
             if(!gameRunning || !gameState1 || e.repeat) return;
 
@@ -832,10 +835,11 @@
             let dt = ts - (gameLoop.last || ts); gameLoop.last = ts;
             
             updateMovement(dt);
+
             if(!moveState.isSoftDropping) {
                 gameState1.lastGravityTime += dt;
                 if(gameState1.lastGravityTime >= gameState1.gravity) { 
-                    gameState1.moveDown();
+                    gameState1.moveDown(); 
                     gameState1.lastGravityTime = 0; 
                 }
             }
@@ -912,7 +916,6 @@
             });
             peer.on('connection', c => { conn = c; setupConn(); });
         };
-
         document.getElementById('joinGameBtn').onclick = () => {
             const id = document.getElementById('opponentPeerId').value.trim();
             if (!id) { alert('Please enter an opponent ID'); return; }
@@ -952,6 +955,7 @@
             document.getElementById('gameStatus').textContent = "Game in progress!";
             // Reset keys held to prevent stuck inputs
             for (let key in keysHeld) delete keysHeld[key];
+            
             gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
             gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
             gameState1.spawnPiece(); gameState2.spawnPiece();
