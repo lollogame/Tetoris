@@ -211,9 +211,11 @@
                 <div class="control-item"><label>Rotate CCW</label><input type="text" id="keyRotateCCW" value="z" readonly></div>
                 <div class="control-item"><label>Rotate 180</label><input type="text" id="keyRotate180" value="x" readonly></div>
                 <div class="control-item"><label>Hold Piece</label><input type="text" id="keyHold" value="c" readonly></div>
-                <div class="control-item"><label>ARR (ms)</label><input type="number" id="arr" value="0" min="0" max="200"></div>
+                
+                <div class="control-item"><label>ARR (ms)</label><input type="number" id="arr" value="10" min="0" max="200"></div>
                 <div class="control-item"><label>DAS (ms)</label><input type="number" id="das" value="133" min="0" max="500"></div>
                 <div class="control-item"><label>DCD (ms)</label><input type="number" id="dcd" value="0" min="0" max="100"></div>
+                
                 <div class="control-item">
                     <label>SDF (multiplier)</label>
                     <select id="sdf">
@@ -323,7 +325,7 @@
         let isHost = false;
         let myPeerId = null;
         
-        // [FIXED] Added 180 rotation kicks (0->2, 2->0, etc) to ensure rotation doesn't "lock" near walls
+        // Kick Tables (Standard SRS + 180)
         const KICK_TABLE = {
             'JLSTZ': {
                 '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
@@ -334,7 +336,7 @@
                 'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
                 'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
                 '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-                // 180 Kicks (Added)
+                // 180 Kicks
                 '0->2': [[0, 0], [0, 1], [1, 1], [-1, 1]],
                 '2->0': [[0, 0], [0, 1], [-1, 1], [1, 1]],
                 'R->L': [[0, 0], [0, 1], [1, 1], [-1, 1]],
@@ -349,7 +351,7 @@
                 'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
                 'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
                 '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-                // 180 Kicks (Added)
+                // 180 Kicks
                 '0->2': [[0, 0], [-1, 0], [-2, 0], [1, 0], [2, 0]],
                 '2->0': [[0, 0], [1, 0], [2, 0], [-1, 0], [-2, 0]],
                 'R->L': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2]],
@@ -433,9 +435,9 @@
                 // IRS
                 if (this.playerId === 1) { 
                     const keyBindings = getKeyBindings();
-                    if (keysHeld[keyBindings.rotateCW]) this.rotate('cw');
-                    else if (keysHeld[keyBindings.rotateCCW]) this.rotate('ccw');
-                    else if (keysHeld[keyBindings.rotate180]) this.rotate('180');
+                    if (keysPressed[keyBindings.rotateCW]) this.rotate('cw');
+                    else if (keysPressed[keyBindings.rotateCCW]) this.rotate('ccw');
+                    else if (keysPressed[keyBindings.rotate180]) this.rotate('180');
                 }
 
                 if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
@@ -475,7 +477,7 @@
                         this.currentY -= dy; this.currentRotation = next;
                         this.lastRotationKicked = (i > 0);
                         this.lastMoveBeforeLock = 'rotate';
-                        // [FIXED] Infinity Rule: Check maxLockResets
+                        // Infinity Rule
                         if (this.isTouchingGround) { 
                             if (this.lockResetCount < this.maxLockResets) {
                                 this.lockDelayTimer = 0;
@@ -493,7 +495,6 @@
                     this.currentX += dx;
                     this.lastMoveBeforeLock = 'move';
                     
-                    // [FIXED] Infinity Rule: Check maxLockResets
                     if (this.isTouchingGround) { 
                         if (this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
@@ -752,72 +753,147 @@
             };
         }
 
-        // --- NEW MOVEMENT CONTROL (Modified to use Jstris style native events) ---
-        const keysHeld = {};
+        // --- CUSTOM PHYSICS MOVEMENT ---
+        // Keeps track of held keys for smooth simultaneous input (moving while rotating)
+        const keysPressed = {};
+        const moveState = {
+            dasTimer: 0,
+            arrTimer: 0,
+            lastDir: 0, // -1 (left) or 1 (right)
+            isSoftDropping: false
+        };
 
         // Prevent scrolling with game keys
         window.addEventListener('keydown', function(e) {
             if(["ArrowUp", "ArrowDown", " "].indexOf(e.key) > -1) e.preventDefault();
         }, false);
 
-        // Movement Logic replaced with direct event handling [cite: 265, 296]
         document.addEventListener('keydown', e => {
-            if(!gameRunning || !gameState1) return;
+            if(!gameRunning || !gameState1 || e.repeat) return;
 
             const binds = getKeyBindings();
+            keysPressed[e.key] = true;
+
+            // Instant Actions (Rotation, Hold, Hard Drop)
+            if(e.key === binds.rotateCW) gameState1.rotate('cw');
+            if(e.key === binds.rotateCCW) gameState1.rotate('ccw');
+            if(e.key === binds.rotate180) gameState1.rotate('180');
+            if(e.key === binds.hold) gameState1.holdCurrentPiece();
             
-            // Jstris Logic: Handle movement directly in the event
-            // Does not use a physics loop for horizontal movement
-            
-            // Move Left
-            if(e.key === binds.left) {
-                gameState1.move(-1);
-            }
-            
-            // Move Right
-            if(e.key === binds.right) {
-                gameState1.move(1);
-            }
-            
-            // Soft Drop (Jstris treats this as a standard move down event)
-            if(e.key === binds.softDrop) {
-                gameState1.moveDown();
-                // Reset gravity timer to prevent double drops
-                gameState1.lastGravityTime = 0; 
+            if(e.key === binds.hardDrop) { 
+                gameState1.hardDrop(); 
+                if(!gameState1.spawnPiece()) endGame(); 
             }
 
-            // Actions that should typically not repeat rapidly on native hold
-            // Note: Jstris text provided [cite: 297] allows rotation on repeat, 
-            // but standard play usually filters it. We filter here for safety.
-            if (!e.repeat) {
-                if(e.key === binds.rotateCW) gameState1.rotate('cw');
-                if(e.key === binds.rotateCCW) gameState1.rotate('ccw');
-                if(e.key === binds.rotate180) gameState1.rotate('180');
-                if(e.key === binds.hold) gameState1.holdCurrentPiece();
-                if(e.key === binds.hardDrop) { 
-                    gameState1.hardDrop(); 
-                    if(!gameState1.spawnPiece()) endGame(); 
-                }
-                
-                // Track held keys for IRS (Initial Rotation System)
-                keysHeld[e.key] = true;
+            // Movement State Initialization
+            if(e.key === binds.left) {
+                moveState.lastDir = -1;
+                moveState.dasTimer = 0;
+                moveState.arrTimer = 0;
+                gameState1.move(-1); // Initial Move
+            }
+            if(e.key === binds.right) {
+                moveState.lastDir = 1;
+                moveState.dasTimer = 0;
+                moveState.arrTimer = 0;
+                gameState1.move(1); // Initial Move
+            }
+            
+            if(e.key === binds.softDrop) {
+                moveState.isSoftDropping = true;
             }
         });
 
         document.addEventListener('keyup', e => {
-             delete keysHeld[e.key];
+            const binds = getKeyBindings();
+            delete keysPressed[e.key];
+            
+            if(e.key === binds.softDrop) {
+                moveState.isSoftDropping = false;
+            }
         });
+
+        function updatePhysics(dt) {
+            // Read Custom Settings from UI
+            const DAS = parseInt(document.getElementById('das').value) || 133;
+            const ARR = parseInt(document.getElementById('arr').value) || 10;
+            const SDF = document.getElementById('sdf').value;
+
+            // Determine active horizontal direction
+            const binds = getKeyBindings();
+            let dir = 0;
+            // Check keysPressed directly to allow movement to persist through other key events
+            if(keysPressed[binds.left] && !keysPressed[binds.right]) dir = -1;
+            else if(keysPressed[binds.right] && !keysPressed[binds.left]) dir = 1;
+            else if(keysPressed[binds.left] && keysPressed[binds.right]) dir = moveState.lastDir;
+
+            // Apply Horizontal Movement
+            if(dir !== 0) {
+                // If we changed direction while holding, reset timers
+                if(dir !== moveState.lastDir) {
+                    moveState.lastDir = dir;
+                    moveState.dasTimer = 0;
+                    moveState.arrTimer = 0;
+                    gameState1.move(dir);
+                }
+
+                moveState.dasTimer += dt;
+                if(moveState.dasTimer >= DAS) {
+                    if (ARR === 0) {
+                        // Instant movement to wall
+                        while(gameState1.move(dir));
+                    } else {
+                        moveState.arrTimer += dt;
+                        while(moveState.arrTimer >= ARR) {
+                            gameState1.move(dir);
+                            moveState.arrTimer -= ARR;
+                        }
+                    }
+                }
+            } else {
+                moveState.dasTimer = 0;
+                moveState.arrTimer = 0;
+            }
+
+            // Apply Soft Drop
+            if(moveState.isSoftDropping) {
+                if(SDF === 'inf') {
+                    // Make it really fast but not instant hard drop (unless desired)
+                    // Usually SDF infinity means 20G or immediate drop to bottom but not lock
+                    gameState1.moveDown(); 
+                } else {
+                    const factor = parseInt(SDF);
+                    const grav = gameState1.gravity / factor;
+                    // We handle this by modifying gravity timer in gameLoop, 
+                    // or we can force moves here. 
+                    // Let's force moves here for smoother feel independent of gravity
+                    // but we need a separate timer for SDF smoothness or just add to gravity
+                }
+            }
+        }
 
         function gameLoop(ts) {
             if(!gameRunning) return;
             let dt = ts - (gameLoop.last || ts); gameLoop.last = ts;
             
-            // NOTE: updateMovement(dt) removed as we now use event-driven movement
+            updatePhysics(dt);
 
-            // Gravity Logic (Retained natural gravity)
+            // Gravity Logic
+            const SDF = document.getElementById('sdf').value;
+            let currentGravity = gameState1.gravity;
+            
+            if(moveState.isSoftDropping) {
+                if(SDF === 'inf') currentGravity = 0; // Immediate gravity
+                else currentGravity = gameState1.gravity / parseInt(SDF);
+            }
+
             gameState1.lastGravityTime += dt;
-            if(gameState1.lastGravityTime >= gameState1.gravity) { 
+            if(gameState1.lastGravityTime >= currentGravity) { 
                 gameState1.moveDown();
+                // If inf, we might want to loop until collision, but single step is safer to prevent bugs
+                if(SDF === 'inf' && moveState.isSoftDropping) {
+                     while(gameState1.moveDown());
+                }
                 gameState1.lastGravityTime = 0; 
             }
 
@@ -932,7 +1008,7 @@
             document.getElementById('restartBtn').classList.add('hidden');
             document.getElementById('gameStatus').textContent = "Game in progress!";
             // Reset keys held to prevent stuck inputs
-            for (let key in keysHeld) delete keysHeld[key];
+            for (let key in keysPressed) delete keysPressed[key];
             gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
             gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
             gameState1.spawnPiece(); gameState2.spawnPiece();
