@@ -519,7 +519,9 @@
                 this.isTouchingGround = false; this.maxLockResets = 15; this.lockResetCount = 0;
                 this.hardDropCooldown = 0; this.piecesPlaced = 0; this.attacksSent = 0;
                 this.b2bCounter = 0; this.comboCounter = -1; this.lastClearWasB2B = false;
-                this.pendingGarbage = [];
+                this.pendingGarbage = 0; // Changed to number for total pending lines
+                this.lastRotationKicked = false; // For T-spin detection
+                this.lastMoveBeforeLock = null; // Track last move type
                 this.initQueue();
             }
 
@@ -545,6 +547,9 @@
                 this.currentY = 0;
                 this.canHold = true;
                 this.lockDelayTimer = 0; this.lockResetCount = 0; this.isTouchingGround = false;
+                this.hardDropCooldown = 0; // Reset hard drop cooldown on spawn
+                this.lastRotationKicked = false;
+                this.lastMoveBeforeLock = null;
                 return this.isValidPosition(this.currentX, this.currentY, this.currentRotation);
             }
 
@@ -568,9 +573,13 @@
                 const kickTable = (this.currentPiece === 'I') ? KICK_TABLE.I : (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
                 const rotNames = ['0', 'R', '2', 'L'];
                 const kicks = kickTable[`${rotNames[old]}->${rotNames[next]}`] || [[0,0]];
-                for (const [dx, dy] of kicks) {
+                
+                for (let i = 0; i < kicks.length; i++) {
+                    const [dx, dy] = kicks[i];
                     if (this.isValidPosition(this.currentX + dx, this.currentY - dy, next)) {
                         this.currentX += dx; this.currentY -= dy; this.currentRotation = next;
+                        this.lastRotationKicked = (i > 0); // Kick occurred if not first position
+                        this.lastMoveBeforeLock = 'rotate';
                         if (this.isTouchingGround) { this.lockDelayTimer = 0; this.lockResetCount++; }
                         return true;
                     }
@@ -581,6 +590,7 @@
             move(dx) {
                 if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
                     this.currentX += dx;
+                    this.lastMoveBeforeLock = 'move';
                     if (this.isTouchingGround) { this.lockDelayTimer = 0; this.lockResetCount++; }
                     return true;
                 }
@@ -595,7 +605,9 @@
 
             moveDown() {
                 if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                    this.currentY++; return true;
+                    this.currentY++; 
+                    this.lastMoveBeforeLock = 'down';
+                    return true;
                 }
                 return false;
             }
@@ -604,6 +616,29 @@
                 if (document.getElementById('preventMissdrop').value === 'true' && this.hardDropCooldown > 0) return;
                 while (this.moveDown());
                 this.lockPiece();
+            }
+
+            // Check if a T-spin occurred
+            checkTSpin() {
+                if (this.currentPiece !== 'T') return false;
+                if (this.lastMoveBeforeLock !== 'rotate' || !this.lastRotationKicked) return false;
+                
+                // Check corners around T piece center
+                const corners = [
+                    [this.currentX, this.currentY], // top-left
+                    [this.currentX + 2, this.currentY], // top-right
+                    [this.currentX, this.currentY + 2], // bottom-left
+                    [this.currentX + 2, this.currentY + 2] // bottom-right
+                ];
+                
+                let filledCorners = 0;
+                for (const [x, y] of corners) {
+                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
+                        filledCorners++;
+                    }
+                }
+                
+                return filledCorners >= 3; // T-spin if 3+ corners filled
             }
 
             lockPiece() {
@@ -620,54 +655,109 @@
             clearLines() {
                 let cleared = [];
                 for (let r = 0; r < ROWS; r++) if (this.board[r].every(v => v !== 0)) cleared.push(r);
-                if (cleared.length > 0) {
+                
+                const linesCleared = cleared.length;
+                const isTSpin = this.checkTSpin();
+                const isAllClear = this.board.every(row => row.every(cell => cell === 0));
+                
+                if (linesCleared > 0) {
+                    // Remove cleared lines
                     cleared.forEach(r => { this.board.splice(r, 1); this.board.unshift(Array(COLS).fill(0)); });
-                    let attack = this.calculateAttack(cleared.length);
-                    if (this.pendingGarbage.length > 0) {
-                        let total = this.pendingGarbage.reduce((s, g) => s + g.lines, 0);
-                        if (attack >= total) { attack -= total; this.pendingGarbage = []; }
-                        else { 
-                            let rem = attack; 
-                            this.pendingGarbage = this.pendingGarbage.filter(g => {
-                                if (rem >= g.lines) { rem -= g.lines; return false; }
-                                g.lines -= rem; rem = 0; return true;
-                            });
+                    
+                    // Calculate attack
+                    let attack = this.calculateAttack(linesCleared, isTSpin, isAllClear);
+                    
+                    // Cancel pending garbage
+                    if (this.pendingGarbage > 0) {
+                        if (attack >= this.pendingGarbage) {
+                            attack -= this.pendingGarbage;
+                            this.pendingGarbage = 0;
+                        } else {
+                            this.pendingGarbage -= attack;
                             attack = 0;
                         }
                     }
-                    if (attack > 0) { this.attacksSent += attack; if(conn?.open) conn.send({type:'attack', lines:attack}); }
+                    
+                    // Send remaining attack
+                    if (attack > 0) { 
+                        this.attacksSent += attack; 
+                        if(conn?.open) conn.send({type:'attack', lines:attack}); 
+                    }
                 } else {
+                    // No lines cleared - apply pending garbage (max 8 lines per lock)
                     this.applyGarbage();
                 }
                 this.updateStats();
             }
 
-            calculateAttack(lines) {
-                if (lines === 4) return 4;
-                if (lines === 3) return 2;
-                if (lines === 2) return 1;
-                return 0;
+            calculateAttack(lines, isTSpin, isAllClear) {
+                let attack = 0;
+                
+                // T-spin attacks
+                if (isTSpin) {
+                    if (lines === 1) attack = 2; // T-spin single
+                    else if (lines === 2) attack = 4; // T-spin double
+                    else if (lines === 3) attack = 6; // T-spin triple
+                } else {
+                    // Regular line clears
+                    if (lines === 1) attack = 0;
+                    else if (lines === 2) attack = 1;
+                    else if (lines === 3) attack = 2;
+                    else if (lines === 4) attack = 4; // Tetris
+                }
+                
+                // All clear bonus
+                if (isAllClear && lines > 0) {
+                    if (lines === 4) attack += 6; // All clear with tetris = 10 total
+                    else attack += 8; // All clear = 8 bonus
+                }
+                
+                return attack;
             }
 
             applyGarbage() {
-                if (this.pendingGarbage.length === 0) return;
-                this.pendingGarbage.forEach(g => {
-                    for(let i=0; i<g.lines; i++) {
-                        this.board.shift();
-                        let line = Array(COLS).fill('G'); line[g.hole] = 0;
-                        this.board.push(line);
+                if (this.pendingGarbage === 0) return;
+                
+                // Apply max 8 lines at a time
+                const linesToApply = Math.min(this.pendingGarbage, 8);
+                this.pendingGarbage -= linesToApply;
+                
+                const hole = Math.floor(this.rng() * COLS);
+                for(let i = 0; i < linesToApply; i++) {
+                    // Check if adding garbage would cause top out
+                    if (this.board[0].some(cell => cell !== 0)) {
+                        // Top out condition
+                        if(conn?.open) conn.send({type:'gameOver'});
+                        endGame();
+                        return;
                     }
-                });
-                this.pendingGarbage = [];
+                    this.board.shift();
+                    let line = Array(COLS).fill('G'); 
+                    line[hole] = 0;
+                    this.board.push(line);
+                }
             }
 
-            receiveAttack(lines) { this.pendingGarbage.push({lines, hole: Math.floor(this.rng() * COLS)}); }
+            receiveAttack(lines) { 
+                this.pendingGarbage += lines; 
+            }
 
             holdCurrentPiece() {
                 if (!this.canHold) return;
-                if (!this.holdPiece) { this.holdPiece = this.currentPiece; this.spawnPiece(); }
-                else { let t = this.holdPiece; this.holdPiece = this.currentPiece; this.currentPiece = t; this.currentX = (t === 'O') ? 4 : 3; this.currentY = 0; this.currentRotation = 0; }
+                if (!this.holdPiece) { 
+                    this.holdPiece = this.currentPiece; 
+                    this.spawnPiece(); 
+                } else { 
+                    let t = this.holdPiece; 
+                    this.holdPiece = this.currentPiece; 
+                    this.currentPiece = t; 
+                    this.currentX = (t === 'O') ? 4 : 3; 
+                    this.currentY = 0; 
+                    this.currentRotation = 0; 
+                }
                 this.canHold = false;
+                this.lastRotationKicked = false;
+                this.lastMoveBeforeLock = null;
             }
 
             updateStats() {
@@ -720,7 +810,20 @@
                 }));
             }
 
-            getState() { return { board: this.board, currentPiece: this.currentPiece, currentX: this.currentX, currentY: this.currentY, currentRotation: this.currentRotation, holdPiece: this.holdPiece, queue: this.queue, piecesPlaced: this.piecesPlaced, attacksSent: this.attacksSent }; }
+            getState() { 
+                return { 
+                    board: this.board, 
+                    currentPiece: this.currentPiece, 
+                    currentX: this.currentX, 
+                    currentY: this.currentY, 
+                    currentRotation: this.currentRotation, 
+                    holdPiece: this.holdPiece, 
+                    queue: this.queue, 
+                    piecesPlaced: this.piecesPlaced, 
+                    attacksSent: this.attacksSent,
+                    pendingGarbage: this.pendingGarbage 
+                }; 
+            }
             setState(s) { Object.assign(this, s); this.updateStats(); }
         }
 
@@ -801,7 +904,11 @@
             requestAnimationFrame(gameLoop);
         }
 
-        function endGame() { gameRunning = false; document.getElementById('gameStatus').textContent = "LOST!"; conn?.send({type:'gameOver'}); }
+        function endGame() { 
+            gameRunning = false; 
+            document.getElementById('gameStatus').textContent = "GAME OVER - YOU LOST!"; 
+            if(conn?.open) conn.send({type:'gameOver'}); 
+        }
 
         // Chat functionality
         function addChatMessage(message, isSelf = false) {
@@ -870,7 +977,10 @@
                 if(d.type === 'start') startGame(d.seed);
                 if(d.type === 'state') gameState2.setState(d.state);
                 if(d.type === 'attack') gameState1.receiveAttack(d.lines);
-                if(d.type === 'gameOver') { gameRunning = false; document.getElementById('gameStatus').textContent = "WINNER!"; }
+                if(d.type === 'gameOver') { 
+                    gameRunning = false; 
+                    document.getElementById('gameStatus').textContent = "YOU WIN!"; 
+                }
                 if(d.type === 'chat') addChatMessage(d.message, false);
             });
         }
