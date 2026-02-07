@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - Refactored</title>
+    <title>Tetris Multiplayer - Refined</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
         
         :root {
             --bg-dark: #0a0e27;
             --bg-grid: #151b3d;
-            --border-glow: #00ffff;
-            --text-primary: #ffffff;
             --accent-cyan: #00ffff;
             --accent-pink: #ff00ff;
+            --text-primary: #ffffff;
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: 'Orbitron', sans-serif;
@@ -24,615 +25,425 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            overflow: hidden;
             height: 100vh;
+            overflow: hidden;
         }
 
-        #ui-layer { margin: 10px; z-index: 10; text-align: center; }
-        .game-container { display: flex; gap: 40px; margin-top: 20px; }
-        .player-section { position: relative; border: 4px solid var(--bg-grid); padding: 10px; background: rgba(0,0,0,0.3); }
-        canvas { background: #000; display: block; }
-        .hold-canvas, .queue-canvas { background: #000; border: 2px solid var(--bg-grid); }
+        #ui-layer { margin: 15px; text-align: center; z-index: 10; }
+        .game-container { display: flex; gap: 30px; align-items: flex-start; }
         
-        .controls { margin-top: 10px; display: flex; gap: 10px; justify-content: center; }
+        .player-section { 
+            display: flex; gap: 10px; padding: 15px; 
+            background: rgba(255, 255, 255, 0.05); border: 2px solid var(--bg-grid);
+        }
+
+        canvas { background: #000; display: block; border: 1px solid #333; }
+        .side-panels { display: flex; flex-direction: column; gap: 10px; }
+        
+        .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; }
         input, button { 
-            padding: 8px; font-family: 'Orbitron'; background: #1a1a2e; color: white; border: 1px solid var(--accent-cyan);
+            padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; 
+            color: white; border: 1px solid var(--accent-cyan); outline: none;
         }
         button:hover { background: var(--accent-cyan); color: black; cursor: pointer; }
 
         #chat-container {
-            position: fixed; bottom: 20px; right: 20px; width: 250px;
-            background: rgba(10, 14, 39, 0.9); border: 1px solid var(--accent-cyan);
+            position: fixed; bottom: 10px; right: 10px; width: 280px;
+            display: flex; flex-direction: column;
+            background: rgba(10, 14, 39, 0.95); border: 1px solid var(--accent-cyan);
+            max-height: 300px;
         }
-        #chat-messages { height: 150px; overflow-y: auto; font-size: 10px; padding: 5px; }
-        #chat-input { width: 100%; border: none; background: #151b3d; color: white; padding: 5px; }
+        #chat-messages { height: 200px; overflow-y: auto; padding: 8px; font-size: 12px; }
+        .chat-input-area { display: flex; border-top: 1px solid var(--accent-cyan); }
+        #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; }
+
+        .score-board { font-size: 24px; color: var(--accent-cyan); margin: 5px 0; }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <h1 style="color: var(--accent-cyan); text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
+    <h1 style="text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
+    <div class="score-board"><span id="p1-wins">0</span> - <span id="p2-wins">0</span></div>
     <div class="controls">
-        <button id="create-btn">Create Game</button>
-        <input type="text" id="join-id" placeholder="Enter Friend's ID">
+        <button id="create-btn">Host Match</button>
+        <input type="text" id="join-id" placeholder="Paste ID here">
         <button id="join-btn">Join</button>
-        <button id="restart-btn" style="display:none;">Restart Game</button>
+        <button id="restart-btn" style="display:none; border-color: var(--accent-pink);">Restart</button>
     </div>
-    <div id="peer-id-display">Your ID: <span id="my-id">...</span></div>
+    <div id="my-id-label">Your ID: <span id="my-id" style="color:var(--accent-pink)">...</span></div>
 </div>
 
 <div class="game-container">
-    <div class="player-section" id="player1-area">
-        <h3>YOU</h3>
-        <canvas id="holdCanvas1" class="hold-canvas" width="80" height="80"></canvas>
-        <canvas id="gameCanvas1" width="300" height="600"></canvas>
-        <canvas id="queueCanvas1" class="queue-canvas" width="80" height="400"></canvas>
-        <div id="stats1">Lines: 0 | Attack: 0</div>
+    <div class="player-section">
+        <div class="side-panels">
+            <p>HOLD</p>
+            <canvas id="hold1" width="80" height="80"></canvas>
+            <div id="stats1" style="font-size: 10px; margin-top: 20px;">LINES: 0<br>ATTACK: 0</div>
+        </div>
+        <div>
+            <p>YOU</p>
+            <canvas id="board1" width="300" height="600"></canvas>
+        </div>
+        <div class="side-panels">
+            <p>NEXT</p>
+            <canvas id="queue1" width="80" height="400"></canvas>
+        </div>
     </div>
-    <div class="player-section" id="player2-area">
-        <h3>OPPONENT</h3>
-        <canvas id="holdCanvas2" class="hold-canvas" width="80" height="80"></canvas>
-        <canvas id="gameCanvas2" width="300" height="600"></canvas>
-        <canvas id="queueCanvas2" class="queue-canvas" width="80" height="400"></canvas>
-        <div id="stats2">Lines: 0 | Attack: 0</div>
+
+    <div class="player-section">
+        <div class="side-panels">
+            <p>HOLD</p>
+            <canvas id="hold2" width="80" height="80"></canvas>
+            <div id="stats2" style="font-size: 10px; margin-top: 20px;">LINES: 0<br>ATTACK: 0</div>
+        </div>
+        <div>
+            <p>ENEMY</p>
+            <canvas id="board2" width="300" height="600"></canvas>
+        </div>
+        <div class="side-panels">
+            <p>NEXT</p>
+            <canvas id="queue2" width="80" height="400"></canvas>
+        </div>
     </div>
 </div>
 
 <div id="chat-container">
     <div id="chat-messages"></div>
-    <input type="text" id="chat-input" placeholder="Press T to chat...">
+    <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Type message...">
+    </div>
 </div>
 
 <script>
-/** * SEEDED RANDOM GENERATOR 
- * Ensures both players get the exact same pieces
- */
+/** SEEDED RNG **/
 class SeededRandom {
-    constructor(seed) {
-        this.seed = seed % 2147483647;
-        if (this.seed <= 0) this.seed += 2147483646;
-    }
+    constructor(seed) { this.state = seed || Math.floor(Math.random() * 1000000); }
     next() {
-        return this.seed = (this.seed * 48271) % 2147483647;
-    }
-    nextFloat() {
-        return (this.next() - 1) / 2147483646;
+        this.state = (this.state * 1664525 + 1013904223) % 4294967296;
+        return this.state / 4294967296;
     }
 }
 
-const COLS = 10;
-const ROWS = 20;
-const BLOCK_SIZE = 30;
-
-const COLORS = {
-    'I': '#00f0f0', 'O': '#f0f000', 'T': '#a000f0',
-    'S': '#00f000', 'Z': '#f00000', 'J': '#0000f0', 'L': '#f0a000'
+const COLS = 10, ROWS = 20, BLOCK = 30;
+const COLORS = { I:'#00f0f0', O:'#f0f000', T:'#a000f0', S:'#00f000', Z:'#f00000', J:'#0000f0', L:'#f0a000', grey:'#555' };
+const SHAPES = {
+    I:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], O:[[1,1],[1,1]], T:[[0,1,0],[1,1,1],[0,0,0]],
+    S:[[0,1,1],[1,1,0],[0,0,0]], Z:[[1,1,0],[0,1,1],[0,0,0]], J:[[1,0,0],[1,1,1],[0,0,0]], L:[[0,0,1],[1,1,1],[0,0,0]]
 };
 
-const PIECES = {
-    'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-    'O': [[1,1],[1,1]],
-    'T': [[0,1,0],[1,1,1],[0,0,0]],
-    'S': [[0,1,1],[1,1,0],[0,0,0]],
-    'Z': [[1,1,0],[0,1,1],[0,0,0]],
-    'J': [[1,0,0],[1,1,1],[0,0,0]],
-    'L': [[0,0,1],[1,1,1],[0,0,0]]
-};
-
-// SRS Kick Data (Simplified)
 const KICKS = {
-    "0-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
-    "1-0": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
-    "1-2": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
-    "2-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
-    "2-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]],
-    "3-2": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
-    "3-0": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
-    "0-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]]
+    "0-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], "1-0":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
+    "1-2":[[0,0],[1,0],[1,-1],[0,2],[1,2]], "2-1":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+    "2-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]], "3-2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+    "3-0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]], "0-3":[[0,0],[1,0],[1,1],[0,-2],[1,-2]]
 };
 
 class GameState {
-    constructor(canvasId, holdId, queueId, playerNum, seed) {
-        this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
-        this.holdCanvas = document.getElementById(holdId);
-        this.queueCanvas = document.getElementById(queueId);
-        this.playerNum = playerNum;
-        
-        this.rng = new SeededRandom(seed);
+    constructor(bId, hId, qId, pNum, seed) {
+        this.canvas = document.getElementById(bId); this.ctx = this.canvas.getContext('2d');
+        this.holdCanvas = document.getElementById(hId); this.queueCanvas = document.getElementById(qId);
+        this.pNum = pNum; this.rng = new SeededRandom(seed);
         this.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-        this.queue = [];
-        this.holdPiece = null;
-        this.canHold = true;
-        this.score = 0;
-        this.lines = 0;
-        this.attack = 0;
+        this.queue = []; this.holdPiece = null; this.canHold = true;
+        this.lines = 0; this.attack = 0; this.isGameOver = false;
         
-        this.currentPiece = null;
-        this.currentType = '';
-        this.currentX = 0;
-        this.currentY = 0;
-        this.currentRotation = 0;
-        this.lastMoveWasRotation = false;
-        this.lastKickIndex = 0;
+        this.curr = null; this.type = ''; this.x = 0; this.y = 0; this.rot = 0;
+        this.dropTimer = 0; this.lockTimer = 0; this.lastMoveRot = false; this.lastKick = 0;
 
-        this.dropCounter = 0;
-        this.dropInterval = 1000;
-        this.lockTimer = 0;
-        this.lockDelay = 500;
-        this.isGameOver = false;
-
-        this.fillQueue();
-        this.spawnPiece();
+        this.fillQueue(); this.spawn();
     }
 
     fillQueue() {
-        while (this.queue.length < 14) {
-            let bag = ['I','O','T','S','Z','J','L'];
+        while(this.queue.length < 14) {
+            let bag = Object.keys(SHAPES);
             for (let i = bag.length - 1; i > 0; i--) {
-                const j = Math.floor(this.rng.nextFloat() * (i + 1));
+                const j = Math.floor(this.rng.next() * (i + 1));
                 [bag[i], bag[j]] = [bag[j], bag[i]];
             }
             this.queue.push(...bag);
         }
     }
 
-    spawnPiece(type = null) {
-        this.currentType = type || this.queue.shift();
-        this.fillQueue();
-        this.currentPiece = PIECES[this.currentType];
-        this.currentX = Math.floor(COLS / 2) - Math.floor(this.currentPiece[0].length / 2);
-        this.currentY = 0;
-        this.currentRotation = 0;
-        this.canHold = true;
-        this.lastMoveWasRotation = false;
-
-        if (!this.isValid(this.currentX, this.currentY, this.currentPiece)) {
+    spawn(type = null) {
+        this.type = type || this.queue.shift(); this.fillQueue();
+        this.curr = SHAPES[this.type]; this.rot = 0;
+        this.x = Math.floor(COLS/2) - Math.floor(this.curr[0].length/2); this.y = 0;
+        this.canHold = true; this.lastMoveRot = false;
+        if (!this.isValid(this.x, this.y, this.curr)) {
             this.isGameOver = true;
+            if (this.pNum === 1 && conn) conn.send({type: 'gameover'});
             return false;
         }
         return true;
     }
 
-    isValid(x, y, piece) {
-        return piece.every((row, dy) => {
-            return row.every((value, dx) => {
-                let nextX = x + dx;
-                let nextY = y + dy;
-                return (
-                    value === 0 ||
-                    (nextX >= 0 && nextX < COLS && nextY < ROWS &&
-                    (nextY < 0 || !this.board[nextY][nextX]))
-                );
-            });
-        });
+    isValid(nx, ny, p) {
+        return p.every((row, dy) => row.every((v, dx) => {
+            let x = nx + dx, y = ny + dy;
+            return !v || (x >= 0 && x < COLS && y < ROWS && (y < 0 || !this.board[y][x]));
+        }));
     }
 
     rotate(dir) {
-        const prevRotation = this.currentRotation;
-        const nextRotation = (this.currentRotation + (dir === 'cw' ? 1 : 3)) % 4;
-        const nextPiece = this.rotateMatrix(this.currentPiece, dir);
-        
-        // SRS Kicks
-        const key = `${prevRotation}-${nextRotation}`;
-        const kicks = KICKS[key] || [[0,0]];
-
-        for (let i = 0; i < kicks.length; i++) {
+        const nextRot = (this.rot + (dir === 'cw' ? 1 : 3)) % 4;
+        const nextP = this.rotateMat(this.curr, dir);
+        const kicks = KICKS[`${this.rot}-${nextRot}`] || [[0,0]];
+        for (let i=0; i<kicks.length; i++) {
             const [kx, ky] = kicks[i];
-            if (this.isValid(this.currentX + kx, this.currentY - ky, nextPiece)) {
-                this.currentX += kx;
-                this.currentY -= ky;
-                this.currentPiece = nextPiece;
-                this.currentRotation = nextRotation;
-                this.lastMoveWasRotation = true;
-                this.lastKickIndex = i;
-                this.lockTimer = 0; // Reset lock delay on successful rotate
+            if (this.isValid(this.x + kx, this.y - ky, nextP)) {
+                this.x += kx; this.y -= ky; this.curr = nextP; this.rot = nextRot;
+                this.lastMoveRot = true; this.lastKick = i; this.lockTimer = 0;
                 return;
             }
         }
     }
 
-    rotateMatrix(matrix, dir) {
-        const N = matrix.length;
-        let result = Array.from({length: N}, () => Array(N).fill(0));
-        for (let y = 0; y < N; y++) {
-            for (let x = 0; x < N; x++) {
-                if (dir === 'cw') result[x][N-1-y] = matrix[y][x];
-                else result[N-1-x][y] = matrix[y][x];
-            }
-        }
-        return result;
+    rotateMat(m, dir) {
+        let n = m.length, res = Array.from({length:n},()=>Array(n).fill(0));
+        for(let y=0; y<n; y++) for(let x=0; x<n; x++)
+            if(dir==='cw') res[x][n-1-y] = m[y][x]; else res[n-1-x][y] = m[y][x];
+        return res;
     }
 
     move(dx) {
-        if (this.isValid(this.currentX + dx, this.currentY, this.currentPiece)) {
-            this.currentX += dx;
-            this.lastMoveWasRotation = false;
-            this.lockTimer = 0; // Reset lock delay on move
+        if (this.isValid(this.x + dx, this.y, this.curr)) {
+            this.x += dx; this.lastMoveRot = false; this.lockTimer = 0;
             return true;
         }
         return false;
     }
 
-    softDrop() {
-        if (this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
-            this.currentY++;
-            this.lastMoveWasRotation = false;
-            return true;
+    drop() {
+        if (this.isValid(this.x, this.y + 1, this.curr)) {
+            this.y++; this.lastMoveRot = false; return true;
         }
         return false;
     }
 
     hardDrop() {
-        while (this.softDrop()) {}
-        this.lockPiece();
+        while(this.drop()){}
+        this.lock();
     }
 
     hold() {
         if (!this.canHold) return;
-        const nextType = this.holdPiece;
-        this.holdPiece = this.currentType;
-        if (nextType) this.spawnPiece(nextType);
-        else this.spawnPiece();
-        this.canHold = false;
+        const t = this.holdPiece; this.holdPiece = this.type;
+        this.spawn(t); this.canHold = false;
     }
 
-    lockPiece() {
-        this.currentPiece.forEach((row, dy) => {
-            row.forEach((value, dx) => {
-                if (value && this.currentY + dy >= 0) {
-                    this.board[this.currentY + dy][this.currentX + dx] = this.currentType;
-                }
-            });
-        });
-
-        const spinResult = this.checkSpin();
-        this.clearLines(spinResult);
-        if (!this.spawnPiece()) this.isGameOver = true;
-        
-        // Send state to opponent
-        if (conn && this.playerNum === 1) {
-            sendUpdate();
-        }
+    lock() {
+        this.curr.forEach((row, dy) => row.forEach((v, dx) => {
+            if (v && this.y + dy >= 0) this.board[this.y+dy][this.x+dx] = this.type;
+        }));
+        const spin = this.checkSpin();
+        this.clearLines(spin);
+        if (!this.spawn()) this.isGameOver = true;
+        if (this.pNum === 1 && conn) sendState();
     }
 
     checkSpin() {
-        if (this.currentType !== 'T' || !this.lastMoveWasRotation) return { isSpin: false, isMini: false };
-
-        // 3-Corner Rule
-        const corners = [
-            [this.currentX, this.currentY], [this.currentX+2, this.currentY],
-            [this.currentX, this.currentY+2], [this.currentX+2, this.currentY+2]
-        ];
-        let filled = 0;
-        corners.forEach(([cx, cy]) => {
-            if (cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && this.board[cy][cx])) filled++;
-        });
-
-        if (filled >= 3) {
-            // Check for Mini: If pointing corners (front) aren't both filled 
-            // and it wasn't a kick index 4 (standard SRS)
-            let isMini = this.lastKickIndex < 4; 
-            return { isSpin: true, isMini: isMini };
-        }
-        return { isSpin: false, isMini: false };
+        if (this.type !== 'T' || !this.lastMoveRot) return {isSpin:false};
+        const corners = [[this.x,this.y],[this.x+2,this.y],[this.x,this.y+2],[this.x+2,this.y+2]];
+        let f = 0;
+        corners.forEach(([cx,cy]) => { if(cx<0||cx>=COLS||cy>=ROWS||(cy>=0&&this.board[cy][cx])) f++; });
+        return { isSpin: f >= 3, isMini: f >= 3 && this.lastKick < 4 };
     }
 
     clearLines(spin) {
-        let cleared = 0;
-        for (let y = ROWS - 1; y >= 0; y--) {
+        let c = 0;
+        for (let y = ROWS-1; y>=0; y--) {
             if (this.board[y].every(cell => cell !== 0)) {
-                this.board.splice(y, 1);
-                this.board.unshift(Array(COLS).fill(0));
-                cleared++;
-                y++;
+                this.board.splice(y, 1); this.board.unshift(Array(COLS).fill(0));
+                c++; y++;
             }
         }
-
-        if (cleared > 0 || spin.isSpin) {
-            let damage = this.calculateDamage(cleared, spin);
-            this.attack += damage;
-            this.lines += cleared;
-            if (damage > 0 && conn && this.playerNum === 1) {
-                conn.send({ type: 'attack', amount: damage });
-            }
+        if (c > 0 || spin.isSpin) {
+            let dmg = spin.isSpin ? (spin.isMini ? c+1 : c*2) : (c === 4 ? 4 : Math.max(0, c-1));
+            this.attack += dmg; this.lines += c;
+            if (dmg > 0 && conn && this.pNum === 1) conn.send({type:'attack', amt:dmg});
         }
     }
 
-    calculateDamage(lines, spin) {
-        if (spin.isSpin) {
-            if (spin.isMini) return lines + 1;
-            return lines * 2; // T-Spin Double = 4, Triple = 6
-        }
-        if (lines === 4) return 4;
-        return lines - 1 > 0 ? lines - 1 : 0;
-    }
-
-    update(deltaTime) {
+    update(dt) {
         if (this.isGameOver) return;
-
-        this.dropCounter += deltaTime;
-        if (this.dropCounter > this.dropInterval) {
-            if (!this.softDrop()) {
-                this.lockTimer += deltaTime;
-                if (this.lockTimer >= this.lockDelay) {
-                    this.lockPiece();
-                    this.lockTimer = 0;
-                }
-            } else {
-                this.lockTimer = 0;
-            }
-            this.dropCounter = 0;
-        } else if (!this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
-            // We are touching the ground
-            this.lockTimer += deltaTime;
-            if (this.lockTimer >= this.lockDelay) {
-                this.lockPiece();
-                this.lockTimer = 0;
-            }
+        this.dropTimer += dt;
+        if (this.dropTimer > 800) {
+            if (!this.drop()) {
+                this.lockTimer += dt;
+                if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; }
+            } else { this.lockTimer = 0; }
+            this.dropTimer = 0;
+        } else if (!this.isValid(this.x, this.y + 1, this.curr)) {
+            this.lockTimer += dt;
+            if (this.lockTimer >= 500) this.lock();
         }
     }
 
     draw() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+        this.board.forEach((r,y) => r.forEach((v,x) => { if(v) this.drawBlk(this.ctx,x,y,COLORS[v]); }));
         
-        // Draw Board
-        this.board.forEach((row, y) => {
-            row.forEach((cell, x) => {
-                if (cell) this.drawBlock(this.ctx, x, y, COLORS[cell]);
-            });
-        });
+        // Ghost
+        let gy = this.y; while(this.isValid(this.x, gy+1, this.curr)) gy++;
+        this.ctx.globalAlpha = 0.2;
+        this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,gy+dy,COLORS[this.type]); }));
+        this.ctx.globalAlpha = 1.0;
 
-        // Draw Ghost
-        let ghostY = this.currentY;
-        while (this.isValid(this.currentX, ghostY + 1, this.currentPiece)) ghostY++;
-        this.currentPiece.forEach((row, dy) => {
-            row.forEach((value, dx) => {
-                if (value) {
-                    this.ctx.globalAlpha = 0.2;
-                    this.drawBlock(this.ctx, this.currentX + dx, ghostY + dy, COLORS[this.currentType]);
-                    this.ctx.globalAlpha = 1.0;
-                }
-            });
-        });
-
-        // Draw Current
-        this.currentPiece.forEach((row, dy) => {
-            row.forEach((value, dx) => {
-                if (value) this.drawBlock(this.ctx, this.currentX + dx, this.currentY + dy, COLORS[this.currentType]);
-            });
-        });
-
+        // Piece
+        this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,this.y+dy,COLORS[this.type]); }));
         this.drawUI();
     }
 
-    drawBlock(ctx, x, y, color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-        ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    drawBlk(ctx, x, y, col, sz = BLOCK) {
+        ctx.fillStyle = col; ctx.fillRect(x*sz, y*sz, sz, sz);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.strokeRect(x*sz, y*sz, sz, sz);
     }
 
     drawUI() {
-        const stats = document.getElementById(`stats${this.playerNum}`);
-        stats.innerText = `Lines: ${this.lines} | Attack: ${this.attack}`;
-
+        document.getElementById(`stats${this.pNum}`).innerHTML = `LINES: ${this.lines}<br>ATTACK: ${this.attack}`;
+        
         // Hold
-        const hCtx = this.holdCanvas.getContext('2d');
-        hCtx.clearRect(0,0,80,80);
-        if (this.holdPiece) {
-            const p = PIECES[this.holdPiece];
-            p.forEach((row, y) => row.forEach((v, x) => {
-                if (v) {
-                    hCtx.fillStyle = COLORS[this.holdPiece];
-                    hCtx.fillRect(x*15+10, y*15+10, 15, 15);
-                }
-            }));
-        }
+        const hCtx = this.holdCanvas.getContext('2d'); hCtx.clearRect(0,0,80,80);
+        if (this.holdPiece) this.drawPreview(hCtx, this.holdPiece);
 
-        // Queue (Top 5)
-        const qCtx = this.queueCanvas.getContext('2d');
-        qCtx.clearRect(0,0,80,400);
-        this.queue.slice(0, 5).forEach((type, i) => {
-            const p = PIECES[type];
-            p.forEach((row, y) => row.forEach((v, x) => {
-                if (v) {
-                    qCtx.fillStyle = COLORS[type];
-                    qCtx.fillRect(x*15+10, (i*70) + (y*15) + 10, 15, 15);
-                }
-            }));
-        });
+        // Queue
+        const qCtx = this.queueCanvas.getContext('2d'); qCtx.clearRect(0,0,80,400);
+        this.queue.slice(0, 5).forEach((type, i) => this.drawPreview(qCtx, type, i * 70 + 10));
+    }
+
+    drawPreview(ctx, type, yOffset = 10) {
+        const p = SHAPES[type], sz = 15;
+        p.forEach((r, y) => r.forEach((v, x) => {
+            if (v) {
+                ctx.fillStyle = COLORS[type];
+                ctx.fillRect(x*sz + 10, y*sz + yOffset, sz, sz);
+            }
+        }));
     }
 }
 
-/** * NETWORKING & INPUT
- */
-let peer = new Peer();
-let conn;
-let isHost = false;
-let gameState1, gameState2;
-let currentSeed = Math.floor(Math.random() * 1000000);
-
+/** NETWORK & INPUTS **/
+let peer = new Peer(), conn, gameState1, gameState2, isHost = false;
+let wins = [0, 0];
 const keys = {};
+let dasTimer = 0, arrTimer = 0, DAS = 170, ARR = 30;
+
 window.addEventListener('keydown', e => {
-    const k = e.key.toLowerCase();
+    let k = e.key.toLowerCase();
     if (!keys[k]) {
-        // Trigger non-repeat actions
         if (k === 'w' || e.key === 'ArrowUp') gameState1.rotate('cw');
         if (k === 'q') gameState1.rotate('ccw');
         if (k === ' ') { e.preventDefault(); gameState1.hardDrop(); }
         if (k === 'c' || e.key === 'Shift') gameState1.hold();
-        if (k === 't') {
-            e.preventDefault();
-            document.getElementById('chat-input').focus();
-        }
+        if (k === 't') { e.preventDefault(); document.getElementById('chat-input').focus(); }
     }
     keys[k] = true;
 });
-window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-
-// DAS/ARR Variables
-let dasTimer = 0;
-let arrTimer = 0;
-const DAS = 170; // Delayed Auto Shift
-const ARR = 30;  // Auto Repeat Rate
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; dasTimer = 0; });
 
 function handleInput(dt) {
     if (!gameState1 || gameState1.isGameOver) return;
-
-    if (keys['s'] || e.key === 'ArrowDown') {
-        gameState1.softDrop(); // Infinite SDF basically happens here if pressed
-    }
-
-    if (keys['a'] || e.key === 'ArrowLeft') {
-        if (dasTimer === 0) {
-            gameState1.move(-1);
-        }
+    if (keys['s'] || keys['arrowdown']) gameState1.drop();
+    if (keys['a'] || keys['arrowleft']) {
+        if (dasTimer === 0) gameState1.move(-1);
         dasTimer += dt;
         if (dasTimer >= DAS) {
             arrTimer += dt;
-            if (arrTimer >= ARR) {
-                gameState1.move(-1);
-                arrTimer = 0;
-            }
+            if (arrTimer >= ARR) { gameState1.move(-1); arrTimer = 0; }
         }
-    } else if (keys['d'] || e.key === 'ArrowRight') {
-        if (dasTimer === 0) {
-            gameState1.move(1);
-        }
+    } else if (keys['d'] || keys['arrowright']) {
+        if (dasTimer === 0) gameState1.move(1);
         dasTimer += dt;
         if (dasTimer >= DAS) {
             arrTimer += dt;
-            if (arrTimer >= ARR) {
-                gameState1.move(1);
-                arrTimer = 0;
-            }
+            if (arrTimer >= ARR) { gameState1.move(1); arrTimer = 0; }
         }
-    } else {
-        dasTimer = 0;
-        arrTimer = 0;
-    }
+    } else { dasTimer = 0; }
 }
 
 peer.on('open', id => document.getElementById('my-id').innerText = id);
 
 document.getElementById('create-btn').onclick = () => {
-    isHost = true;
-    document.getElementById('restart-btn').style.display = 'inline-block';
-    addChatMessage("Waiting for opponent...");
+    isHost = true; document.getElementById('restart-btn').style.display = 'inline-block';
+    addChat("System", "Waiting for someone to join...");
 };
 
 document.getElementById('join-btn').onclick = () => {
-    const id = document.getElementById('join-id').value;
-    conn = peer.connect(id);
-    setupConnection();
+    conn = peer.connect(document.getElementById('join-id').value);
+    setupConn();
 };
 
-peer.on('connection', c => {
-    conn = c;
-    isHost = true;
-    setupConnection();
-    conn.send({ type: 'init', seed: currentSeed });
-    startGame(currentSeed);
-});
+peer.on('connection', c => { conn = c; isHost = true; setupConn(); let s = Date.now(); conn.send({type:'init', seed:s}); start(s); });
 
-function setupConnection() {
+function setupConn() {
     conn.on('data', data => {
-        if (data.type === 'init') {
-            currentSeed = data.seed;
-            startGame(currentSeed);
-        }
+        if (data.type === 'init') start(data.seed);
         if (data.type === 'update') {
-            if (gameState2) {
-                gameState2.board = data.board;
-                gameState2.holdPiece = data.holdPiece;
-                gameState2.queue = data.queue;
-                gameState2.lines = data.lines;
-                gameState2.attack = data.attack;
-            }
+            gameState2.board = data.board; gameState2.holdPiece = data.holdPiece;
+            gameState2.queue = data.queue; gameState2.lines = data.lines; gameState2.attack = data.attack;
         }
-        if (data.type === 'attack') {
-            receiveGarbage(data.amount);
+        if (data.type === 'attack') receiveGarb(data.amt);
+        if (data.type === 'chat') addChat("Opponent", data.msg);
+        if (data.type === 'gameover') {
+            wins[0]++; updateWins();
+            addChat("System", "Opponent topped out! You win.");
         }
-        if (data.type === 'restart') {
-            currentSeed = data.seed;
-            startGame(currentSeed);
-        }
-        if (data.type === 'chat') {
-            addChatMessage("Opponent: " + data.msg);
-        }
+        if (data.type === 'restart') start(data.seed);
     });
 }
 
-function startGame(seed) {
-    gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
-    gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
-    requestAnimationFrame(gameLoop);
+function start(seed) {
+    gameState1 = new GameState('board1', 'hold1', 'queue1', 1, seed);
+    gameState2 = new GameState('board2', 'hold2', 'queue2', 2, seed);
+    requestAnimationFrame(loop);
 }
 
-function sendUpdate() {
-    conn.send({
-        type: 'update',
-        board: gameState1.board,
-        holdPiece: gameState1.holdPiece,
-        queue: gameState1.queue,
-        lines: gameState1.lines,
-        attack: gameState1.attack
-    });
+function updateWins() {
+    document.getElementById('p1-wins').innerText = wins[0];
+    document.getElementById('p2-wins').innerText = wins[1];
 }
 
-function receiveGarbage(amount) {
-    let hole = Math.floor(Math.random() * COLS);
-    for (let i = 0; i < amount; i++) {
+function sendState() {
+    conn.send({ type:'update', board:gameState1.board, holdPiece:gameState1.holdPiece, queue:gameState1.queue, lines:gameState1.lines, attack:gameState1.attack });
+}
+
+function receiveGarb(amt) {
+    let hole = Math.floor(Math.random()*COLS);
+    for(let i=0; i<amt; i++) {
         gameState1.board.shift();
-        let row = Array(COLS).fill('grey');
-        row[hole] = 0;
-        gameState1.board.push(row);
+        let r = Array(COLS).fill('grey'); r[hole] = 0;
+        gameState1.board.push(r);
     }
 }
 
 document.getElementById('restart-btn').onclick = () => {
-    if (!isHost) return;
-    currentSeed = Math.floor(Math.random() * 1000000);
-    conn.send({ type: 'restart', seed: currentSeed });
-    startGame(currentSeed);
+    let s = Date.now(); conn.send({type:'restart', seed:s}); start(s);
 };
 
-let lastTime = 0;
-function gameLoop(time) {
-    const dt = time - lastTime;
-    lastTime = time;
-
-    handleInput(dt);
-    gameState1.update(dt);
-    gameState1.draw();
-    gameState2.draw();
-
-    if (!gameState1.isGameOver) {
-        requestAnimationFrame(gameLoop);
-    } else {
-        addChatMessage("GAME OVER");
-    }
+let last = 0;
+function loop(t) {
+    const dt = t - last; last = t;
+    handleInput(dt); gameState1.update(dt);
+    gameState1.draw(); gameState2.draw();
+    if (!gameState1.isGameOver) requestAnimationFrame(loop);
+    else { wins[1]++; updateWins(); addChat("System", "You topped out."); }
 }
 
-// Chat Logic
-const chatInput = document.getElementById('chat-input');
-chatInput.onkeydown = (e) => {
-    if (e.key === 'Enter' && chatInput.value.trim() !== "") {
-        const msg = chatInput.value;
-        addChatMessage("You: " + msg);
-        if (conn) conn.send({ type: 'chat', msg: msg });
-        chatInput.value = "";
-        chatInput.blur();
+const chatIn = document.getElementById('chat-input');
+chatIn.onkeydown = e => {
+    if (e.key === 'Enter' && chatIn.value.trim()) {
+        addChat("You", chatIn.value);
+        if(conn) conn.send({type:'chat', msg:chatIn.value});
+        chatIn.value = ""; chatIn.blur();
     }
 };
 
-function addChatMessage(msg) {
-    const div = document.createElement('div');
-    div.innerText = msg;
-    const container = document.getElementById('chat-messages');
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+function addChat(who, msg) {
+    const d = document.createElement('div');
+    d.innerHTML = `<b style="color:var(--accent-cyan)">${who}:</b> ${msg}`;
+    const c = document.getElementById('chat-messages');
+    c.appendChild(d); c.scrollTop = c.scrollHeight;
 }
 </script>
 </body>
