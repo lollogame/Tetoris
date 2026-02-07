@@ -815,8 +815,13 @@
                 const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
                 
                 if (multiplier === Infinity) {
-                    this.hardDrop();
+                    // Instant drop like hard drop but don't lock
+                    while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                        this.currentY++;
+                    }
+                    return true;
                 } else {
+                    // Normal soft drop - just move down one cell if possible
                     if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                         this.currentY++;
                         return true;
@@ -836,6 +841,12 @@
             }
             
             lockPiece() {
+                // Store piece info BEFORE locking for spin detection
+                const pieceType = this.currentPiece;
+                const pieceX = this.currentX;
+                const pieceY = this.currentY;
+                const pieceRotation = this.currentRotation;
+                
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
@@ -854,10 +865,12 @@
                 this.lockDelayTimer = 0;
                 this.lockResetCount = 0;
                 this.isTouchingGround = false;
-                this.clearLines();
+                
+                // Pass the piece info to clearLines for spin detection
+                this.clearLines(pieceType, pieceX, pieceY, pieceRotation);
             }
             
-            clearLines() {
+            clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation) {
                 const clearedRows = [];
                 
                 // Find all filled rows
@@ -880,9 +893,10 @@
                         this.board.unshift(Array(COLS).fill(0));
                     }
                     
-                    const isSpin = this.checkSpin();
+                    // Check spin using the stored piece position
+                    const isSpin = this.checkSpin(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation);
                     const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear);
+                    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPieceType);
                     
                     // B2B logic
                     const isB2BMove = linesCleared === 4 || isSpin;
@@ -948,17 +962,21 @@
                 this.updateStats();
             }
             
-            checkSpin() {
-                if (this.currentPiece === 'T') return this.checkTSpin();
+            checkSpin(pieceType, pieceX, pieceY, pieceRotation) {
+                if (pieceType === 'T') {
+                    return this.checkTSpin(pieceX, pieceY);
+                }
+                // For other pieces, could implement other spin detection
                 return false;
             }
             
-            checkTSpin() {
+            checkTSpin(pieceX, pieceY) {
+                // T-spin detection: check if 3 out of 4 corners are filled
                 const corners = [
-                    [this.currentX, this.currentY],
-                    [this.currentX + 2, this.currentY],
-                    [this.currentX, this.currentY + 2],
-                    [this.currentX + 2, this.currentY + 2]
+                    [pieceX, pieceY],
+                    [pieceX + 2, pieceY],
+                    [pieceX, pieceY + 2],
+                    [pieceX + 2, pieceY + 2]
                 ];
                 
                 let filledCorners = 0;
@@ -971,12 +989,12 @@
                 return filledCorners >= 3;
             }
             
-            calculateAttack(lines, isSpin, isAllClear) {
+            calculateAttack(lines, isSpin, isAllClear, pieceType) {
                 let attack = 0;
                 
                 if (isAllClear) {
                     attack = lines === 4 ? 10 : 8;
-                } else if (this.currentPiece === 'T' && isSpin) {
+                } else if (pieceType === 'T' && isSpin) {
                     if (lines === 1) attack = 2;
                     else if (lines === 2) attack = 4;
                     else if (lines === 3) attack = 6;
@@ -1359,6 +1377,11 @@
                     }
                 } else if (data.type === 'restart') {
                     restartGame();
+                } else if (data.type === 'gameOver') {
+                    // Opponent lost, you win!
+                    gameRunning = false;
+                    addChatMessage('Opponent lost! You win! 🎉', 'System');
+                    document.getElementById('gameStatus').textContent = 'You Win! 🏆';
                 }
             });
             
@@ -1498,6 +1521,11 @@
                             addChatMessage('You lost! Click Restart to play again.', 'System');
                             document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                             gameRunning = false;
+                            
+                            // Notify opponent that you lost
+                            if (conn && conn.open) {
+                                conn.send({ type: 'gameOver' });
+                            }
                             return;
                         }
                         gameState1.lastGravityTime = 0;
@@ -1580,8 +1608,14 @@
                 e.preventDefault();
                 gameState1.hardDrop();
                 if (!gameState1.spawnPiece()) {
-                    addChatMessage('You lost!');
+                    addChatMessage('You lost! Click Restart to play again.', 'System');
+                    document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                     gameRunning = false;
+                    
+                    // Notify opponent that you lost
+                    if (conn && conn.open) {
+                        conn.send({ type: 'gameOver' });
+                    }
                 }
             } else if (e.key === keyBindings.rotateCW) {
                 e.preventDefault();
