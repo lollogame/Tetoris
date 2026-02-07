@@ -3,333 +3,777 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - Pro</title>
+    <title>Tetris Multiplayer - Fixed</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
-        :root { --bg: #0a0e27; --grid: #151b3d; --cyan: #00ffff; --pink: #ff00ff; --text: #ffffff; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
-        #ui-layer { margin: 15px; text-align: center; z-index: 10; }
-        .game-container { display: flex; gap: 30px; align-items: flex-start; }
-        .player-section { display: flex; gap: 10px; padding: 15px; background: rgba(255, 255, 255, 0.05); border: 2px solid var(--grid); }
-        canvas { background: #000; display: block; border: 1px solid #333; }
-        .side-panels { display: flex; flex-direction: column; gap: 10px; width: 80px; text-align: center;}
-        .controls { margin: 10px 0; display: flex; gap: 5px; justify-content: center; align-items: center; }
-        input[type="text"], button { padding: 8px 12px; font-family: 'Orbitron'; background: #1a1a2e; color: white; border: 1px solid var(--cyan); outline: none; }
-        button:hover { background: var(--cyan); color: black; cursor: pointer; }
-        #settings-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #111; border: 2px solid var(--pink); padding: 20px; z-index: 100; width: 450px; box-shadow: 0 0 30px rgba(255,0,255,0.3); }
-        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .key-btn { width: 120px; text-transform: uppercase; font-size: 10px; border-color: #444; }
-        .key-btn.waiting { border-color: var(--cyan); color: var(--cyan); }
-        .slider-val { color: var(--cyan); min-width: 60px; text-align: right; font-size: 14px; }
-        #chat-container { position: fixed; bottom: 10px; right: 10px; width: 280px; display: flex; flex-direction: column; background: rgba(10, 14, 39, 0.95); border: 1px solid var(--cyan); max-height: 250px; }
-        #chat-messages { height: 180px; overflow-y: auto; padding: 8px; font-size: 11px; }
-        .chat-input-area { display: flex; border-top: 1px solid var(--cyan); }
-        #chat-input { flex-grow: 1; border: none; padding: 8px; background: transparent; color: white; width: 100%; }
-        .score-board { font-size: 24px; color: var(--cyan); margin: 5px 0; }
-        input[type="range"] { accent-color: var(--cyan); }
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
+        
+        :root {
+            --bg-dark: #0a0e27;
+            --bg-grid: #151b3d;
+            --border-glow: #00ffff;
+            --text-primary: #ffffff;
+            --accent-cyan: #00ffff;
+            --accent-pink: #ff00ff;
+        }
+
+        body {
+            font-family: 'Orbitron', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #ui-layer { margin: 10px; z-index: 10; text-align: center; }
+        .game-container { display: flex; gap: 40px; margin-top: 20px; }
+        .player-section { position: relative; border: 4px solid var(--bg-grid); padding: 10px; background: rgba(0,0,0,0.3); }
+        canvas { background: #000; display: block; }
+        .hold-canvas, .queue-canvas { background: #000; border: 2px solid var(--bg-grid); margin: 5px 0; }
+        
+        .controls { margin-top: 10px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        input, button { 
+            padding: 8px; font-family: 'Orbitron'; background: #1a1a2e; color: white; border: 1px solid var(--accent-cyan);
+        }
+        button:hover { background: var(--accent-cyan); color: black; cursor: pointer; }
+
+        #chat-container {
+            position: fixed; bottom: 20px; right: 20px; width: 280px;
+            background: rgba(10, 14, 39, 0.95); border: 2px solid var(--accent-cyan);
+            border-radius: 5px;
+            max-width: calc(100vw - 40px);
+        }
+        #chat-messages { 
+            height: 150px; 
+            overflow-y: auto; 
+            overflow-x: hidden;
+            font-size: 11px; 
+            padding: 8px; 
+            word-wrap: break-word;
+        }
+        #chat-input { 
+            width: calc(100% - 10px); 
+            border: none; 
+            background: #151b3d; 
+            color: white; 
+            padding: 8px 5px; 
+            box-sizing: border-box;
+            font-size: 11px;
+        }
+
+        #game-over-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #game-over-overlay.show {
+            display: flex;
+        }
+
+        .game-over-content {
+            background: var(--bg-dark);
+            border: 3px solid var(--accent-cyan);
+            padding: 40px;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        .game-over-content h2 {
+            color: var(--accent-cyan);
+            font-size: 2.5em;
+            margin: 0 0 20px 0;
+            text-shadow: 0 0 20px var(--accent-cyan);
+        }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
-    <h1 style="text-shadow: 0 0 10px var(--cyan);">TETR.IO CLONE</h1>
-    <div class="score-board"><span id="p1-wins">0</span> - <span id="p2-wins">0</span></div>
+    <h1 style="color: var(--accent-cyan); text-shadow: 0 0 10px var(--accent-cyan);">TETR.IO CLONE</h1>
     <div class="controls">
-        <button id="create-btn">Host Match</button>
-        <input type="text" id="join-id" placeholder="Paste ID">
+        <button id="create-btn">Create Game</button>
+        <input type="text" id="join-id" placeholder="Enter Friend's ID">
         <button id="join-btn">Join</button>
-        <button id="restart-btn" style="display:none;">Restart</button>
-        <button id="open-settings" style="border-color: var(--pink);">⚙️ Settings</button>
+        <button id="restart-btn" style="display:none;">Restart Game</button>
     </div>
-    <div style="font-size: 10px;">ID: <span id="my-id" style="color:var(--pink)">...</span></div>
+    <div id="peer-id-display">Your ID: <span id="my-id">...</span></div>
 </div>
 
 <div class="game-container">
-    <div class="player-section">
-        <div class="side-panels">
-            <p style="font-size: 10px;">HOLD</p>
-            <canvas id="hold1" width="80" height="80"></canvas>
-            <div id="stats1" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
-        </div>
-        <canvas id="board1" width="300" height="600"></canvas>
-        <div class="side-panels">
-            <p style="font-size: 10px;">NEXT</p>
-            <canvas id="queue1" width="80" height="400"></canvas>
-        </div>
+    <div class="player-section" id="player1-area">
+        <h3>YOU</h3>
+        <canvas id="holdCanvas1" class="hold-canvas" width="100" height="100"></canvas>
+        <canvas id="gameCanvas1" width="300" height="600"></canvas>
+        <canvas id="queueCanvas1" class="queue-canvas" width="100" height="400"></canvas>
+        <div id="stats1">Lines: 0 | Attack: 0</div>
     </div>
-    <div class="player-section">
-        <div class="side-panels">
-            <p style="font-size: 10px;">HOLD</p>
-            <canvas id="hold2" width="80" height="80"></canvas>
-            <div id="stats2" style="font-size: 10px; margin-top: 20px; text-align: left;">LINES: 0<br>ATTACK: 0</div>
-        </div>
-        <canvas id="board2" width="300" height="600"></canvas>
-        <div class="side-panels">
-            <p style="font-size: 10px;">NEXT</p>
-            <canvas id="queue2" width="80" height="400"></canvas>
-        </div>
+    <div class="player-section" id="player2-area">
+        <h3>OPPONENT</h3>
+        <canvas id="holdCanvas2" class="hold-canvas" width="100" height="100"></canvas>
+        <canvas id="gameCanvas2" width="300" height="600"></canvas>
+        <canvas id="queueCanvas2" class="queue-canvas" width="100" height="400"></canvas>
+        <div id="stats2">Lines: 0 | Attack: 0</div>
     </div>
-</div>
-
-<div id="settings-modal">
-    <h2 style="color: var(--pink); margin-bottom: 20px;">GAME SETTINGS</h2>
-    <div id="keybinds-list"></div>
-    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #333;">
-    <div class="setting-row"><span>DAS (Initial Delay)</span><input type="range" id="das-range" min="80" max="300" value="170"><span class="slider-val" id="das-val">170ms</span></div>
-    <div class="setting-row"><span>ARR (Repeat Speed)</span><input type="range" id="arr-range" min="0" max="100" value="30"><span class="slider-val" id="arr-val">30ms</span></div>
-    <div class="setting-row"><span>Soft Drop Factor</span><input type="range" id="sdf-range" min="1" max="41" value="20"><span class="slider-val" id="sdf-val">20x</span></div>
-    <button id="close-settings" style="width: 100%; margin-top: 10px; background: var(--pink); border:none;">SAVE & CLOSE</button>
 </div>
 
 <div id="chat-container">
     <div id="chat-messages"></div>
-    <div class="chat-input-area"><input type="text" id="chat-input" placeholder="Press T to chat..."></div>
+    <input type="text" id="chat-input" placeholder="Press T to chat...">
+</div>
+
+<div id="game-over-overlay">
+    <div class="game-over-content">
+        <h2 id="game-result-text">YOU WIN!</h2>
+        <p>Click Restart to play again</p>
+    </div>
 </div>
 
 <script>
-let settings = {
-    keys: { left:'arrowleft', right:'arrowright', softDrop:'arrowdown', hardDrop:' ', rotateCW:'x', rotateCCW:'z', rotate180:'a', hold:'c', chat:'t' },
-    das: 170, arr: 30, sdf: 20
-};
-const saved = localStorage.getItem('tetris_settings_v3');
-if (saved) settings = JSON.parse(saved);
-
+/** * SEEDED RANDOM GENERATOR 
+ * Ensures both players get the exact same pieces
+ */
 class SeededRandom {
-    constructor(seed) { this.state = seed || Date.now(); }
-    next() { this.state = (this.state * 1664525 + 1013904223) % 4294967296; return this.state / 4294967296; }
+    constructor(seed) {
+        this.seed = seed % 2147483647;
+        if (this.seed <= 0) this.seed += 2147483646;
+    }
+    next() {
+        return this.seed = (this.seed * 48271) % 2147483647;
+    }
+    nextFloat() {
+        return (this.next() - 1) / 2147483646;
+    }
 }
 
-const COLS = 10, ROWS = 20, BLOCK = 30;
-const COLORS = { I:'#00f0f0', O:'#f0f000', T:'#a000f0', S:'#00f000', Z:'#f00000', J:'#0000f0', L:'#f0a000', grey:'#555' };
-const SHAPES = {
-    I:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], O:[[1,1],[1,1]], T:[[0,1,0],[1,1,1],[0,0,0]],
-    S:[[0,1,1],[1,1,0],[0,0,0]], Z:[[1,1,0],[0,1,1],[0,0,0]], J:[[1,0,0],[1,1,1],[0,0,0]], L:[[0,0,1],[1,1,1],[0,0,0]]
+const COLS = 10;
+const ROWS = 20;
+const BLOCK_SIZE = 30;
+
+const COLORS = {
+    'I': '#00f0f0', 'O': '#f0f000', 'T': '#a000f0',
+    'S': '#00f000', 'Z': '#f00000', 'J': '#0000f0', 'L': '#f0a000',
+    'grey': '#666666'
+};
+
+const PIECES = {
+    'I': [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    'O': [[1,1],[1,1]],
+    'T': [[0,1,0],[1,1,1],[0,0,0]],
+    'S': [[0,1,1],[1,1,0],[0,0,0]],
+    'Z': [[1,1,0],[0,1,1],[0,0,0]],
+    'J': [[1,0,0],[1,1,1],[0,0,0]],
+    'L': [[0,0,1],[1,1,1],[0,0,0]]
+};
+
+// SRS Kick Data
+const KICKS = {
+    "0-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+    "1-0": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+    "1-2": [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+    "2-1": [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+    "2-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]],
+    "3-2": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+    "3-0": [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+    "0-3": [[0,0], [1,0], [1,1], [0,-2], [1,-2]]
 };
 
 class GameState {
-    constructor(bId, hId, qId, pNum, seed) {
-        this.canvas = document.getElementById(bId); this.ctx = this.canvas.getContext('2d');
-        this.holdCanvas = document.getElementById(hId); this.queueCanvas = document.getElementById(qId);
-        this.pNum = pNum; this.rng = new SeededRandom(seed);
+    constructor(canvasId, holdId, queueId, playerNum, seed) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.holdCanvas = document.getElementById(holdId);
+        this.queueCanvas = document.getElementById(queueId);
+        this.playerNum = playerNum;
+        
+        this.rng = new SeededRandom(seed);
         this.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-        this.queue = []; this.holdPiece = null; this.canHold = true;
-        this.lines = 0; this.attack = 0; this.isGameOver = false;
-        this.curr = null; this.type = ''; this.x = 0; this.y = 0; this.rot = 0;
-        this.dropTimer = 0; this.lockTimer = 0; this.lastMoveRot = false;
-        this.fillQueue(); this.spawn();
+        this.queue = [];
+        this.holdPiece = null;
+        this.canHold = true;
+        this.score = 0;
+        this.lines = 0;
+        this.attack = 0;
+        
+        this.currentPiece = null;
+        this.currentType = '';
+        this.currentX = 0;
+        this.currentY = 0;
+        this.currentRotation = 0;
+        this.lastMoveWasRotation = false;
+        this.lastKickIndex = 0;
+
+        this.dropCounter = 0;
+        this.dropInterval = 1000;
+        this.lockTimer = 0;
+        this.lockDelay = 500;
+        this.isGameOver = false;
+
+        this.fillQueue();
+        this.spawnPiece();
     }
 
     fillQueue() {
-        while(this.queue.length < 14) {
-            let bag = Object.keys(SHAPES);
+        while (this.queue.length < 14) {
+            let bag = ['I','O','T','S','Z','J','L'];
             for (let i = bag.length - 1; i > 0; i--) {
-                const j = Math.floor(this.rng.next() * (i + 1));
+                const j = Math.floor(this.rng.nextFloat() * (i + 1));
                 [bag[i], bag[j]] = [bag[j], bag[i]];
             }
             this.queue.push(...bag);
         }
     }
 
-    spawn(type = null) {
-        this.type = type || this.queue.shift(); this.fillQueue();
-        this.curr = SHAPES[this.type]; this.rot = 0;
-        // Correct Spawn Columns (SRS Style / User Requested)
-        // O at index 4 (5,6), I at index 3 (4,5,6,7), others at index 3 (4,5,6)
-        this.x = (this.type === 'O') ? 4 : 3;
-        this.y = (this.type === 'I') ? -1 : 0;
-        this.canHold = true; this.lastMoveRot = false;
-        if (!this.isValid(this.x, this.y, this.curr)) {
+    spawnPiece(type = null) {
+        this.currentType = type || this.queue.shift();
+        this.fillQueue();
+        this.currentPiece = PIECES[this.currentType];
+        this.currentX = Math.floor(COLS / 2) - Math.floor(this.currentPiece[0].length / 2);
+        this.currentY = 0;
+        this.currentRotation = 0;
+        this.canHold = true;
+        this.lastMoveWasRotation = false;
+
+        if (!this.isValid(this.currentX, this.currentY, this.currentPiece)) {
             this.isGameOver = true;
-            if (this.pNum === 1 && conn) conn.send({type: 'gameover'});
+            this.handleGameOver();
             return false;
         }
         return true;
     }
 
-    isValid(nx, ny, p) {
-        return p.every((row, dy) => row.every((v, dx) => {
-            let x = nx + dx, y = ny + dy;
-            return !v || (x >= 0 && x < COLS && y < ROWS && (y < 0 || !this.board[y][x]));
-        }));
+    handleGameOver() {
+        if (conn && this.playerNum === 1) {
+            conn.send({ type: 'game_over', winner: 'opponent' });
+        }
+        showGameOver(false);
+    }
+
+    isValid(x, y, piece) {
+        return piece.every((row, dy) => {
+            return row.every((value, dx) => {
+                let nextX = x + dx;
+                let nextY = y + dy;
+                return (
+                    value === 0 ||
+                    (nextX >= 0 && nextX < COLS && nextY < ROWS &&
+                    (nextY < 0 || !this.board[nextY][nextX]))
+                );
+            });
+        });
     }
 
     rotate(dir) {
-        const rotateMat = (m, d) => {
-            let n = m.length, res = Array.from({length:n},()=>Array(n).fill(0));
-            for(let y=0; y<n; y++) for(let x=0; x<n; x++)
-                if(d==='cw') res[x][n-1-y] = m[y][x]; else res[n-1-x][y] = m[y][x];
-            return res;
-        };
-        const nextP = rotateMat(this.curr, dir);
-        if (this.isValid(this.x, this.y, nextP)) { this.curr = nextP; this.lastMoveRot = true; this.lockTimer = 0; }
-    }
+        const prevRotation = this.currentRotation;
+        const nextRotation = (this.currentRotation + (dir === 'cw' ? 1 : 3)) % 4;
+        const nextPiece = this.rotateMatrix(this.currentPiece, dir);
+        
+        const key = `${prevRotation}-${nextRotation}`;
+        const kicks = KICKS[key] || [[0,0]];
 
-    move(dx) { if (this.isValid(this.x + dx, this.y, this.curr)) { this.x += dx; this.lastMoveRot = false; this.lockTimer = 0; return true; } return false; }
-    drop() { if (this.isValid(this.x, this.y + 1, this.curr)) { this.y++; this.lastMoveRot = false; return true; } return false; }
-    hardDrop() { while(this.drop()){} this.lock(); }
-    hold() { if (!this.canHold) return; const t = this.holdPiece; this.holdPiece = this.type; this.spawn(t); this.canHold = false; }
-
-    lock() {
-        this.curr.forEach((row, dy) => row.forEach((v, dx) => { if (v && this.y + dy >= 0) this.board[this.y+dy][this.x+dx] = this.type; }));
-        this.clearLines();
-        if (!this.spawn()) this.isGameOver = true;
-        if (this.pNum === 1 && conn) sendState();
-    }
-
-    clearLines() {
-        let c = 0;
-        for (let y = ROWS-1; y>=0; y--) { if (this.board[y].every(cell => cell !== 0)) { this.board.splice(y, 1); this.board.unshift(Array(COLS).fill(0)); c++; y++; } }
-        if (c > 0) {
-            let dmg = c === 4 ? 4 : Math.max(0, c-1);
-            this.attack += dmg; this.lines += c;
-            if (dmg > 0 && conn && this.pNum === 1) conn.send({type:'attack', amt:dmg});
+        for (let i = 0; i < kicks.length; i++) {
+            const [kx, ky] = kicks[i];
+            if (this.isValid(this.currentX + kx, this.currentY - ky, nextPiece)) {
+                this.currentX += kx;
+                this.currentY -= ky;
+                this.currentPiece = nextPiece;
+                this.currentRotation = nextRotation;
+                this.lastMoveWasRotation = true;
+                this.lastKickIndex = i;
+                this.lockTimer = 0;
+                return;
+            }
         }
     }
 
-    update(dt, isSD) {
+    rotateMatrix(matrix, dir) {
+        const N = matrix.length;
+        let result = Array.from({length: N}, () => Array(N).fill(0));
+        for (let y = 0; y < N; y++) {
+            for (let x = 0; x < N; x++) {
+                if (dir === 'cw') result[x][N-1-y] = matrix[y][x];
+                else result[N-1-x][y] = matrix[y][x];
+            }
+        }
+        return result;
+    }
+
+    move(dx) {
+        if (this.isValid(this.currentX + dx, this.currentY, this.currentPiece)) {
+            this.currentX += dx;
+            this.lastMoveWasRotation = false;
+            this.lockTimer = 0;
+            return true;
+        }
+        return false;
+    }
+
+    softDrop() {
+        if (this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
+            this.currentY++;
+            this.lastMoveWasRotation = false;
+            return true;
+        }
+        return false;
+    }
+
+    hardDrop() {
+        while (this.softDrop()) {}
+        this.lockPiece();
+    }
+
+    hold() {
+        if (!this.canHold) return;
+        const nextType = this.holdPiece;
+        this.holdPiece = this.currentType;
+        if (nextType) this.spawnPiece(nextType);
+        else this.spawnPiece();
+        this.canHold = false;
+    }
+
+    lockPiece() {
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value && this.currentY + dy >= 0) {
+                    this.board[this.currentY + dy][this.currentX + dx] = this.currentType;
+                }
+            });
+        });
+
+        const spinResult = this.checkSpin();
+        this.clearLines(spinResult);
+        if (!this.spawnPiece()) {
+            this.isGameOver = true;
+        }
+        
+        if (conn && this.playerNum === 1) {
+            sendUpdate();
+        }
+    }
+
+    checkSpin() {
+        if (this.currentType !== 'T' || !this.lastMoveWasRotation) return { isSpin: false, isMini: false };
+
+        const corners = [
+            [this.currentX, this.currentY], [this.currentX+2, this.currentY],
+            [this.currentX, this.currentY+2], [this.currentX+2, this.currentY+2]
+        ];
+        let filled = 0;
+        corners.forEach(([cx, cy]) => {
+            if (cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && this.board[cy][cx])) filled++;
+        });
+
+        if (filled >= 3) {
+            let isMini = this.lastKickIndex < 4; 
+            return { isSpin: true, isMini: isMini };
+        }
+        return { isSpin: false, isMini: false };
+    }
+
+    clearLines(spin) {
+        let cleared = 0;
+        for (let y = ROWS - 1; y >= 0; y--) {
+            if (this.board[y].every(cell => cell !== 0)) {
+                this.board.splice(y, 1);
+                this.board.unshift(Array(COLS).fill(0));
+                cleared++;
+                y++;
+            }
+        }
+
+        if (cleared > 0 || spin.isSpin) {
+            let damage = this.calculateDamage(cleared, spin);
+            this.attack += damage;
+            this.lines += cleared;
+            if (damage > 0 && conn && this.playerNum === 1) {
+                conn.send({ type: 'attack', amount: damage });
+            }
+        }
+    }
+
+    calculateDamage(lines, spin) {
+        if (spin.isSpin) {
+            if (spin.isMini) return lines + 1;
+            return lines * 2;
+        }
+        if (lines === 4) return 4;
+        return lines - 1 > 0 ? lines - 1 : 0;
+    }
+
+    update(deltaTime) {
         if (this.isGameOver) return;
-        let effDt = isSD ? dt * (settings.sdf > 40 ? 1000 : settings.sdf) : dt;
-        if (isSD && settings.sdf > 40) while(this.isValid(this.x, this.y + 1, this.curr)) this.y++;
-        this.dropTimer += effDt;
-        if (this.dropTimer > 800) {
-            if (!this.drop()) { this.lockTimer += dt; if (this.lockTimer >= 500) { this.lock(); this.lockTimer = 0; } }
-            else this.lockTimer = 0;
-            this.dropTimer = 0;
-        } else if (!this.isValid(this.x, this.y + 1, this.curr)) {
-            this.lockTimer += dt; if (this.lockTimer >= 500) this.lock();
+
+        this.dropCounter += deltaTime;
+        if (this.dropCounter > this.dropInterval) {
+            if (!this.softDrop()) {
+                this.lockTimer += deltaTime;
+                if (this.lockTimer >= this.lockDelay) {
+                    this.lockPiece();
+                    this.lockTimer = 0;
+                }
+            } else {
+                this.lockTimer = 0;
+            }
+            this.dropCounter = 0;
+        } else if (!this.isValid(this.currentX, this.currentY + 1, this.currentPiece)) {
+            this.lockTimer += deltaTime;
+            if (this.lockTimer >= this.lockDelay) {
+                this.lockPiece();
+                this.lockTimer = 0;
+            }
         }
     }
 
     draw() {
-        this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-        this.board.forEach((r,y) => r.forEach((v,x) => { if(v) this.drawBlk(this.ctx,x,y,COLORS[v]); }));
-        let gy = this.y; while(this.isValid(this.x, gy+1, this.curr)) gy++;
-        this.ctx.globalAlpha = 0.2;
-        this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,gy+dy,COLORS[this.type]); }));
-        this.ctx.globalAlpha = 1.0;
-        this.curr.forEach((r,dy) => r.forEach((v,dx) => { if(v) this.drawBlk(this.ctx,this.x+dx,this.y+dy,COLORS[this.type]); }));
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw Board
+        this.board.forEach((row, y) => {
+            row.forEach((cell, x) => {
+                if (cell) this.drawBlock(this.ctx, x, y, COLORS[cell]);
+            });
+        });
+
+        // Draw Ghost
+        let ghostY = this.currentY;
+        while (this.isValid(this.currentX, ghostY + 1, this.currentPiece)) ghostY++;
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value) {
+                    this.ctx.globalAlpha = 0.2;
+                    this.drawBlock(this.ctx, this.currentX + dx, ghostY + dy, COLORS[this.currentType]);
+                    this.ctx.globalAlpha = 1.0;
+                }
+            });
+        });
+
+        // Draw Current
+        this.currentPiece.forEach((row, dy) => {
+            row.forEach((value, dx) => {
+                if (value) this.drawBlock(this.ctx, this.currentX + dx, this.currentY + dy, COLORS[this.currentType]);
+            });
+        });
+
         this.drawUI();
     }
 
-    drawBlk(ctx, x, y, col, sz = BLOCK) { ctx.fillStyle = col; ctx.fillRect(x*sz, y*sz, sz, sz); ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.strokeRect(x*sz, y*sz, sz, sz); }
+    drawBlock(ctx, x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    }
 
     drawUI() {
-        document.getElementById(`stats${this.pNum}`).innerHTML = `LINES: ${this.lines}<br>ATTACK: ${this.attack}`;
-        const hCtx = this.holdCanvas.getContext('2d'); hCtx.clearRect(0,0,80,80);
-        if (this.holdPiece) this.drawPreview(hCtx, this.holdPiece);
-        const qCtx = this.queueCanvas.getContext('2d'); qCtx.clearRect(0,0,80,400);
-        this.queue.slice(0, 5).forEach((type, i) => this.drawPreview(qCtx, type, i * 70 + 10));
-    }
+        const stats = document.getElementById(`stats${this.playerNum}`);
+        stats.innerText = `Lines: ${this.lines} | Attack: ${this.attack}`;
 
-    drawPreview(ctx, type, yOffset = 10) {
-        const p = SHAPES[type], sz = 15;
-        p.forEach((r, y) => r.forEach((v, x) => { if (v) { ctx.fillStyle = COLORS[type]; ctx.fillRect(x*sz+10, y*sz+yOffset, sz, sz); } }));
+        // Hold
+        const hCtx = this.holdCanvas.getContext('2d');
+        hCtx.clearRect(0,0,100,100);
+        if (this.holdPiece) {
+            const p = PIECES[this.holdPiece];
+            const offsetX = this.holdPiece === 'O' ? 25 : this.holdPiece === 'I' ? 10 : 20;
+            const offsetY = this.holdPiece === 'O' ? 25 : this.holdPiece === 'I' ? 30 : 20;
+            p.forEach((row, y) => row.forEach((v, x) => {
+                if (v) {
+                    hCtx.fillStyle = COLORS[this.holdPiece];
+                    hCtx.fillRect(x*20+offsetX, y*20+offsetY, 18, 18);
+                    hCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+                    hCtx.strokeRect(x*20+offsetX, y*20+offsetY, 18, 18);
+                }
+            }));
+        }
+
+        // Queue (Top 5)
+        const qCtx = this.queueCanvas.getContext('2d');
+        qCtx.clearRect(0,0,100,400);
+        this.queue.slice(0, 5).forEach((type, i) => {
+            const p = PIECES[type];
+            const offsetX = type === 'O' ? 25 : type === 'I' ? 10 : 20;
+            const offsetY = type === 'O' ? 10 : type === 'I' ? 15 : 10;
+            p.forEach((row, y) => row.forEach((v, x) => {
+                if (v) {
+                    qCtx.fillStyle = COLORS[type];
+                    qCtx.fillRect(x*20+offsetX, (i*75) + (y*20) + offsetY, 18, 18);
+                    qCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+                    qCtx.strokeRect(x*20+offsetX, (i*75) + (y*20) + offsetY, 18, 18);
+                }
+            }));
+        });
     }
 }
 
-/** INPUTS **/
-const keysActive = {};
-let dasTimer = 0, arrTimer = 0, waitingForKey = null;
+/** * NETWORKING & INPUT */
+let peer = new Peer();
+let conn;
+let isHost = false;
+let gameState1, gameState2;
+let currentSeed = Math.floor(Math.random() * 1000000);
+
+const keys = {};
+
+// Keydown - solo azioni immediate (non ripetute)
 window.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if (waitingForKey) { settings.keys[waitingForKey] = k; waitingForKey = null; renderKeybinds(); return; }
-    if (!keysActive[k]) {
-        if (k === settings.keys.rotateCW) gameState1.rotate('cw');
-        if (k === settings.keys.rotateCCW) gameState1.rotate('ccw');
-        if (k === settings.keys.rotate180) { gameState1.rotate('cw'); gameState1.rotate('cw'); }
-        if (k === settings.keys.hardDrop) { e.preventDefault(); gameState1.hardDrop(); }
-        if (k === settings.keys.hold) gameState1.hold();
-        if (k === settings.keys.chat) { e.preventDefault(); document.getElementById('chat-input').focus(); }
+    
+    // Previeni azioni multiple se il tasto è già premuto
+    if (keys[k]) return;
+    
+    keys[k] = true;
+
+    // Azioni immediate (non ripetibili)
+    if (gameState1 && !gameState1.isGameOver) {
+        if (k === 'w' || k === 'arrowup') {
+            e.preventDefault();
+            gameState1.rotate('cw');
+        }
+        if (k === 'q') {
+            e.preventDefault();
+            gameState1.rotate('ccw');
+        }
+        if (k === ' ') {
+            e.preventDefault();
+            gameState1.hardDrop();
+        }
+        if (k === 'c' || k === 'shift') {
+            e.preventDefault();
+            gameState1.hold();
+        }
     }
-    keysActive[k] = true;
+    
+    if (k === 't') {
+        e.preventDefault();
+        document.getElementById('chat-input').focus();
+    }
 });
-window.addEventListener('keyup', e => { keysActive[e.key.toLowerCase()] = false; if (e.key.toLowerCase() === settings.keys.left || e.key.toLowerCase() === settings.keys.right) dasTimer = 0; });
+
+window.addEventListener('keyup', e => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+// DAS/ARR Variables
+let dasTimer = 0;
+let arrTimer = 0;
+const DAS = 170;
+const ARR = 30;
 
 function handleInput(dt) {
-    if (!gameState1 || gameState1.isGameOver || document.activeElement.tagName === 'INPUT') return false;
-    const moveDir = keysActive[settings.keys.left] ? -1 : (keysActive[settings.keys.right] ? 1 : 0);
-    if (moveDir !== 0) {
-        if (dasTimer === 0) gameState1.move(moveDir);
-        dasTimer += dt;
-        if (dasTimer >= settings.das) { arrTimer += dt; if (arrTimer >= settings.arr) { gameState1.move(moveDir); arrTimer = 0; } }
-    } else dasTimer = 0;
-    return keysActive[settings.keys.softDrop];
-}
+    if (!gameState1 || gameState1.isGameOver) return;
 
-/** NETWORK **/
-let peer = new Peer(), conn, gameState1, gameState2, wins = [0, 0];
-peer.on('open', id => document.getElementById('my-id').innerText = id);
+    // Soft Drop continuo
+    if (keys['s'] || keys['arrowdown']) {
+        gameState1.softDrop();
+    }
 
-document.getElementById('create-btn').onclick = () => { document.getElementById('restart-btn').style.display = 'inline-block'; addChat("System", "Hosting... waiting for join."); };
-document.getElementById('join-btn').onclick = () => { conn = peer.connect(document.getElementById('join-id').value); setupConn(); };
-peer.on('connection', c => { conn = c; setupConn(); });
+    // Movimento laterale con DAS/ARR
+    const movingLeft = keys['a'] || keys['arrowleft'];
+    const movingRight = keys['d'] || keys['arrowright'];
 
-function setupConn() {
-    conn.on('open', () => {
-        addChat("System", "Connected!");
-        if (!gameState1) { let s = Date.now(); conn.send({type:'init', seed:s}); start(s); }
-    });
-    conn.on('data', data => {
-        if (data.type === 'init' || data.type === 'restart') start(data.seed);
-        if (data.type === 'update' && gameState2) {
-            gameState2.board = data.board; gameState2.holdPiece = data.holdPiece;
-            gameState2.queue = data.queue; gameState2.lines = data.lines; gameState2.attack = data.attack;
+    if (movingLeft && !movingRight) {
+        if (dasTimer === 0) {
+            gameState1.move(-1);
         }
-        if (data.type === 'attack') receiveGarb(data.amt);
-        if (data.type === 'gameover') { wins[0]++; updateWins(); addChat("System", "Opponent topped out!"); }
-        if (data.type === 'chat') addChat("Opponent", data.msg);
-    });
-}
-
-function start(seed) {
-    gameState1 = new GameState('board1', 'hold1', 'queue1', 1, seed);
-    gameState2 = new GameState('board2', 'hold2', 'queue2', 2, seed);
-    requestAnimationFrame(loop);
-}
-
-function updateWins() { document.getElementById('p1-wins').innerText = wins[0]; document.getElementById('p2-wins').innerText = wins[1]; }
-function sendState() { conn.send({ type:'update', board:gameState1.board, holdPiece:gameState1.holdPiece, queue:gameState1.queue, lines:gameState1.lines, attack:gameState1.attack }); }
-function receiveGarb(amt) {
-    let hole = Math.floor(Math.random()*COLS);
-    for(let i=0; i<amt; i++) { gameState1.board.shift(); let r = Array(COLS).fill('grey'); r[hole] = 0; gameState1.board.push(r); }
-}
-document.getElementById('restart-btn').onclick = () => { let s = Date.now(); conn.send({type:'restart', seed:s}); start(s); };
-
-let last = 0;
-function loop(t) {
-    const dt = t - last; last = t;
-    const isSD = handleInput(dt); 
-    gameState1.update(dt, isSD);
-    gameState1.draw(); gameState2.draw();
-    if (!gameState1.isGameOver) requestAnimationFrame(loop);
-    else { wins[1]++; updateWins(); addChat("System", "You topped out."); }
-}
-
-/** SETTINGS & UI **/
-const modal = document.getElementById('settings-modal');
-const dasRange = document.getElementById('das-range'), arrRange = document.getElementById('arr-range'), sdfRange = document.getElementById('sdf-range');
-function updateReadouts() {
-    document.getElementById('das-val').innerText = dasRange.value + 'ms';
-    document.getElementById('arr-val').innerText = arrRange.value + 'ms';
-    document.getElementById('sdf-val').innerText = sdfRange.value > 40 ? 'INF' : sdfRange.value + 'x';
-}
-[dasRange, arrRange, sdfRange].forEach(s => s.oninput = updateReadouts);
-document.getElementById('open-settings').onclick = () => { dasRange.value = settings.das; arrRange.value = settings.arr; sdfRange.value = settings.sdf; updateReadouts(); modal.style.display = 'block'; renderKeybinds(); };
-document.getElementById('close-settings').onclick = () => { settings.das = parseInt(dasRange.value); settings.arr = parseInt(arrRange.value); settings.sdf = parseInt(sdfRange.value); localStorage.setItem('tetris_settings_v3', JSON.stringify(settings)); modal.style.display = 'none'; };
-function renderKeybinds() {
-    const list = document.getElementById('keybinds-list'); list.innerHTML = '';
-    for (let a in settings.keys) {
-        const r = document.createElement('div'); r.className = 'setting-row';
-        r.innerHTML = `<span>${a}</span><button class="key-btn" id="key-${a}">${settings.keys[a]===' '?'SPACE':settings.keys[a]}</button>`;
-        list.appendChild(r);
-        document.getElementById(`key-${a}`).onclick = (e) => { waitingForKey = a; e.target.innerText = '...'; e.target.classList.add('waiting'); };
+        dasTimer += dt;
+        if (dasTimer >= DAS) {
+            arrTimer += dt;
+            while (arrTimer >= ARR) {
+                gameState1.move(-1);
+                arrTimer -= ARR;
+            }
+        }
+    } else if (movingRight && !movingLeft) {
+        if (dasTimer === 0) {
+            gameState1.move(1);
+        }
+        dasTimer += dt;
+        if (dasTimer >= DAS) {
+            arrTimer += dt;
+            while (arrTimer >= ARR) {
+                gameState1.move(1);
+                arrTimer -= ARR;
+            }
+        }
+    } else {
+        // Reset quando nessun tasto di movimento è premuto
+        dasTimer = 0;
+        arrTimer = 0;
     }
 }
-const chatIn = document.getElementById('chat-input');
-chatIn.onkeydown = e => { if (e.key === 'Enter' && chatIn.value.trim()) { addChat("You", chatIn.value); if(conn) conn.send({type:'chat', msg:chatIn.value}); chatIn.value = ""; chatIn.blur(); } };
-function addChat(who, msg) { const d = document.createElement('div'); d.innerHTML = `<b style="color:var(--cyan)">${who}:</b> ${msg}`; const c = document.getElementById('chat-messages'); c.appendChild(d); c.scrollTop = c.scrollHeight; }
+
+peer.on('open', id => document.getElementById('my-id').innerText = id);
+
+document.getElementById('create-btn').onclick = () => {
+    isHost = true;
+    document.getElementById('restart-btn').style.display = 'inline-block';
+    addChatMessage("Waiting for opponent...");
+};
+
+document.getElementById('join-btn').onclick = () => {
+    const id = document.getElementById('join-id').value.trim();
+    if (!id) return;
+    conn = peer.connect(id);
+    setupConnection();
+};
+
+peer.on('connection', c => {
+    conn = c;
+    isHost = true;
+    setupConnection();
+    conn.send({ type: 'init', seed: currentSeed });
+    startGame(currentSeed);
+    addChatMessage("Opponent connected!");
+});
+
+function setupConnection() {
+    conn.on('open', () => {
+        addChatMessage("Connected to opponent!");
+    });
+
+    conn.on('data', data => {
+        if (data.type === 'init') {
+            currentSeed = data.seed;
+            startGame(currentSeed);
+        }
+        if (data.type === 'update') {
+            if (gameState2) {
+                gameState2.board = data.board;
+                gameState2.holdPiece = data.holdPiece;
+                gameState2.queue = data.queue;
+                gameState2.lines = data.lines;
+                gameState2.attack = data.attack;
+            }
+        }
+        if (data.type === 'attack') {
+            receiveGarbage(data.amount);
+        }
+        if (data.type === 'restart') {
+            currentSeed = data.seed;
+            hideGameOver();
+            startGame(currentSeed);
+        }
+        if (data.type === 'chat') {
+            addChatMessage("Opponent: " + data.msg);
+        }
+        if (data.type === 'game_over') {
+            showGameOver(true);
+        }
+    });
+}
+
+function startGame(seed) {
+    gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+    gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+function sendUpdate() {
+    if (!conn) return;
+    conn.send({
+        type: 'update',
+        board: gameState1.board,
+        holdPiece: gameState1.holdPiece,
+        queue: gameState1.queue,
+        lines: gameState1.lines,
+        attack: gameState1.attack
+    });
+}
+
+function receiveGarbage(amount) {
+    if (!gameState1) return;
+    let hole = Math.floor(Math.random() * COLS);
+    for (let i = 0; i < amount; i++) {
+        gameState1.board.shift();
+        let row = Array(COLS).fill('grey');
+        row[hole] = 0;
+        gameState1.board.push(row);
+    }
+}
+
+function showGameOver(didWin) {
+    const overlay = document.getElementById('game-over-overlay');
+    const resultText = document.getElementById('game-result-text');
+    resultText.textContent = didWin ? 'YOU WIN!' : 'GAME OVER';
+    resultText.style.color = didWin ? '#00ff00' : '#ff0000';
+    overlay.classList.add('show');
+    addChatMessage(didWin ? "You won the game!" : "You lost the game!");
+}
+
+function hideGameOver() {
+    document.getElementById('game-over-overlay').classList.remove('show');
+}
+
+document.getElementById('restart-btn').onclick = () => {
+    if (!isHost) {
+        addChatMessage("Only the host can restart!");
+        return;
+    }
+    currentSeed = Math.floor(Math.random() * 1000000);
+    if (conn) {
+        conn.send({ type: 'restart', seed: currentSeed });
+    }
+    hideGameOver();
+    startGame(currentSeed);
+    addChatMessage("Game restarted!");
+};
+
+let lastTime = 0;
+function gameLoop(time) {
+    const dt = time - lastTime;
+    lastTime = time;
+
+    handleInput(dt);
+    
+    if (gameState1) {
+        gameState1.update(dt);
+        gameState1.draw();
+    }
+    
+    if (gameState2) {
+        gameState2.draw();
+    }
+
+    if (!gameState1.isGameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Chat Logic
+const chatInput = document.getElementById('chat-input');
+chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && chatInput.value.trim() !== "") {
+        const msg = chatInput.value.trim();
+        addChatMessage("You: " + msg);
+        if (conn) conn.send({ type: 'chat', msg: msg });
+        chatInput.value = "";
+        chatInput.blur();
+    }
+    if (e.key === 'Escape') {
+        chatInput.value = "";
+        chatInput.blur();
+    }
+});
+
+function addChatMessage(msg) {
+    const div = document.createElement('div');
+    div.innerText = msg;
+    div.style.marginBottom = '5px';
+    const container = document.getElementById('chat-messages');
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
 </script>
 </body>
 </html>
