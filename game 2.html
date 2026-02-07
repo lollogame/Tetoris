@@ -725,7 +725,20 @@
         }
 
         let gameState1, gameState2, gameRunning = false;
-        const keyBindings = { left: 'ArrowLeft', right: 'ArrowRight', softDrop: 'ArrowDown', hardDrop: ' ', rotateCW: 'ArrowUp', rotateCCW: 'z', rotate180: 'x', hold: 'c' };
+
+        // Get current key bindings from input fields
+        function getKeyBindings() {
+            return {
+                left: document.getElementById('keyLeft').value,
+                right: document.getElementById('keyRight').value,
+                softDrop: document.getElementById('keySoftDrop').value,
+                hardDrop: document.getElementById('keyHardDrop').value,
+                rotateCW: document.getElementById('keyRotateCW').value,
+                rotateCCW: document.getElementById('keyRotateCCW').value,
+                rotate180: document.getElementById('keyRotate180').value,
+                hold: document.getElementById('keyHold').value
+            };
+        }
 
         // Input Setup
         const keysHeld = {};
@@ -733,6 +746,14 @@
 
         document.addEventListener('keydown', e => {
             if(!gameRunning || !gameState1 || keysHeld[e.key]) return;
+            
+            const keyBindings = getKeyBindings();
+            
+            // Prevent default scrolling for game keys
+            if(Object.values(keyBindings).includes(e.key)) {
+                e.preventDefault();
+            }
+            
             keysHeld[e.key] = true;
             if(e.key === keyBindings.left) { gameState1.move(-1); dasTimers[e.key] = {das:0, arr:0, dir:-1}; }
             else if(e.key === keyBindings.right) { gameState1.move(1); dasTimers[e.key] = {das:0, arr:0, dir:1}; }
@@ -782,21 +803,64 @@
 
         function endGame() { gameRunning = false; document.getElementById('gameStatus').textContent = "LOST!"; conn?.send({type:'gameOver'}); }
 
+        // Chat functionality
+        function addChatMessage(message, isSelf = false) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.textContent = `${isSelf ? 'You' : 'Opponent'}: ${message}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (message && conn?.open) {
+                conn.send({type: 'chat', message: message});
+                addChatMessage(message, true);
+                input.value = '';
+            }
+        }
+
+        document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
+        
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+
         // PeerJS
         document.getElementById('createGameBtn').onclick = () => {
             isHost = true; peer = new Peer();
-            peer.on('open', id => { document.getElementById('peerIdDisplay').textContent = id; document.getElementById('myPeerId').classList.remove('hidden'); });
+            peer.on('open', id => { 
+                myPeerId = id;
+                document.getElementById('peerIdDisplay').textContent = id; 
+                document.getElementById('myPeerId').classList.remove('hidden'); 
+                document.getElementById('gameStatus').textContent = "Waiting for opponent to join...";
+            });
             peer.on('connection', c => { conn = c; setupConn(); });
         };
 
         document.getElementById('joinGameBtn').onclick = () => {
-            const id = document.getElementById('opponentPeerId').value;
+            const id = document.getElementById('opponentPeerId').value.trim();
+            if (!id) {
+                alert('Please enter an opponent ID');
+                return;
+            }
             peer = new Peer();
-            peer.on('open', () => { conn = peer.connect(id); setupConn(); });
+            peer.on('open', () => { 
+                conn = peer.connect(id); 
+                setupConn(); 
+                document.getElementById('gameStatus').textContent = "Connecting to opponent...";
+            });
         };
 
         function setupConn() {
             conn.on('open', () => {
+                document.getElementById('gameStatus').textContent = "Connected! Starting game...";
                 if(isHost) {
                     const seed = Math.floor(Math.random() * 1000000);
                     conn.send({type:'start', seed}); startGame(seed);
@@ -807,18 +871,30 @@
                 if(d.type === 'state') gameState2.setState(d.state);
                 if(d.type === 'attack') gameState1.receiveAttack(d.lines);
                 if(d.type === 'gameOver') { gameRunning = false; document.getElementById('gameStatus').textContent = "WINNER!"; }
+                if(d.type === 'chat') addChatMessage(d.message, false);
             });
         }
 
         function startGame(seed) {
             document.getElementById('gameArea').classList.remove('hidden');
+            document.getElementById('gameStatus').textContent = "Game in progress!";
             gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
             gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
             gameState1.spawnPiece(); gameState2.spawnPiece();
             gameRunning = true; requestAnimationFrame(gameLoop);
         }
 
-        function copyPeerId() { navigator.clipboard.writeText(document.getElementById('peerIdDisplay').textContent); }
+        function copyPeerId() { 
+            const peerId = document.getElementById('peerIdDisplay').textContent;
+            navigator.clipboard.writeText(peerId).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
     </script>
 </body>
 </html>
