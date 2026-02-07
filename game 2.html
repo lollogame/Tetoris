@@ -88,6 +88,17 @@
         .control-item input:focus, .control-item select:focus {
             outline: none;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            border-color: var(--accent-pink);
+        }
+
+        /* Added specific style for key inputs to look interactive */
+        .control-input {
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .control-input:hover {
+            background: rgba(21, 27, 61, 1);
         }
         
         button {
@@ -161,8 +172,7 @@
         }
         
         .connection-panel {
-            display: flex;
-            gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; align-items: center;
+            display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; align-items: center;
         }
         
         .connection-panel input {
@@ -203,14 +213,15 @@
             <h2 style="font-family: 'Press Start 2P', cursive; font-size: 1rem; margin-bottom: 15px; text-align: center;">Game Settings</h2>
             
             <div class="controls-grid">
-                <div class="control-item"><label>Move Left</label><input type="text" id="keyLeft" value="ArrowLeft" readonly></div>
-                <div class="control-item"><label>Move Right</label><input type="text" id="keyRight" value="ArrowRight" readonly></div>
-                <div class="control-item"><label>Soft Drop</label><input type="text" id="keySoftDrop" value="ArrowDown" readonly></div>
-                <div class="control-item"><label>Hard Drop</label><input type="text" id="keyHardDrop" value=" " readonly></div>
-                <div class="control-item"><label>Rotate CW</label><input type="text" id="keyRotateCW" value="ArrowUp" readonly></div>
-                <div class="control-item"><label>Rotate CCW</label><input type="text" id="keyRotateCCW" value="z" readonly></div>
-                <div class="control-item"><label>Rotate 180</label><input type="text" id="keyRotate180" value="x" readonly></div>
-                <div class="control-item"><label>Hold Piece</label><input type="text" id="keyHold" value="c" readonly></div>
+                <div class="control-item"><label>Move Left</label><input type="text" id="keyLeft" class="control-input" value="ArrowLeft"></div>
+                <div class="control-item"><label>Move Right</label><input type="text" id="keyRight" class="control-input" value="ArrowRight"></div>
+                <div class="control-item"><label>Soft Drop</label><input type="text" id="keySoftDrop" class="control-input" value="ArrowDown"></div>
+                <div class="control-item"><label>Hard Drop</label><input type="text" id="keyHardDrop" class="control-input" value=" "></div>
+                <div class="control-item"><label>Rotate CW</label><input type="text" id="keyRotateCW" class="control-input" value="ArrowUp"></div>
+                <div class="control-item"><label>Rotate CCW</label><input type="text" id="keyRotateCCW" class="control-input" value="z"></div>
+                <div class="control-item"><label>Rotate 180</label><input type="text" id="keyRotate180" class="control-input" value="x"></div>
+                <div class="control-item"><label>Hold Piece</label><input type="text" id="keyHold" class="control-input" value="c"></div>
+                
                 <div class="control-item"><label>ARR (ms)</label><input type="number" id="arr" value="0" min="0" max="200"></div>
                 <div class="control-item"><label>DAS (ms)</label><input type="number" id="das" value="133" min="0" max="500"></div>
                 <div class="control-item"><label>DCD (ms)</label><input type="number" id="dcd" value="0" min="0" max="100"></div>
@@ -323,7 +334,7 @@
         let isHost = false;
         let myPeerId = null;
         
-        // [FIXED] Added 180 rotation kicks (0->2, 2->0, etc) to ensure rotation doesn't "lock" near walls
+        // [FIXED] Added 180 rotation kicks (0->2, 2->0, etc)
         const KICK_TABLE = {
             'JLSTZ': {
                 '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
@@ -334,7 +345,7 @@
                 'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
                 'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
                 '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
-                // 180 Kicks (Added)
+                // 180 Kicks
                 '0->2': [[0, 0], [0, 1], [1, 1], [-1, 1]],
                 '2->0': [[0, 0], [0, 1], [-1, 1], [1, 1]],
                 'R->L': [[0, 0], [0, 1], [1, 1], [-1, 1]],
@@ -349,7 +360,7 @@
                 'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
                 'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
                 '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
-                // 180 Kicks (Added)
+                // 180 Kicks
                 '0->2': [[0, 0], [-1, 0], [-2, 0], [1, 0], [2, 0]],
                 '2->0': [[0, 0], [1, 0], [2, 0], [-1, 0], [-2, 0]],
                 'R->L': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2]],
@@ -429,7 +440,6 @@
                 this.hardDropCooldown = 0;
                 this.lastRotationKicked = false;
                 this.lastMoveBeforeLock = null;
-                
                 // IRS
                 if (this.playerId === 1) { 
                     const keyBindings = getKeyBindings();
@@ -473,8 +483,7 @@
                         this.currentY -= dy; this.currentRotation = next;
                         this.lastRotationKicked = (i > 0);
                         this.lastMoveBeforeLock = 'rotate';
-                        
-                        // [FIXED] Infinity Rule: Check maxLockResets
+                        // Infinity Rule
                         if (this.isTouchingGround) { 
                             if (this.lockResetCount < this.maxLockResets) {
                                 this.lockDelayTimer = 0;
@@ -492,7 +501,7 @@
                     this.currentX += dx;
                     this.lastMoveBeforeLock = 'move';
                     
-                    // [FIXED] Infinity Rule: Check maxLockResets
+                    // Infinity Rule
                     if (this.isTouchingGround) { 
                         if (this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
@@ -549,7 +558,6 @@
                 const linesCleared = cleared.length;
                 const isTSpin = this.checkTSpin();
                 const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-                
                 if (linesCleared > 0) {
                     if (isTSpin || linesCleared === 4) {
                         this.b2bCounter++;
@@ -733,7 +741,7 @@
                 Object.assign(this, s);
                 this.b2bCounter = s.b2b || 0;
                 this.comboCounter = s.combo || -1;
-                this.updateStats(); 
+                this.updateStats();
             }
         }
 
@@ -751,7 +759,21 @@
             };
         }
 
-        // --- NEW MOVEMENT CONTROL ---
+        // --- NEW CONTROL BINDING LOGIC ---
+        document.querySelectorAll('.control-input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.value = 'Press key...';
+            });
+            input.addEventListener('keydown', (e) => {
+                e.preventDefault();
+                let key = e.key;
+                if(key === ' ') key = ' ';
+                input.value = key;
+                input.blur();
+            });
+        });
+
+        // --- MOVEMENT CONTROL ---
         const keysHeld = {};
         const moveState = {
             dir: 0,
@@ -759,16 +781,21 @@
             arrTimer: 0,
             isSoftDropping: false
         };
-        window.addEventListener('keydown', function(e) {
-            if(["ArrowUp", "ArrowDown", " "].indexOf(e.key) > -1) e.preventDefault();
-        }, false);
         
+        window.addEventListener('keydown', function(e) {
+            // Prevent default scrolling for arrows and space
+            if(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].indexOf(e.key) > -1) {
+                // Only prevent default if we aren't in a text input (like chat)
+                if(e.target.tagName !== 'INPUT') e.preventDefault();
+            }
+        }, false);
+
         document.addEventListener('keydown', e => {
+            // Prevent game inputs if user is typing in chat or changing controls
+            if(e.target.tagName === 'INPUT') return;
             if(!gameRunning || !gameState1 || e.repeat) return;
 
             const binds = getKeyBindings();
-            if(Object.values(binds).includes(e.key)) e.preventDefault();
-            
             keysHeld[e.key] = true;
 
             // Rotation & Hard Drop (Instant actions)
