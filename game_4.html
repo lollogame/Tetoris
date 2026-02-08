@@ -733,6 +733,14 @@
                 
                 this.initQueue();
             }
+
+            resetInputState() {
+        // Reset input-related timers when spawning new piece
+        this.dasTimer = 0;
+        this.dasDirection = null;
+        this.arrTimer = 0;
+        this.dcdTimer = 0;  // Reset DCD timer on spawn
+    }
             
             initQueue() {
                 for (let i = 0; i < 6; i++) {
@@ -767,41 +775,23 @@
             }
             
             spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(this.getNextPiece());
-                this.currentPiece = pieceType;
-                this.currentRotation = 0;
-                this.currentX = this.getSpawnColumn(pieceType);
-                this.currentY = 0;
-                this.canHold = true;
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                this.hardDropCooldown = 0;
-                
-                // IRS (Initial Rotation System) & IHS (Initial Hold System)
-                // This checks if keys are held during spawn and applies them immediately
-                if (this.playerId === 1) { // Only for local player
-                    // IHS
-                    if (keysHeld[keyBindings.hold]) {
-                        this.holdCurrentPiece();
-                        return true; // Stop here as holdCurrentPiece calls spawnPiece again
-                    }
-
-                    // IRS
-                    if (keysHeld[keyBindings.rotateCW]) {
-                        this.rotate('cw');
-                    } else if (keysHeld[keyBindings.rotateCCW]) {
-                        this.rotate('ccw');
-                    } else if (keysHeld[keyBindings.rotate180]) {
-                        this.rotate('180');
-                    }
-                }
-
-                // Allow piece to spawn even if overlapping - player can move/rotate it
-                // Only game over if piece locks while overlapping
-                return true;
-            }
+    const pieceType = this.queue.shift();
+    this.queue.push(this.getNextPiece());
+    this.currentPiece = pieceType;
+    this.currentRotation = 0;
+    this.currentX = this.getSpawnColumn(pieceType);
+    this.currentY = 0;
+    this.canHold = true;
+    this.lockDelayTimer = 0;
+    this.lockResetCount = 0;
+    this.isTouchingGround = false;
+    this.hardDropCooldown = 0;
+    
+    // Reset input state for immediate responsiveness
+    this.resetInputState();
+    
+    return true;
+}
             
             isValidPosition(x, y, rotation) {
                 const shape = SHAPES[this.currentPiece].shape[rotation];
@@ -819,48 +809,56 @@
             }
             
             rotate(direction) {
-                const oldRotation = this.currentRotation;
-                let newRotation;
-                
-                if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
-                else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
-                else if (direction === '180') newRotation = (oldRotation + 2) % 4;
-                
-                const kickTable = ['I'].includes(this.currentPiece) ?
-                                   KICK_TABLE.I : 
-                                   this.currentPiece === 'O' ?
-                                   KICK_TABLE.O : KICK_TABLE.JLSTZ;
-                const rotations = ['0', 'R', '2', 'L'];
-                const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
-                const kicks = kickTable[kickKey] || [[0, 0]];
-                
-                for (const [dx, dy] of kicks) {
-                    if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newRotation)) {
-                        this.currentX += dx;
-                        this.currentY -= dy;
-                        this.currentRotation = newRotation;
-                        // Don't apply DCD for rotation - only for hard drop
-                        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                            this.lockDelayTimer = 0;
-                            this.lockResetCount++;
-                        }
-                        return true;
-                    }
-                }
-                return false;
+    // Check if DCD is blocking rotation (only block for a few frames after hard drop)
+    if (this.dcdTimer > 0) {
+        // Allow rotation anyway - DCD should only affect hard drops, not rotations
+        // Or implement a shorter delay for rotations if needed
+        // For now, we'll just continue
+    }
+    
+    const oldRotation = this.currentRotation;
+    let newRotation;
+    
+    if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
+    else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
+    else if (direction === '180') newRotation = (oldRotation + 2) % 4;
+    
+    const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
+                       this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+    const rotations = ['0', 'R', '2', 'L'];
+    const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
+    const kicks = kickTable[kickKey] || [[0, 0]];
+    
+    for (const [dx, dy] of kicks) {
+        if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newRotation)) {
+            this.currentX += dx;
+            this.currentY -= dy;
+            this.currentRotation = newRotation;
+            
+            // Reset lock delay when rotating on ground (this is standard Tetris behavior)
+            if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+                this.lockDelayTimer = 0;
+                this.lockResetCount++;
             }
             
+            // Don't reset DCD timer for rotations
+            return true;
+        }
+    }
+    return false;
+}
+            
             move(dx) {
-                if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
-                    this.currentX += dx;
-                    if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
-                        this.lockDelayTimer = 0;
-                        this.lockResetCount++;
-                    }
-                    return true;
-                }
-                return false;
-            }
+    if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
+        this.currentX += dx;
+        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+            this.lockDelayTimer = 0;
+            this.lockResetCount++;
+        }
+        return true;
+    }
+    return false;
+}
             
             softDrop() {
                 const sdf = document.getElementById('sdf').value;
@@ -881,53 +879,60 @@
                 return false;
             }
             
-            hardDrop() {
-                const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                if (preventMissdrop && this.hardDropCooldown > 0) return true;
-                
-                while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                    this.currentY++;
-                }
-                return this.lockPiece();
-                // Return lock result (false = game over)
-            }
+           hardDrop() {
+    const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+    if (preventMissdrop && this.hardDropCooldown > 0) return true;
+    
+    while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+        this.currentY++;
+    }
+    
+    // Only set DCD timer for hard drops
+    this.dcdTimer = parseInt(document.getElementById('dcd').value);
+    return this.lockPiece(); // Return lock result (false = game over)
+}
+
             
             lockPiece() {
-                // Store piece info BEFORE locking for spin detection
-                const pieceType = this.currentPiece;
-                const pieceX = this.currentX;
-                const pieceY = this.currentY;
-                const pieceRotation = this.currentRotation;
+    // Store piece info BEFORE locking for spin detection
+    const pieceType = this.currentPiece;
+    const pieceX = this.currentX;
+    const pieceY = this.currentY;
+    const pieceRotation = this.currentRotation;
+    
+    const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+    
+    // Check if piece is overlapping blocks when trying to lock
+    for (let row = 0; row < shape.length; row++) {
+        for (let col = 0; col < shape[row].length; col++) {
+            if (shape[row][col]) {
+                const boardY = this.currentY + row;
+                const boardX = this.currentX + col;
                 
-                const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
-                // Check if piece is overlapping blocks when trying to lock
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col]) {
-                            const boardY = this.currentY + row;
-                            const boardX = this.currentX + col;
-                            
-                            // Game over if piece locks while overlapping existing blocks
-                            if (boardY >= 0 && this.board[boardY][boardX]) {
-                                return false; // Signal game over
-                            }
-                            
-                            if (boardY >= 0) {
-                                this.board[boardY][boardX] = this.currentPiece;
-                            }
-                        }
-                    }
+                // Game over if piece locks while overlapping existing blocks
+                if (boardY >= 0 && this.board[boardY][boardX]) {
+                    return false; // Signal game over
                 }
                 
-                this.piecesPlaced++;
-                this.dcdTimer = parseInt(document.getElementById('dcd').value);
-                this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
-                this.isTouchingGround = false;
-                // Pass the piece info to clearLines for spin detection
-                this.clearLines(pieceType, pieceX, pieceY, pieceRotation);
-                return true; // Lock successful
+                if (boardY >= 0) {
+                    this.board[boardY][boardX] = this.currentPiece;
+                }
             }
+        }
+    }
+    
+    this.piecesPlaced++;
+    // REMOVE DCD timer reset here - only set it for hard drops
+    // this.dcdTimer = parseInt(document.getElementById('dcd').value);
+    
+    this.lockDelayTimer = 0;
+    this.lockResetCount = 0;
+    this.isTouchingGround = false;
+    
+    // Pass the piece info to clearLines for spin detection
+    this.clearLines(pieceType, pieceX, pieceY, pieceRotation);
+    return true; // Lock successful
+}
             
             clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation) {
                 const clearedRows = [];
@@ -1548,102 +1553,130 @@
         }
         
         // Game loop
-        let lastTime = 0;
-        let lastStateSendTime = 0;
-        const STATE_SEND_INTERVAL = 50; // Send state every 50ms
+let lastTime = 0;
+let lastStateSendTime = 0;
+const STATE_SEND_INTERVAL = 50; // Send state every 50ms
+
+function gameLoop(timestamp = 0) {
+    if (!gameRunning) return;
+    
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+    
+    // Update Player 1
+    if (gameState1) {
+        // Update cooldowns
+        if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
         
-        function gameLoop(timestamp = 0) {
-            if (!gameRunning) return;
-            const deltaTime = timestamp - lastTime;
-            lastTime = timestamp;
-            
-            // Update Player 1
-            if (gameState1) {
-                if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
-                const wasTouching = gameState1.isTouchingGround;
-                gameState1.isTouchingGround = !gameState1.isValidPosition(
-                    gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
-                );
-                if (gameState1.isTouchingGround && !wasTouching) {
-                    gameState1.lockDelayTimer = 0;
-                }
-                
-                gameState1.lastGravityTime += deltaTime;
-                if (gameState1.isTouchingGround) {
-                    gameState1.lockDelayTimer += deltaTime;
-                    if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
-                        gameState1.lockResetCount >= gameState1.maxLockResets) {
-                        
-                        const lockSuccess = gameState1.lockPiece();
-                        if (!lockSuccess) {
-                            // Game over - piece locked while overlapping
-                            addChatMessage('You lost! Click Restart to play again.', 'System');
-                            document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
-                            gameRunning = false;
-                            
-                            // Notify opponent that you lost
-                            if (conn && conn.open) {
-                                conn.send({ type: 'gameOver' });
-                            }
-                            return;
-                        }
-                        
-                        const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                        if (preventMissdrop) {
-                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
-                        }
-                        
-                        gameState1.spawnPiece();
-                        gameState1.lastGravityTime = 0;
-                    }
-                } else {
-                    if (gameState1.lastGravityTime >= gameState1.gravity) {
-                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
-                                                       gameState1.currentRotation)) {
-                            gameState1.currentY++;
-                        }
-                        gameState1.lastGravityTime = 0;
-                    }
-                }
-                
-                if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
-                // Process DAS/ARR for held movement keys
-                const dasDelay = parseInt(document.getElementById('das').value);
-                const arrDelay = parseInt(document.getElementById('arr').value);
-                
-                for (const key in dasTimers) {
-                    const timer = dasTimers[key];
-                    timer.das += deltaTime;
-                    
-                    if (timer.das >= dasDelay) {
-                        timer.arr += deltaTime;
-                        if (arrDelay === 0 || timer.arr >= arrDelay) {
-                            if (timer.direction) {
-                                gameState1.move(timer.direction);
-                            }
-                            timer.arr = 0;
-                        }
-                    }
-                }
-                
-                gameState1.draw();
-                // Send game state to opponent periodically
-                if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
-                    conn.send({
-                        type: 'gameState',
-                        state: gameState1.getState()
-                    });
-                    lastStateSendTime = timestamp;
-                }
-            }
-            
-            // Draw opponent's board (received via network)
-            if (gameState2) {
-                gameState2.draw();
-            }
-            
-            requestAnimationFrame(gameLoop);
+        // Decrement DCD timer (now only active after hard drops)
+        if (gameState1.dcdTimer > 0) {
+            gameState1.dcdTimer = Math.max(0, gameState1.dcdTimer - deltaTime);
         }
+        
+        // Check if piece is touching ground
+        const wasTouching = gameState1.isTouchingGround;
+        gameState1.isTouchingGround = !gameState1.isValidPosition(
+            gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
+        );
+        
+        // Start lock delay when piece first touches ground
+        if (gameState1.isTouchingGround && !wasTouching) {
+            gameState1.lockDelayTimer = 0;
+        }
+        
+        // Apply gravity
+        gameState1.lastGravityTime += deltaTime;
+        
+        if (gameState1.isTouchingGround) {
+            // Piece is on ground, increment lock delay timer
+            gameState1.lockDelayTimer += deltaTime;
+            
+            // Check if piece should lock
+            if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
+                gameState1.lockResetCount >= gameState1.maxLockResets) {
+                
+                const lockSuccess = gameState1.lockPiece();
+                
+                if (!lockSuccess) {
+                    // Game over - piece locked while overlapping
+                    addChatMessage('You lost! Click Restart to play again.', 'System');
+                    document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
+                    gameRunning = false;
+                    
+                    // Notify opponent that you lost
+                    if (conn && conn.open) {
+                        conn.send({ type: 'gameOver' });
+                    }
+                    return;
+                }
+                
+                const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+                if (preventMissdrop) {
+                    gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
+                }
+                
+                // Spawn new piece
+                gameState1.spawnPiece();
+                gameState1.lastGravityTime = 0;
+            }
+        } else {
+            // Piece is falling normally
+            if (gameState1.lastGravityTime >= gameState1.gravity) {
+                if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
+                                               gameState1.currentRotation)) {
+                    gameState1.currentY++;
+                }
+                gameState1.lastGravityTime = 0;
+            }
+        }
+        
+        // Process DAS/ARR for held movement keys
+        const dasDelay = parseInt(document.getElementById('das').value);
+        const arrDelay = parseInt(document.getElementById('arr').value);
+        
+        // Process each movement key with DAS/ARR
+        for (const key in dasTimers) {
+            const timer = dasTimers[key];
+            timer.das += deltaTime;
+            
+            // Check DAS delay
+            if (timer.das >= dasDelay) {
+                timer.arr += deltaTime;
+                
+                // Check ARR delay
+                if (arrDelay === 0 || timer.arr >= arrDelay) {
+                    if (timer.direction) {
+                        // Only move if DCD timer is not active
+                        if (gameState1.dcdTimer <= 0) {
+                            gameState1.move(timer.direction);
+                        }
+                    }
+                    timer.arr = 0;
+                }
+            }
+        }
+        
+        // Draw current state
+        gameState1.draw();
+        
+        // Send game state to opponent periodically
+        if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
+            conn.send({
+                type: 'gameState',
+                state: gameState1.getState()
+            });
+            lastStateSendTime = timestamp;
+        }
+    }
+    
+    // Draw opponent's board (received via network)
+    if (gameState2) {
+        gameState2.draw();
+    }
+    
+    // Continue the game loop
+    requestAnimationFrame(gameLoop);
+}
         
         // Input handling with DAS/ARR
         const dasTimers = {};
