@@ -3,8 +3,6 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 32;
 const PREVIEW_BLOCK_SIZE = 16;
-const FPS = 60;
-const FRAME_TIME = 1000 / FPS; // ~16.67ms per frame
 
 // Seeded Random Number Generator for synchronized piece generation
 class SeededRandom {
@@ -152,7 +150,7 @@ class GameState {
         this.isTouchingGround = false;
         this.maxLockResets = 15;
         this.lockResetCount = 0;
-        this.dcdTimer = 0;
+        this.hardDropLockout = 0; // Only blocks hard drop, not other inputs
         
         this.piecesPlaced = 0;
         this.attacksSent = 0;
@@ -160,7 +158,7 @@ class GameState {
         this.comboCounter = -1;
         this.lastClearWasB2B = false;
         
-        // Techmino-style handling system (frame-based)
+        // Movement handling (millisecond-based)
         this.dasLeft = 0;
         this.dasRight = 0;
         this.arrLeft = 0;
@@ -169,9 +167,9 @@ class GameState {
         this.sdArr = 0;
         
         // Initial action states
-        this.pendingIRS = null; // null, 'cw', 'ccw', '180'
+        this.pendingIRS = null;
         this.pendingIHS = false;
-        this.pendingIMS = 0; // -1, 0, 1
+        this.pendingIMS = 0;
         
         this.pendingGarbage = [];
         
@@ -319,7 +317,8 @@ class GameState {
     }
     
     hardDrop() {
-        if (this.dcdTimer > 0) return true;
+        // Only block hard drop with DCD, not other inputs
+        if (this.hardDropLockout > 0) return true;
         
         while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
             this.currentY++;
@@ -353,7 +352,11 @@ class GameState {
         }
         
         this.piecesPlaced++;
-        this.dcdTimer = parseInt(document.getElementById('dcd').value);
+        
+        // Set hard drop lockout (DCD) - only affects hard drop
+        const dcdValue = parseInt(document.getElementById('dcd').value);
+        this.hardDropLockout = dcdValue;
+        
         this.lockDelayTimer = 0;
         this.lockResetCount = 0;
         this.isTouchingGround = false;
@@ -390,8 +393,8 @@ class GameState {
             if (isB2BMove) {
                 if (this.lastClearWasB2B) {
                     this.b2bCounter++;
-                    const b2bBonus = Math.floor(this.b2bCounter / 5);
-                    attack += b2bBonus;
+                    // B2B bonus: +1 for each B2B clear
+                    attack += 1;
                 } else {
                     this.b2bCounter = 1;
                 }
@@ -402,8 +405,15 @@ class GameState {
             }
             
             this.comboCounter++;
-            if (this.comboCounter >= 4) attack += 1;
+            // Combo table: starts at combo 1
+            if (this.comboCounter >= 1) {
+                const comboTable = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5];
+                const comboBonus = this.comboCounter < comboTable.length ? 
+                    comboTable[this.comboCounter] : 5;
+                attack += comboBonus;
+            }
             
+            // Garbage canceling
             if (this.pendingGarbage.length > 0) {
                 let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
                 
@@ -430,8 +440,11 @@ class GameState {
             }
             
             this.attacksSent += attack;
+            
+            // Send attack if > 0
             if (attack > 0) {
                 this.sendAttack(attack);
+                console.log(`Sending ${attack} lines of attack`);
             }
         } else {
             this.comboCounter = -1;
@@ -473,17 +486,23 @@ class GameState {
         let attack = 0;
         
         if (isAllClear) {
-            attack = lines === 4 ? 10 : 8;
+            // Perfect clear bonus
+            attack = lines === 1 ? 10 : lines === 2 ? 12 : lines === 3 ? 14 : 18;
         } else if (pieceType === 'T' && isSpin) {
-            if (lines === 1) attack = 2;
-            else if (lines === 2) attack = 4;
-            else if (lines === 3) attack = 6;
+            // T-Spin attack values
+            if (lines === 1) attack = 2;      // T-Spin Single: 2 lines
+            else if (lines === 2) attack = 4; // T-Spin Double: 4 lines
+            else if (lines === 3) attack = 6; // T-Spin Triple: 6 lines
+            else attack = 0; // T-Spin Mini (0 lines cleared)
         } else if (isSpin) {
-            attack = lines;
+            // Other spin bonuses
+            attack = lines * 2;
         } else {
-            if (lines === 4) attack = 4;
-            else if (lines === 3) attack = 2;
-            else if (lines === 2) attack = 1;
+            // Regular line clears
+            if (lines === 1) attack = 0;      // Single: 0 lines
+            else if (lines === 2) attack = 1; // Double: 1 line
+            else if (lines === 3) attack = 2; // Triple: 2 lines
+            else if (lines === 4) attack = 4; // Quad: 4 lines
         }
         
         return attack;
@@ -491,10 +510,10 @@ class GameState {
     
     sendAttack(lines) {
         if (conn && conn.open && lines > 0) {
-            const cappedLines = Math.min(lines, 10);
+            // Don't cap - send full attack
             conn.send({
                 type: 'attack',
-                lines: cappedLines
+                lines: lines
             });
         }
     }
@@ -504,6 +523,7 @@ class GameState {
             lines: lines,
             hole: this.rng.nextInt(COLS)
         });
+        console.log(`Received ${lines} lines of garbage, total pending: ${this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0)}`);
     }
     
     applyGarbage() {
@@ -527,7 +547,7 @@ class GameState {
         let linesAdded = 0;
         for (const garbage of this.pendingGarbage) {
             const useAlignedHole = garbage.lines >= 2;
-            const hole = useAlignedHole ? garbage.hole : this.rng.nextInt(COLS);
+            const hole = useAlignedHole && alignedHole !== null ? alignedHole : this.rng.nextInt(COLS);
             
             for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
                 const garbageLine = Array(COLS).fill('G');
@@ -965,12 +985,12 @@ function startGame() {
     gameState2.spawnPiece();
     
     addChatMessage('Game started! Good luck!');
-    addChatMessage('Movement enhanced with Techmino-style DAS/ARR system!', 'System');
+    addChatMessage('Enhanced handling enabled!', 'System');
     
     gameLoop();
 }
 
-// Game loop with frame-based timing
+// Game loop
 let lastTime = 0;
 let lastStateSendTime = 0;
 const STATE_SEND_INTERVAL = 50;
@@ -983,8 +1003,8 @@ function gameLoop(timestamp = 0) {
     
     // Update Player 1
     if (gameState1) {
-        // DCD countdown
-        if (gameState1.dcdTimer > 0) gameState1.dcdTimer--;
+        // Countdown hard drop lockout (DCD)
+        if (gameState1.hardDropLockout > 0) gameState1.hardDropLockout -= deltaTime;
         
         const wasTouching = gameState1.isTouchingGround;
         gameState1.isTouchingGround = !gameState1.isValidPosition(
@@ -1047,7 +1067,7 @@ function gameLoop(timestamp = 0) {
     requestAnimationFrame(gameLoop);
 }
 
-// Techmino-style input handling
+// Input handling
 const keysHeld = {};
 
 document.addEventListener('keydown', (e) => {
@@ -1130,21 +1150,23 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-// Frame-based DAS/ARR processing
+// Millisecond-based DAS/ARR processing
 setInterval(() => {
     if (!gameRunning || !gameState1) return;
     
-    const dasFrames = parseInt(document.getElementById('das').value);
-    const arrFrames = parseInt(document.getElementById('arr').value);
-    const sdDasFrames = parseInt(document.getElementById('sdDas').value);
-    const sdArrFrames = parseInt(document.getElementById('sdArr').value);
+    const dasDelay = parseInt(document.getElementById('das').value);
+    const arrDelay = parseInt(document.getElementById('arr').value);
+    const sdDasDelay = parseInt(document.getElementById('sdDas').value);
+    const sdArrDelay = parseInt(document.getElementById('sdArr').value);
+    
+    const intervalMs = 16; // ~16ms per tick
     
     // Horizontal movement DAS/ARR
     if (keysHeld[keyBindings.left]) {
-        gameState1.dasLeft++;
-        if (gameState1.dasLeft >= dasFrames) {
-            gameState1.arrLeft++;
-            if (arrFrames === 0 || gameState1.arrLeft >= arrFrames) {
+        gameState1.dasLeft += intervalMs;
+        if (gameState1.dasLeft >= dasDelay) {
+            gameState1.arrLeft += intervalMs;
+            if (arrDelay === 0 || gameState1.arrLeft >= arrDelay) {
                 gameState1.move(-1);
                 gameState1.arrLeft = 0;
             }
@@ -1152,10 +1174,10 @@ setInterval(() => {
     }
     
     if (keysHeld[keyBindings.right]) {
-        gameState1.dasRight++;
-        if (gameState1.dasRight >= dasFrames) {
-            gameState1.arrRight++;
-            if (arrFrames === 0 || gameState1.arrRight >= arrFrames) {
+        gameState1.dasRight += intervalMs;
+        if (gameState1.dasRight >= dasDelay) {
+            gameState1.arrRight += intervalMs;
+            if (arrDelay === 0 || gameState1.arrRight >= arrDelay) {
                 gameState1.move(1);
                 gameState1.arrRight = 0;
             }
@@ -1164,18 +1186,18 @@ setInterval(() => {
     
     // Soft drop DAS/ARR
     if (keysHeld[keyBindings.softDrop]) {
-        gameState1.sdDas++;
-        if (gameState1.sdDas >= sdDasFrames) {
-            gameState1.sdArr++;
-            if (sdArrFrames === 0 || gameState1.sdArr >= sdArrFrames) {
+        gameState1.sdDas += intervalMs;
+        if (gameState1.sdDas >= sdDasDelay) {
+            gameState1.sdArr += intervalMs;
+            if (sdArrDelay === 0 || gameState1.sdArr >= sdArrDelay) {
                 gameState1.softDrop();
                 gameState1.sdArr = 0;
             }
         }
     }
-}, FRAME_TIME);
+}, 16);
 
 // Initialize
-addChatMessage('Welcome to Tetris Online Battle with Techmino-Style Movement!');
-addChatMessage('Features: Frame-based DAS/ARR, Initial Actions (IRS/IHS/IMS), DAS Cut');
+addChatMessage('Welcome to Tetris Online Battle!');
+addChatMessage('Enhanced with improved handling and proper attack system!');
 addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
