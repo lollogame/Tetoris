@@ -556,6 +556,26 @@
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         
+        // Seeded Random Number Generator for synchronized piece generation
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                // Linear Congruential Generator
+                this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
+                return this.seed / 0x7fffffff;
+            }
+            
+            nextInt(max) {
+                return Math.floor(this.next() * max);
+            }
+        }
+        
+        // Game seed - will be shared between players
+        let gameSeed = null;
+        
         // PeerJS connection
         let peer = null;
         let conn = null;
@@ -654,7 +674,7 @@
         
         // Game State
         class GameState {
-            constructor(canvasId, holdCanvasId, queueCanvasId, playerId) {
+            constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
                 this.canvas = document.getElementById(canvasId);
                 this.ctx = this.canvas.getContext('2d');
                 this.holdCanvas = document.getElementById(holdCanvasId);
@@ -662,6 +682,9 @@
                 this.queueCanvas = document.getElementById(queueCanvasId);
                 this.queueCtx = this.queueCanvas.getContext('2d');
                 this.playerId = playerId;
+                
+                // Initialize seeded random generator
+                this.rng = new SeededRandom(seed);
                 
                 this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
                 this.currentPiece = null;
@@ -712,8 +735,9 @@
             getNextPiece() {
                 if (this.bag.length === 0) {
                     this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+                    // Fisher-Yates shuffle with seeded random
                     for (let i = this.bag.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
+                        const j = this.rng.nextInt(i + 1);
                         [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
                     }
                 }
@@ -747,9 +771,8 @@
                 this.isTouchingGround = false;
                 this.hardDropCooldown = 0;
                 
-                if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
-                    return false;
-                }
+                // Allow piece to spawn even if overlapping - player can move/rotate it
+                // Only game over if piece locks while overlapping
                 return true;
             }
             
@@ -832,12 +855,12 @@
             
             hardDrop() {
                 const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                if (preventMissdrop && this.hardDropCooldown > 0) return;
+                if (preventMissdrop && this.hardDropCooldown > 0) return true;
                 
                 while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                     this.currentY++;
                 }
-                this.lockPiece();
+                return this.lockPiece(); // Return lock result (false = game over)
             }
             
             lockPiece() {
@@ -848,11 +871,19 @@
                 const pieceRotation = this.currentRotation;
                 
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+                
+                // Check if piece is overlapping blocks when trying to lock
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
                         if (shape[row][col]) {
                             const boardY = this.currentY + row;
                             const boardX = this.currentX + col;
+                            
+                            // Game over if piece locks while overlapping existing blocks
+                            if (boardY >= 0 && this.board[boardY][boardX]) {
+                                return false; // Signal game over
+                            }
+                            
                             if (boardY >= 0) {
                                 this.board[boardY][boardX] = this.currentPiece;
                             }
@@ -868,6 +899,7 @@
                 
                 // Pass the piece info to clearLines for spin detection
                 this.clearLines(pieceType, pieceX, pieceY, pieceRotation);
+                return true; // Lock successful
             }
             
             clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation) {
@@ -1021,10 +1053,10 @@
             }
             
             receiveAttack(lines) {
-                // Add to pending garbage queue
+                // Add to pending garbage queue with seeded random hole
                 this.pendingGarbage.push({
                     lines: lines,
-                    hole: Math.floor(Math.random() * COLS)
+                    hole: this.rng.nextInt(COLS)
                 });
             }
             
@@ -1053,7 +1085,7 @@
                 let linesAdded = 0;
                 for (const garbage of this.pendingGarbage) {
                     const useAlignedHole = garbage.lines >= 2;
-                    const hole = useAlignedHole ? garbage.hole : Math.floor(Math.random() * COLS);
+                    const hole = useAlignedHole ? garbage.hole : this.rng.nextInt(COLS);
                     
                     for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
                         const garbageLine = Array(COLS).fill('G');
@@ -1351,7 +1383,18 @@
                 setupConnection();
                 addChatMessage('Opponent connected!');
                 document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
-                setTimeout(() => startGame(), 1000);
+                
+                // Host generates seed and sends to client
+                gameSeed = Math.floor(Math.random() * 1000000000);
+                addChatMessage(`Generated game seed: ${gameSeed}`, 'System');
+                
+                setTimeout(() => {
+                    conn.send({ 
+                        type: 'start',
+                        seed: gameSeed 
+                    });
+                    startGame();
+                }, 1000);
             });
             
             peer.on('error', (err) => {
@@ -1369,6 +1412,11 @@
                         gameState1.receiveAttack(data.lines);
                     }
                 } else if (data.type === 'start') {
+                    // Client receives seed from host
+                    if (data.seed) {
+                        gameSeed = data.seed;
+                        addChatMessage(`Received game seed: ${gameSeed}`, 'System');
+                    }
                     startGame();
                 } else if (data.type === 'gameState') {
                     // Update opponent's board display
@@ -1376,6 +1424,10 @@
                         gameState2.setState(data.state);
                     }
                 } else if (data.type === 'restart') {
+                    // Receive new seed for restart
+                    if (data.seed) {
+                        gameSeed = data.seed;
+                    }
                     restartGame();
                 } else if (data.type === 'gameOver') {
                     // Opponent lost, you win!
@@ -1426,12 +1478,10 @@
                 conn.on('open', () => {
                     setupConnection();
                     addChatMessage('Connected to opponent!');
-                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                    document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
                     document.getElementById('joinGameBtn').disabled = true;
                     
-                    // Send start signal
-                    conn.send({ type: 'start' });
-                    setTimeout(() => startGame(), 1000);
+                    // Don't send start - wait for host to send seed and start signal
                 });
                 
                 conn.on('error', (err) => {
@@ -1441,8 +1491,15 @@
         });
         
         document.getElementById('restartBtn').addEventListener('click', () => {
+            // Generate new seed for restart
+            gameSeed = Math.floor(Math.random() * 1000000000);
+            addChatMessage(`New game seed: ${gameSeed}`, 'System');
+            
             if (conn && conn.open) {
-                conn.send({ type: 'restart' });
+                conn.send({ 
+                    type: 'restart',
+                    seed: gameSeed 
+                });
             }
             restartGame();
         });
@@ -1463,8 +1520,14 @@
             document.getElementById('restartBtn').classList.remove('hidden');
             document.getElementById('gameStatus').textContent = 'Game in progress!';
             
-            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1);
-            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2);
+            // Use shared seed for both players
+            if (!gameSeed) {
+                gameSeed = Math.floor(Math.random() * 1000000000);
+                addChatMessage(`Generated game seed: ${gameSeed}`, 'System');
+            }
+            
+            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, gameSeed);
+            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, gameSeed);
             
             // Sync start time for both boards
             const startTime = Date.now();
@@ -1510,14 +1573,11 @@
                     
                     if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
                         gameState1.lockResetCount >= gameState1.maxLockResets) {
-                        gameState1.lockPiece();
                         
-                        const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-                        if (preventMissdrop) {
-                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
-                        }
+                        const lockSuccess = gameState1.lockPiece();
                         
-                        if (!gameState1.spawnPiece()) {
+                        if (!lockSuccess) {
+                            // Game over - piece locked while overlapping
                             addChatMessage('You lost! Click Restart to play again.', 'System');
                             document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                             gameRunning = false;
@@ -1528,6 +1588,13 @@
                             }
                             return;
                         }
+                        
+                        const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+                        if (preventMissdrop) {
+                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
+                        }
+                        
+                        gameState1.spawnPiece();
                         gameState1.lastGravityTime = 0;
                     }
                 } else {
@@ -1606,8 +1673,10 @@
                 gameState1.softDrop();
             } else if (e.key === keyBindings.hardDrop) {
                 e.preventDefault();
-                gameState1.hardDrop();
-                if (!gameState1.spawnPiece()) {
+                const success = gameState1.hardDrop();
+                
+                if (!success) {
+                    // Game over from hard drop
                     addChatMessage('You lost! Click Restart to play again.', 'System');
                     document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                     gameRunning = false;
@@ -1617,6 +1686,8 @@
                         conn.send({ type: 'gameOver' });
                     }
                 }
+                
+                gameState1.spawnPiece();
             } else if (e.key === keyBindings.rotateCW) {
                 e.preventDefault();
                 gameState1.rotate('cw');
