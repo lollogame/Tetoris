@@ -7,7 +7,6 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
-        
         :root {
             --bg-dark: #0a0e27;
             --bg-grid: #151b3d;
@@ -556,6 +555,21 @@
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         
+        // Key bindings - Moved to top for global access
+        const keyBindings = {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            softDrop: 'ArrowDown',
+            hardDrop: ' ',
+            rotateCW: 'ArrowUp',
+            rotateCCW: 'z',
+            rotate180: 'x',
+            hold: 'c'
+        };
+
+        // Key states - Moved to top for global access
+        const keysHeld = {};
+
         // Seeded Random Number Generator for synchronized piece generation
         class SeededRandom {
             constructor(seed) {
@@ -575,7 +589,6 @@
         
         // Game seed - will be shared between players
         let gameSeed = null;
-        
         // PeerJS connection
         let peer = null;
         let conn = null;
@@ -609,7 +622,7 @@
                 '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
             }
         };
-        
+
         // Tetromino shapes and colors
         const SHAPES = {
             'I': {
@@ -671,7 +684,7 @@
                 color: '#f0a000'
             }
         };
-        
+
         // Game State
         class GameState {
             constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
@@ -682,10 +695,8 @@
                 this.queueCanvas = document.getElementById(queueCanvasId);
                 this.queueCtx = this.queueCanvas.getContext('2d');
                 this.playerId = playerId;
-                
                 // Initialize seeded random generator
                 this.rng = new SeededRandom(seed);
-                
                 this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
                 this.currentPiece = null;
                 this.currentX = 0;
@@ -698,7 +709,6 @@
                 this.gravity = 1000;
                 this.lastGravityTime = 0;
                 this.gameStartTime = Date.now();
-                
                 this.lockDelay = 500;
                 this.lockDelayTimer = 0;
                 this.isTouchingGround = false;
@@ -712,13 +722,11 @@
                 this.b2bCounter = 0;
                 this.comboCounter = -1;
                 this.lastClearWasB2B = false;
-                
                 this.dasTimer = 0;
                 this.dasDirection = null;
                 this.arrTimer = 0;
                 this.dcdTimer = 0;
                 this.softDropActive = false;
-                
                 // Garbage queue system
                 this.pendingGarbage = [];
                 this.garbageCanceled = 0;
@@ -771,6 +779,25 @@
                 this.isTouchingGround = false;
                 this.hardDropCooldown = 0;
                 
+                // IRS (Initial Rotation System) & IHS (Initial Hold System)
+                // This checks if keys are held during spawn and applies them immediately
+                if (this.playerId === 1) { // Only for local player
+                    // IHS
+                    if (keysHeld[keyBindings.hold]) {
+                        this.holdCurrentPiece();
+                        return true; // Stop here as holdCurrentPiece calls spawnPiece again
+                    }
+
+                    // IRS
+                    if (keysHeld[keyBindings.rotateCW]) {
+                        this.rotate('cw');
+                    } else if (keysHeld[keyBindings.rotateCCW]) {
+                        this.rotate('ccw');
+                    } else if (keysHeld[keyBindings.rotate180]) {
+                        this.rotate('180');
+                    }
+                }
+
                 // Allow piece to spawn even if overlapping - player can move/rotate it
                 // Only game over if piece locks while overlapping
                 return true;
@@ -799,8 +826,10 @@
                 else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
                 else if (direction === '180') newRotation = (oldRotation + 2) % 4;
                 
-                const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
-                                   this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+                const kickTable = ['I'].includes(this.currentPiece) ?
+                                   KICK_TABLE.I : 
+                                   this.currentPiece === 'O' ?
+                                   KICK_TABLE.O : KICK_TABLE.JLSTZ;
                 const rotations = ['0', 'R', '2', 'L'];
                 const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
                 const kicks = kickTable[kickKey] || [[0, 0]];
@@ -836,7 +865,6 @@
             softDrop() {
                 const sdf = document.getElementById('sdf').value;
                 const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
-                
                 if (multiplier === Infinity) {
                     // Instant drop like hard drop but don't lock
                     while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
@@ -860,7 +888,8 @@
                 while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                     this.currentY++;
                 }
-                return this.lockPiece(); // Return lock result (false = game over)
+                return this.lockPiece();
+                // Return lock result (false = game over)
             }
             
             lockPiece() {
@@ -871,7 +900,6 @@
                 const pieceRotation = this.currentRotation;
                 
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
-                
                 // Check if piece is overlapping blocks when trying to lock
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
@@ -896,7 +924,6 @@
                 this.lockDelayTimer = 0;
                 this.lockResetCount = 0;
                 this.isTouchingGround = false;
-                
                 // Pass the piece info to clearLines for spin detection
                 this.clearLines(pieceType, pieceX, pieceY, pieceRotation);
                 return true; // Lock successful
@@ -904,7 +931,6 @@
             
             clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation) {
                 const clearedRows = [];
-                
                 // Find all filled rows
                 for (let row = 0; row < ROWS; row++) {
                     if (this.board[row].every(cell => cell !== 0)) {
@@ -913,7 +939,6 @@
                 }
                 
                 const linesCleared = clearedRows.length;
-                
                 if (linesCleared > 0) {
                     // Remove all cleared rows at once
                     for (let i = clearedRows.length - 1; i >= 0; i--) {
@@ -929,8 +954,7 @@
                     const isSpin = this.checkSpin(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation);
                     const isAllClear = this.board.every(row => row.every(cell => cell === 0));
                     let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPieceType);
-                    
-                    // B2B logic - FIXED!
+                    // B2B logic
                     const isB2BMove = linesCleared === 4 || isSpin;
                     if (isB2BMove) {
                         if (this.lastClearWasB2B) {
@@ -958,7 +982,6 @@
                     // Garbage canceling
                     if (this.pendingGarbage.length > 0) {
                         let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
-                        
                         if (attack >= totalPending) {
                             // Cancel all pending garbage and send remaining attack
                             attack -= totalPending;
@@ -990,7 +1013,6 @@
                     }
                 } else {
                     this.comboCounter = -1;
-                    
                     // Apply pending garbage when placing a piece without clearing
                     if (this.pendingGarbage.length > 0) {
                         this.applyGarbage();
@@ -1016,7 +1038,6 @@
                     [pieceX, pieceY + 2],
                     [pieceX + 2, pieceY + 2]
                 ];
-                
                 let filledCorners = 0;
                 for (const [x, y] of corners) {
                     if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
@@ -1029,12 +1050,11 @@
             
             calculateAttack(lines, isSpin, isAllClear, pieceType) {
                 let attack = 0;
-                
                 // FIXED ATTACK TABLE
                 if (isAllClear) {
                     attack = lines === 1 ? 10 : lines === 2 ? 12 : lines === 3 ? 14 : 18;
                 } else if (pieceType === 'T' && isSpin) {
-                    // T-Spin attack values - FIXED!
+                    // T-Spin attack values
                     if (lines === 1) attack = 2;      // T-Spin Single: 2 lines
                     else if (lines === 2) attack = 4; // T-Spin Double: 4 lines
                     else if (lines === 3) attack = 6; // T-Spin Triple: 6 lines
@@ -1042,7 +1062,7 @@
                     attack = lines * 2;
                 } else {
                     // Regular line clears
-                    if (lines === 1) attack = 0;      // Single: 0 lines
+                    if (lines === 1) attack = 0; // Single: 0 lines
                     else if (lines === 2) attack = 1; // Double: 1 line
                     else if (lines === 3) attack = 2; // Triple: 2 lines
                     else if (lines === 4) attack = 4; // Quad: 4 lines
@@ -1072,14 +1092,12 @@
             
             applyGarbage() {
                 if (this.pendingGarbage.length === 0) return;
-                
                 let totalLines = 0;
                 let alignedHole = null;
                 
                 // Group consecutive attacks
                 for (const garbage of this.pendingGarbage) {
                     totalLines += garbage.lines;
-                    
                     // For attacks of 2+ lines, align the hole
                     if (garbage.lines >= 2) {
                         alignedHole = garbage.hole;
@@ -1096,7 +1114,6 @@
                 for (const garbage of this.pendingGarbage) {
                     const useAlignedHole = garbage.lines >= 2;
                     const hole = useAlignedHole && alignedHole !== null ? alignedHole : this.rng.nextInt(COLS);
-                    
                     for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
                         const garbageLine = Array(COLS).fill('G');
                         garbageLine[hole] = 0;
@@ -1111,7 +1128,6 @@
             
             holdCurrentPiece() {
                 if (!this.canHold) return false;
-                
                 if (this.holdPiece === null) {
                     this.holdPiece = this.currentPiece;
                     this.spawnPiece();
@@ -1169,7 +1185,6 @@
                 this.attacksSent = state.attacksSent;
                 this.b2bCounter = state.b2bCounter;
                 this.comboCounter = state.comboCounter;
-                
                 // Update stats display
                 const elapsed = (Date.now() - this.gameStartTime) / 1000;
                 const pps = this.piecesPlaced / elapsed;
@@ -1262,7 +1277,6 @@
                     const color = SHAPES[this.holdPiece].color;
                     const offsetX = (this.holdCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
                     const offsetY = (this.holdCanvas.height - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
                     for (let row = 0; row < shape.length; row++) {
                         for (let col = 0; col < shape[row].length; col++) {
                             if (shape[row][col]) {
@@ -1282,14 +1296,12 @@
             drawQueue() {
                 this.queueCtx.fillStyle = '#0a0e27';
                 this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
-                
                 for (let i = 0; i < 6; i++) {
                     const pieceType = this.queue[i];
                     const shape = SHAPES[pieceType].shape[0];
                     const color = SHAPES[pieceType].color;
                     const offsetX = (this.queueCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
                     const offsetY = i * 80 + (80 - shape.length * PREVIEW_BLOCK_SIZE) / 2;
-                    
                     for (let row = 0; row < shape.length; row++) {
                         for (let col = 0; col < shape[row].length; col++) {
                             if (shape[row][col]) {
@@ -1311,19 +1323,7 @@
         let gameState1 = null;
         let gameState2 = null;
         let gameRunning = false;
-        
-        // Key bindings
-        const keyBindings = {
-            left: 'ArrowLeft',
-            right: 'ArrowRight',
-            softDrop: 'ArrowDown',
-            hardDrop: ' ',
-            rotateCW: 'ArrowUp',
-            rotateCCW: 'z',
-            rotate180: 'x',
-            hold: 'c'
-        };
-        
+
         // Setup key binding listeners
         Object.keys(keyBindings).forEach(action => {
             const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
@@ -1338,7 +1338,7 @@
                 document.addEventListener('keydown', listener);
             });
         });
-        
+
         // Chat functions
         function addChatMessage(message, sender = 'System') {
             const chatMessages = document.getElementById('chatMessages');
@@ -1361,13 +1361,13 @@
                 input.value = '';
             }
         });
-        
+
         document.getElementById('chatInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 document.getElementById('sendChatBtn').click();
             }
         });
-        
+
         // PeerJS connection functions
         function initializePeer() {
             // Using public PeerJS cloud server
@@ -1379,7 +1379,6 @@
                     ]
                 }
             });
-            
             peer.on('open', (id) => {
                 myPeerId = id;
                 document.getElementById('peerIdDisplay').textContent = id;
@@ -1387,7 +1386,6 @@
                 addChatMessage(`Your Peer ID: ${id}`);
                 addChatMessage('Share this ID with your opponent to let them join!');
             });
-            
             peer.on('connection', (connection) => {
                 conn = connection;
                 setupConnection();
@@ -1406,7 +1404,6 @@
                     startGame();
                 }, 1000);
             });
-            
             peer.on('error', (err) => {
                 console.error('PeerJS error:', err);
                 addChatMessage(`Connection error: ${err.type}`);
@@ -1446,7 +1443,6 @@
                     document.getElementById('gameStatus').textContent = 'You Win! 🏆';
                 }
             });
-            
             conn.on('close', () => {
                 addChatMessage('Opponent disconnected');
                 document.getElementById('gameStatus').textContent = 'Opponent disconnected';
@@ -1470,7 +1466,7 @@
                 document.getElementById('createGameBtn').disabled = true;
             }
         });
-        
+
         document.getElementById('joinGameBtn').addEventListener('click', () => {
             const opponentId = document.getElementById('opponentPeerId').value.trim();
             if (!opponentId) {
@@ -1513,10 +1509,9 @@
             }
             restartGame();
         });
-        
+
         function restartGame() {
             gameRunning = false;
-            
             // Reset and restart
             setTimeout(() => {
                 startGame();
@@ -1559,33 +1554,27 @@
         
         function gameLoop(timestamp = 0) {
             if (!gameRunning) return;
-            
             const deltaTime = timestamp - lastTime;
             lastTime = timestamp;
             
             // Update Player 1
             if (gameState1) {
                 if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
-                
                 const wasTouching = gameState1.isTouchingGround;
                 gameState1.isTouchingGround = !gameState1.isValidPosition(
                     gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
                 );
-                
                 if (gameState1.isTouchingGround && !wasTouching) {
                     gameState1.lockDelayTimer = 0;
                 }
                 
                 gameState1.lastGravityTime += deltaTime;
-                
                 if (gameState1.isTouchingGround) {
                     gameState1.lockDelayTimer += deltaTime;
-                    
                     if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
                         gameState1.lockResetCount >= gameState1.maxLockResets) {
                         
                         const lockSuccess = gameState1.lockPiece();
-                        
                         if (!lockSuccess) {
                             // Game over - piece locked while overlapping
                             addChatMessage('You lost! Click Restart to play again.', 'System');
@@ -1618,7 +1607,6 @@
                 }
                 
                 if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
-                
                 // Process DAS/ARR for held movement keys
                 const dasDelay = parseInt(document.getElementById('das').value);
                 const arrDelay = parseInt(document.getElementById('arr').value);
@@ -1629,7 +1617,6 @@
                     
                     if (timer.das >= dasDelay) {
                         timer.arr += deltaTime;
-                        
                         if (arrDelay === 0 || timer.arr >= arrDelay) {
                             if (timer.direction) {
                                 gameState1.move(timer.direction);
@@ -1640,7 +1627,6 @@
                 }
                 
                 gameState1.draw();
-                
                 // Send game state to opponent periodically
                 if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
                     conn.send({
@@ -1660,7 +1646,6 @@
         }
         
         // Input handling with DAS/ARR
-        const keysHeld = {};
         const dasTimers = {};
         
         document.addEventListener('keydown', (e) => {
@@ -1690,7 +1675,6 @@
                     addChatMessage('You lost! Click Restart to play again.', 'System');
                     document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                     gameRunning = false;
-                    
                     // Notify opponent that you lost
                     if (conn && conn.open) {
                         conn.send({ type: 'gameOver' });
@@ -1712,12 +1696,12 @@
                 gameState1.holdCurrentPiece();
             }
         });
-        
+
         document.addEventListener('keyup', (e) => {
             delete keysHeld[e.key];
             delete dasTimers[e.key];
         });
-        
+
         // Initialize
         addChatMessage('Welcome to Tetris Online Battle!');
         addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
