@@ -666,7 +666,107 @@
         };
         
         // =============================================
-        // GAME STATE CLASS (OPTIMIZED)
+        // INPUT SYSTEM
+        // =============================================
+        const keysHeld = {};
+        const keyBindings = {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            softDrop: 'ArrowDown',
+            hardDrop: ' ',
+            rotateCW: 'ArrowUp',
+            rotateCCW: 'z',
+            rotate180: 'x',
+            hold: 'c'
+        };
+        
+        // Setup key binding listeners
+        Object.keys(keyBindings).forEach(action => {
+            const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
+            input.addEventListener('click', () => {
+                input.value = 'Press a key...';
+                const listener = (e) => {
+                    e.preventDefault();
+                    keyBindings[action] = e.key;
+                    input.value = e.key;
+                    document.removeEventListener('keydown', listener);
+                };
+                document.addEventListener('keydown', listener);
+            });
+        });
+        
+        // Keyboard event handlers
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning || !gameState1) return;
+            
+            // Find which action this key corresponds to
+            let action = null;
+            for (const [act, key] of Object.entries(keyBindings)) {
+                if (key === e.key) {
+                    action = act;
+                    break;
+                }
+            }
+            
+            if (!action) return;
+            
+            // Prevent key repeat for some actions
+            if (keysHeld[action] && (action === 'rotateCW' || action === 'rotateCCW' || 
+                action === 'rotate180' || action === 'hold' || action === 'hardDrop')) {
+                return;
+            }
+            
+            keysHeld[action] = true;
+            
+            // Handle immediate actions
+            if (action === 'rotateCW') {
+                e.preventDefault();
+                gameState1.rotate('cw');
+            } else if (action === 'rotateCCW') {
+                e.preventDefault();
+                gameState1.rotate('ccw');
+            } else if (action === 'rotate180') {
+                e.preventDefault();
+                gameState1.rotate('180');
+            } else if (action === 'hold') {
+                e.preventDefault();
+                gameState1.holdCurrentPiece();
+            } else if (action === 'hardDrop') {
+                e.preventDefault();
+                const success = gameState1.hardDrop();
+                
+                if (!success) {
+                    // Game over
+                    addChatMessage('You lost! Click Restart to play again.', 'System');
+                    document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
+                    gameRunning = false;
+                    
+                    if (conn && conn.open) {
+                        conn.send({ type: 'gameOver' });
+                    }
+                }
+                
+                gameState1.spawnPiece();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            // Find which action this key corresponds to
+            let action = null;
+            for (const [act, key] of Object.entries(keyBindings)) {
+                if (key === e.key) {
+                    action = act;
+                    break;
+                }
+            }
+            
+            if (action) {
+                delete keysHeld[action];
+            }
+        });
+        
+        // =============================================
+        // GAME STATE CLASS
         // =============================================
         class GameState {
             constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
@@ -713,7 +813,6 @@
                 // DAS/ARR system
                 this.dasTimer = { left: 0, right: 0 };
                 this.arrTimer = { left: 0, right: 0 };
-                this.softDropActive = false;
                 
                 // Scoring and stats
                 this.piecesPlaced = 0;
@@ -791,7 +890,7 @@
             }
             
             // =============================================
-            // OPTIMIZED MOVEMENT METHODS
+            // MOVEMENT METHODS
             // =============================================
             
             rotate(direction) {
@@ -1302,7 +1401,7 @@
         }
         
         // =============================================
-        // GAME LOOP (OPTIMIZED FOR RESPONSIVE CONTROLS)
+        // GAME LOOP
         // =============================================
         
         let gameState1 = null;
@@ -1390,7 +1489,7 @@
                 // Process left movement
                 if (keysHeld.left) {
                     if (gameState1.dasTimer.left === 0) {
-                        // First movement
+                        // First movement - immediate response
                         if (gameState1.move(-1)) {
                             gameState1.dasTimer.left = dasDelay;
                         }
@@ -1413,7 +1512,7 @@
                 // Process right movement
                 if (keysHeld.right) {
                     if (gameState1.dasTimer.right === 0) {
-                        // First movement
+                        // First movement - immediate response
                         if (gameState1.move(1)) {
                             gameState1.dasTimer.right = dasDelay;
                         }
@@ -1431,6 +1530,11 @@
                 } else {
                     gameState1.dasTimer.right = 0;
                     gameState1.arrTimer.right = 0;
+                }
+                
+                // Process soft drop if held
+                if (keysHeld.softDrop) {
+                    gameState1.softDrop();
                 }
                 
                 // Draw current state
@@ -1454,84 +1558,6 @@
             // Continue game loop
             requestAnimationFrame(gameLoop);
         }
-        
-        // =============================================
-        // INPUT HANDLING SYSTEM
-        // =============================================
-        
-        const keysHeld = {};
-        const keyBindings = {
-            left: 'ArrowLeft',
-            right: 'ArrowRight',
-            softDrop: 'ArrowDown',
-            hardDrop: ' ',
-            rotateCW: 'ArrowUp',
-            rotateCCW: 'z',
-            rotate180: 'x',
-            hold: 'c'
-        };
-        
-        // Setup key binding listeners
-        Object.keys(keyBindings).forEach(action => {
-            const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
-            input.addEventListener('click', () => {
-                input.value = 'Press a key...';
-                const listener = (e) => {
-                    e.preventDefault();
-                    keyBindings[action] = e.key;
-                    input.value = e.key;
-                    document.removeEventListener('keydown', listener);
-                };
-                document.addEventListener('keydown', listener);
-            });
-        });
-        
-        // Keyboard event handlers
-        document.addEventListener('keydown', (e) => {
-            if (!gameRunning || !gameState1) return;
-            
-            if (keysHeld[e.key]) return; // Prevent key repeat
-            keysHeld[e.key] = true;
-            
-            // Handle immediate actions
-            if (e.key === keyBindings.rotateCW) {
-                e.preventDefault();
-                gameState1.rotate('cw');
-            } else if (e.key === keyBindings.rotateCCW) {
-                e.preventDefault();
-                gameState1.rotate('ccw');
-            } else if (e.key === keyBindings.rotate180) {
-                e.preventDefault();
-                gameState1.rotate('180');
-            } else if (e.key === keyBindings.hold) {
-                e.preventDefault();
-                gameState1.holdCurrentPiece();
-            } else if (e.key === keyBindings.softDrop) {
-                e.preventDefault();
-                gameState1.softDrop();
-            } else if (e.key === keyBindings.hardDrop) {
-                e.preventDefault();
-                const success = gameState1.hardDrop();
-                
-                if (!success) {
-                    // Game over
-                    addChatMessage('You lost! Click Restart to play again.', 'System');
-                    document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
-                    gameRunning = false;
-                    
-                    if (conn && conn.open) {
-                        conn.send({ type: 'gameOver' });
-                    }
-                }
-                
-                gameState1.spawnPiece();
-            }
-            // Left/right movement handled in game loop via DAS/ARR
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            delete keysHeld[e.key];
-        });
         
         // =============================================
         // NETWORKING AND UI FUNCTIONS
