@@ -61,7 +61,7 @@
             filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
         }
         
-        /* Layout */
+        /* Game Layout */
         .game-area {
             display: flex;
             justify-content: center;
@@ -120,33 +120,7 @@
             display: flex; justify-content: center; align-items: center;
         }
         
-        /* Controls & UI */
-        .controls-panel {
-            background: rgba(21, 27, 61, 0.8);
-            border: 2px solid var(--border-glow);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-        }
-        
-        .control-item { display: flex; flex-direction: column; gap: 5px; }
-        
-        .control-item label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; }
-        
-        .control-item input, .control-item select {
-            background: rgba(10, 14, 39, 0.9);
-            border: 1px solid var(--accent-cyan);
-            color: var(--text-primary);
-            padding: 8px;
-            font-family: 'Orbitron', monospace;
-        }
-        
+        /* UI Elements */
         button {
             background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
             border: none; color: var(--bg-dark);
@@ -162,6 +136,76 @@
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .hidden { display: none !important; }
+
+        /* Settings Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            display: flex; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background: rgba(21, 27, 61, 0.95);
+            border: 2px solid var(--accent-cyan);
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .setting-group { margin-bottom: 15px; }
+        .setting-group h3 { 
+            color: var(--accent-pink); 
+            font-size: 0.8rem; 
+            margin-bottom: 10px; 
+            border-bottom: 1px solid rgba(255,255,255,0.1); 
+            padding-bottom: 5px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .control-row label { font-size: 0.8rem; color: var(--text-secondary); }
+        
+        .control-row input {
+            background: rgba(10, 14, 39, 0.6);
+            border: 1px solid var(--accent-cyan);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            width: 120px;
+            text-align: center;
+            cursor: pointer;
+            font-family: 'Orbitron', monospace;
+            font-size: 0.8rem;
+        }
+        
+        .control-row input:focus { outline: none; border-color: var(--accent-yellow); box-shadow: 0 0 10px var(--accent-yellow); }
+
+        .close-btn {
+            width: 100%;
+            margin-top: 10px;
+            background: var(--bg-grid);
+            border: 1px solid var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+        .close-btn:hover { background: var(--accent-cyan); color: var(--bg-dark); }
         
         /* Chat */
         .chat-container {
@@ -208,38 +252,20 @@
     <div class="container">
         <h1>⬛ Tetris Battle ⬛</h1>
         
-        <div class="controls-panel">
-            <h2 style="text-align: center; font-family: 'Press Start 2P'; font-size: 1rem; margin-bottom: 15px;">Handling Settings</h2>
-            <div class="controls-grid">
-                <div class="control-item">
-                    <label>ARR (Auto Repeat Rate - ms)</label>
-                    <input type="number" id="arr" value="0" min="0" max="100">
-                </div>
-                <div class="control-item">
-                    <label>DAS (Delayed Auto Shift - ms)</label>
-                    <input type="number" id="das" value="133" min="0" max="500">
-                </div>
-                <div class="control-item">
-                    <label>Soft Drop Factor</label>
-                    <select id="sdf">
-                        <option value="40">Fast (40x)</option>
-                        <option value="inf" selected>Instant (Inf)</option>
-                    </select>
-                </div>
-            </div>
-            <div style="text-align:center; margin-top:10px; font-size:0.7rem; color:var(--text-secondary);">Controls: Arrow Keys to Move/Rotate, Space to Hard Drop, C to Hold, Z/X to Rotate</div>
+        <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+            <button id="settingsBtn">⚙️ Settings</button>
+            <button id="createGameBtn">Create Host</button>
+        </div>
+
+        <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+            <input type="text" id="opponentPeerId" placeholder="Enter Host ID" style="padding:10px; background: rgba(10, 14, 39, 0.9); border: 1px solid var(--accent-cyan); color: white;">
+            <button id="joinGameBtn">Join Game</button>
+            <button id="restartBtn" class="hidden">Restart Match</button>
         </div>
 
         <div id="myPeerId" class="hidden">
             <div style="font-size: 0.7rem; color: var(--text-secondary);">YOUR PEER ID:</div>
             <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
-        </div>
-        
-        <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
-            <button id="createGameBtn">Create Host</button>
-            <input type="text" id="opponentPeerId" placeholder="Enter Host ID" style="padding:10px;">
-            <button id="joinGameBtn">Join Game</button>
-            <button id="restartBtn" class="hidden">Restart Match</button>
         </div>
         
         <div id="gameStatus">Waiting to start...</div>
@@ -301,6 +327,52 @@
         </div>
     </div>
 
+    <div id="settingsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 style="text-align: center; margin-bottom: 20px; font-family: 'Press Start 2P'; font-size: 1rem; color: var(--accent-yellow);">Game Settings</h2>
+            
+            <div class="settings-grid">
+                <div class="setting-group">
+                    <h3>Handling</h3>
+                    <div class="control-row">
+                        <label>ARR (ms)</label>
+                        <input type="number" id="arrInput" value="0" min="0" max="100">
+                    </div>
+                    <div class="control-row">
+                        <label>DAS (ms)</label>
+                        <input type="number" id="dasInput" value="133" min="0" max="500">
+                    </div>
+                    <div class="control-row">
+                        <label>SDF</label>
+                        <input type="text" id="sdfInput" value="inf" placeholder="inf or number">
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3>Movement</h3>
+                    <div class="control-row"><label>Left</label><input type="text" id="bindLeft" readonly></div>
+                    <div class="control-row"><label>Right</label><input type="text" id="bindRight" readonly></div>
+                    <div class="control-row"><label>Soft Drop</label><input type="text" id="bindSoft" readonly></div>
+                    <div class="control-row"><label>Hard Drop</label><input type="text" id="bindHard" readonly></div>
+                </div>
+
+                <div class="setting-group">
+                    <h3>Rotation</h3>
+                    <div class="control-row"><label>Rotate CW</label><input type="text" id="bindCW" readonly></div>
+                    <div class="control-row"><label>Rotate CCW</label><input type="text" id="bindCCW" readonly></div>
+                    <div class="control-row"><label>Rotate 180</label><input type="text" id="bind180" readonly></div>
+                    <div class="control-row"><label>Hold</label><input type="text" id="bindHold" readonly></div>
+                </div>
+            </div>
+
+            <div style="text-align: center; font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 20px;">
+                Click any control box to rebind.
+            </div>
+            
+            <button class="close-btn" id="closeSettingsBtn">Close & Save</button>
+        </div>
+    </div>
+
     <script>
         /**
          * ENGINE CONSTANTS & DATA
@@ -310,8 +382,8 @@
         const BLOCK = 32;
         const PREVIEW_BLOCK = 16;
         
-        // Key Mapping
-        const KEYS = {
+        // Modifiable Key Map
+        let keyMap = {
             LEFT: 'ArrowLeft',
             RIGHT: 'ArrowRight',
             SOFT: 'ArrowDown',
@@ -382,14 +454,17 @@
 
             onKeyDown(e) {
                 if (!this.game.running) return;
+                if (!document.getElementById('settingsModal').classList.contains('hidden')) return; // Block input in menu
                 
-                // If key is already held, ignore repeat (we handle DAS manually)
+                // Prevent scrolling for game keys
+                if (Object.values(keyMap).includes(e.key)) e.preventDefault();
+
                 if (this.keys.get(e.key)) return;
                 this.keys.set(e.key, true);
 
                 // MOVEMENT (Left/Right)
-                if (e.key === KEYS.LEFT || e.key === KEYS.RIGHT) {
-                    const dir = e.key === KEYS.LEFT ? -1 : 1;
+                if (e.key === keyMap.LEFT || e.key === keyMap.RIGHT) {
+                    const dir = e.key === keyMap.LEFT ? -1 : 1;
                     
                     if (this.currentDir !== dir) {
                         this.currentDir = dir;
@@ -400,8 +475,8 @@
                 }
 
                 // ROTATION (Bufferable)
-                if (e.key === KEYS.CW || e.key === KEYS.CCW || e.key === KEYS.R180) {
-                    let dir = e.key === KEYS.CW ? 1 : (e.key === KEYS.CCW ? 3 : 2);
+                if (e.key === keyMap.CW || e.key === keyMap.CCW || e.key === keyMap.R180) {
+                    let dir = e.key === keyMap.CW ? 1 : (e.key === keyMap.CCW ? 3 : 2);
                     
                     // If piece exists, rotate. If not (delay state), buffer it.
                     if (this.game.piece) {
@@ -412,7 +487,7 @@
                 }
 
                 // HOLD (Bufferable)
-                if (e.key === KEYS.HOLD) {
+                if (e.key === keyMap.HOLD) {
                     if (this.game.piece) {
                         this.game.hold();
                     } else {
@@ -421,7 +496,7 @@
                 }
                 
                 // HARD DROP
-                if (e.key === KEYS.HARD) {
+                if (e.key === keyMap.HARD) {
                     if (this.game.piece) this.game.hardDrop();
                 }
             }
@@ -429,8 +504,8 @@
             onKeyUp(e) {
                 this.keys.set(e.key, false);
                 
-                if (e.key === KEYS.LEFT && this.currentDir === -1) this.currentDir = 0;
-                if (e.key === KEYS.RIGHT && this.currentDir === 1) this.currentDir = 0;
+                if (e.key === keyMap.LEFT && this.currentDir === -1) this.currentDir = 0;
+                if (e.key === keyMap.RIGHT && this.currentDir === 1) this.currentDir = 0;
             }
 
             update(dt) {
@@ -444,7 +519,7 @@
                         const arr = this.game.settings.arr;
                         
                         if (arr === 0) {
-                            // Instant ARR - Teleport to wall
+                            // Instant ARR
                             while(this.game.move(this.currentDir)) {}
                         } else {
                             while (this.arrTimer >= arr) {
@@ -456,19 +531,16 @@
                 }
 
                 // Soft Drop
-                if (this.keys.get(KEYS.SOFT) && this.game.piece) {
+                if (this.keys.get(keyMap.SOFT) && this.game.piece) {
                     const factor = this.game.settings.sdf === 'inf' ? 20 : this.game.settings.sdf;
-                    // Standard gravity is ~1G at level 1, soft drop adds to it
                     this.game.gravityTimer += dt * factor; 
                 }
             }
             
-            // Called by Game when a new piece spawns to apply IRS/IHS
             applyBuffer() {
                 if (this.bufferedHold) {
                     this.game.hold();
                     this.bufferedHold = false;
-                    // If we held, the new piece might also need rotation, but usually IHS cancels IRS
                     this.bufferedRotate = null; 
                     return;
                 }
@@ -502,9 +574,14 @@
                 this.piece = null;
                 
                 this.stats = { pps: 0, apm: 0, b2b: 0, combo: -1, pieces: 0, attacks: 0, start: 0 };
-                this.settings = { arr: 0, das: 133, sdf: 'inf' }; // Defaults
+                // Settings are now loaded from the inputs
+                this.settings = { 
+                    arr: parseInt(document.getElementById('arrInput').value), 
+                    das: parseInt(document.getElementById('dasInput').value), 
+                    sdf: document.getElementById('sdfInput').value === 'inf' ? 'inf' : parseInt(document.getElementById('sdfInput').value) 
+                }; 
                 
-                this.gravity = 1000; // ms per row
+                this.gravity = 1000; 
                 this.gravityTimer = 0;
                 this.lockDelay = 500;
                 this.lockTimer = 0;
@@ -515,9 +592,6 @@
 
                 if (isLocal) {
                     this.input = new InputHandler(this);
-                    this.settings.arr = parseInt(document.getElementById('arr').value);
-                    this.settings.das = parseInt(document.getElementById('das').value);
-                    this.settings.sdf = document.getElementById('sdf').value === 'inf' ? 'inf' : parseInt(document.getElementById('sdf').value);
                 }
 
                 this.fillBag();
@@ -544,13 +618,12 @@
                 this.piece = {
                     type: type,
                     x: type === 'O' ? 4 : 3,
-                    y: type === 'I' ? -1 : 0, // I spawns one lower visually usually, but logic row 0
+                    y: type === 'I' ? -1 : 0, 
                     r: 0,
                     shape: SHAPES[type].shape[0],
                     lastKick: null
                 };
                 
-                // Immediately check if blocked
                 if (this.collide(0, 0, this.piece.shape)) {
                     this.gameOver();
                     return;
@@ -561,8 +634,15 @@
                 this.lockMoves = 0;
                 this.canHold = true;
 
-                // Apply Buffers (IRS/IHS)
-                if (this.isLocal) this.input.applyBuffer();
+                if (this.isLocal) {
+                    // Refresh settings on spawn (in case they changed during game)
+                    this.settings.arr = parseInt(document.getElementById('arrInput').value);
+                    this.settings.das = parseInt(document.getElementById('dasInput').value);
+                    const sdfVal = document.getElementById('sdfInput').value;
+                    this.settings.sdf = sdfVal === 'inf' ? 'inf' : parseFloat(sdfVal);
+                    
+                    this.input.applyBuffer();
+                }
                 
                 this.sendState();
             }
@@ -573,7 +653,6 @@
                 const newR = (this.piece.r + dir) % 4;
                 const nextShape = SHAPES[this.piece.type].shape[newR];
                 
-                // Get Kicks
                 const table = this.piece.type === 'I' ? KICKS.I : (this.piece.type === 'O' ? null : KICKS.JLSTZ);
                 const kicks = table ? table[`${this.piece.r}-${newR}`] : [[0,0]];
                 
@@ -627,7 +706,7 @@
             hardDrop() {
                 while (!this.collide(0, 1, this.piece.shape)) {
                     this.piece.y++;
-                    this.stats.attacks += 0; // Score could go here
+                    this.stats.attacks += 0; 
                 }
                 this.lock();
             }
@@ -640,8 +719,6 @@
                 } else {
                     const temp = this.holdPiece;
                     this.holdPiece = this.piece.type;
-                    
-                    // Respawn temp
                     this.piece = {
                         type: temp,
                         x: temp === 'O' ? 4 : 3,
@@ -656,7 +733,6 @@
             }
 
             lock() {
-                // Add to board
                 for (let y = 0; y < 4; y++) {
                     for (let x = 0; x < 4; x++) {
                         if (this.piece.shape[y][x]) {
@@ -666,10 +742,8 @@
                     }
                 }
 
-                // T-Spin Detection
                 let tSpin = false;
                 if (this.piece.type === 'T') {
-                    // Check corners
                     let corners = 0;
                     [[0,0],[2,0],[0,2],[2,2]].forEach(([cx, cy]) => {
                         const bx = this.piece.x + cx;
@@ -679,7 +753,6 @@
                     if (corners >= 3) tSpin = true;
                 }
 
-                // Clear Lines
                 let lines = [];
                 for (let r = 0; r < ROWS; r++) {
                     if (this.board[r].every(c => c !== 0)) lines.push(r);
@@ -687,22 +760,16 @@
 
                 let sent = 0;
                 if (lines.length > 0) {
-                    // Remove lines
                     lines.forEach(idx => {
                         this.board.splice(idx, 1);
                         this.board.unshift(Array(COLS).fill(0));
                     });
                     
-                    // Calc Attack
                     const count = lines.length;
-                    let atk = [0, 0, 1, 2, 4][count]; // 0, 1, 2, 3, 4 lines
-                    
-                    if (tSpin) atk = [0, 2, 4, 6][count]; // T-Spins
-                    
-                    // Perfect Clear
+                    let atk = [0, 0, 1, 2, 4][count]; 
+                    if (tSpin) atk = [0, 2, 4, 6][count]; 
                     if (this.board.every(r => r.every(c => c===0))) atk = 10;
 
-                    // B2B & Combo
                     const b2b = (tSpin || count === 4);
                     if (b2b) {
                         if (this.stats.b2b > 0) atk += 1;
@@ -712,9 +779,8 @@
                     }
                     
                     this.stats.combo++;
-                    if (this.stats.combo > 0) atk += Math.min(this.stats.combo, 4); // Cap combo damage
+                    if (this.stats.combo > 0) atk += Math.min(this.stats.combo, 4);
                     
-                    // Garbage Canceling
                     while (atk > 0 && this.garbageQueue.length > 0) {
                         if (this.garbageQueue[0] <= atk) {
                             atk -= this.garbageQueue.shift();
@@ -727,11 +793,9 @@
                     sent = atk;
                 } else {
                     this.stats.combo = -1;
-                    // Accept Garbage
                     this.addGarbage();
                 }
 
-                // Update Stats
                 this.stats.pieces++;
                 if (sent > 0) {
                     this.stats.attacks += sent;
@@ -739,17 +803,12 @@
                 }
 
                 this.piece = null;
-                // Tiny spawn delay (can be 0)
                 this.spawn();
             }
 
             addGarbage() {
                 if (this.garbageQueue.length === 0) return;
-                
                 let total = this.garbageQueue.reduce((a,b)=>a+b, 0);
-                // Cap garbage per frame to prevent instant death? Nah, standard rules.
-                
-                // Shift board up
                 for (let i=0; i<total; i++) {
                     this.board.shift();
                     const line = Array(COLS).fill('G');
@@ -757,8 +816,6 @@
                     this.board.push(line);
                 }
                 this.garbageQueue = [];
-                
-                // Check death
                 if (!this.board[0].every(c => c===0)) this.gameOver();
             }
 
@@ -771,9 +828,7 @@
                     this.gravityTimer += dt;
                     if (this.gravityTimer >= this.gravity) {
                         this.gravityTimer = 0;
-                        if (!this.move(0, 1)) {
-                            // Can't move down, gravity resets if not grounded? No, handled by lock timer
-                        }
+                        if (!this.move(0, 1)) {}
                     }
 
                     if (this.isGround()) {
@@ -784,46 +839,36 @@
                     }
                 }
                 
-                // Update DOM stats
                 const time = (Date.now() - this.stats.start) / 1000;
                 document.getElementById(`pps${this.id}`).innerText = (this.stats.pieces / time).toFixed(2);
                 document.getElementById(`apm${this.id}`).innerText = (this.stats.attacks / time * 60).toFixed(2);
             }
 
             draw() {
-                // Main Board
                 this.ctx.fillStyle = '#0a0e27';
                 this.ctx.fillRect(0, 0, 320, 640);
                 
-                // Grid
                 this.ctx.strokeStyle = 'rgba(255,255,255,0.05)';
                 this.ctx.lineWidth = 1;
                 for(let x=0;x<=10;x++){this.ctx.beginPath();this.ctx.moveTo(x*BLOCK,0);this.ctx.lineTo(x*BLOCK,640);this.ctx.stroke();}
                 for(let y=0;y<=20;y++){this.ctx.beginPath();this.ctx.moveTo(0,y*BLOCK);this.ctx.lineTo(320,y*BLOCK);this.ctx.stroke();}
 
-                // Blocks
                 for (let y=0; y<ROWS; y++) {
                     for (let x=0; x<COLS; x++) {
                         if (this.board[y][x]) this.drawBlock(this.ctx, x, y, this.board[y][x]);
                     }
                 }
 
-                // Ghost & Piece
                 if (this.piece) {
-                    // Ghost
                     let gy = this.piece.y;
                     while (!this.collide(0, gy - this.piece.y + 1, this.piece.shape)) gy++;
                     this.drawPiece(this.ctx, this.piece.x, gy, this.piece.shape, this.piece.type, 0.2);
-                    
-                    // Active
                     this.drawPiece(this.ctx, this.piece.x, this.piece.y, this.piece.shape, this.piece.type, 1);
                 }
 
-                // Hold
                 this.holdCtx.clearRect(0,0,80,80);
                 if (this.holdPiece) this.drawPreview(this.holdCtx, this.holdPiece);
 
-                // Queue
                 this.queueCtx.clearRect(0,0,80,480);
                 this.queue.forEach((p, i) => this.drawPreview(this.queueCtx, p, i * 80));
             }
@@ -833,8 +878,6 @@
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = color;
                 ctx.fillRect(x*BLOCK+1, y*BLOCK+1, BLOCK-2, BLOCK-2);
-                
-                // Shiny effect
                 ctx.fillStyle = 'rgba(255,255,255,0.3)';
                 ctx.fillRect(x*BLOCK+1, y*BLOCK+1, BLOCK-2, 6);
                 ctx.globalAlpha = 1;
@@ -881,7 +924,6 @@
 
             sendState() {
                 if (!this.isLocal || !conn) return;
-                // Only send visual data
                 sendNetworkData('state', {
                     board: this.board,
                     piece: this.piece,
@@ -899,7 +941,7 @@
         let player1, player2;
         let lastTime = 0;
         let accumulator = 0;
-        const STEP = 1000/60; // 60 FPS Logic
+        const STEP = 1000/60;
 
         function init() {
             peer = new Peer({ config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
@@ -917,7 +959,7 @@
                 addLog("Connected! Waiting for host to start.");
             });
             
-            // Loop
+            updateKeyInputDisplays();
             requestAnimationFrame(loop);
         }
 
@@ -963,13 +1005,12 @@
         };
 
         function startMatch(seed) {
-            player1 = new TetrisGame(1, seed, true); // Local
-            player2 = new TetrisGame(2, seed, false); // Remote
+            player1 = new TetrisGame(1, seed, true); 
+            player2 = new TetrisGame(2, seed, false); 
             player1.running = true;
             player1.stats.start = Date.now();
             player2.stats.start = Date.now();
             player1.spawn();
-            // Player 2 spawns when state is received
         }
 
         function loop(time) {
@@ -977,16 +1018,12 @@
             lastTime = time;
 
             if (player1 && player1.running) {
-                // Logic Step (Fixed Time Step)
                 player1.update(dt);
                 player1.draw();
-                
-                // Network Sync (Throttle to 20fps for bandwidth)
                 if (Math.floor(time / 50) > Math.floor((time - dt) / 50)) {
                     player1.sendState();
                 }
             }
-            
             if (player2) player2.draw();
 
             requestAnimationFrame(loop);
@@ -1007,6 +1044,43 @@
         function copyPeerId() {
             navigator.clipboard.writeText(myId);
             addLog("ID Copied");
+        }
+
+        // --- SETTINGS MODAL & BINDING LOGIC ---
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+        settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
+        closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
+
+        const bindMap = {
+            'bindLeft': 'LEFT', 'bindRight': 'RIGHT', 'bindSoft': 'SOFT', 'bindHard': 'HARD',
+            'bindCW': 'CW', 'bindCCW': 'CCW', 'bind180': 'R180', 'bindHold': 'HOLD'
+        };
+
+        function updateKeyInputDisplays() {
+            for (let [id, key] of Object.entries(bindMap)) {
+                let val = keyMap[key];
+                if(val === " ") val = "Space";
+                document.getElementById(id).value = val;
+            }
+        }
+
+        for (let [id, action] of Object.entries(bindMap)) {
+            const input = document.getElementById(id);
+            input.onclick = () => {
+                input.value = "Press key...";
+                
+                const handler = (e) => {
+                    e.preventDefault();
+                    keyMap[action] = e.key;
+                    updateKeyInputDisplays();
+                    document.removeEventListener('keydown', handler);
+                };
+                
+                document.addEventListener('keydown', handler);
+            };
         }
 
         init();
