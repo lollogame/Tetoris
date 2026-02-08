@@ -7,7 +7,6 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
-        
         :root {
             --bg-dark: #0a0e27;
             --bg-grid: #151b3d;
@@ -139,10 +138,12 @@
 
         /* Settings Modal */
         .modal-overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0, 0, 0, 0.85);
             z-index: 1000;
-            display: flex; justify-content: center; align-items: center;
+            display: flex; justify-content: center;
+            align-items: center;
             backdrop-filter: blur(5px);
         }
         
@@ -167,7 +168,7 @@
 
         .setting-group { margin-bottom: 15px; }
         .setting-group h3 { 
-            color: var(--accent-pink); 
+            color: var(--accent-pink);
             font-size: 0.8rem; 
             margin-bottom: 10px; 
             border-bottom: 1px solid rgba(255,255,255,0.1); 
@@ -216,7 +217,8 @@
             margin-top: 20px;
         }
         .chat-messages {
-            height: 150px; overflow-y: auto;
+            height: 150px;
+            overflow-y: auto;
             background: rgba(10, 14, 39, 0.8);
             border: 1px solid var(--accent-cyan);
             margin-bottom: 10px; padding: 10px;
@@ -241,7 +243,8 @@
         }
         
         .peer-id-value {
-            font-family: 'Press Start 2P'; color: var(--accent-cyan);
+            font-family: 'Press Start 2P';
+            color: var(--accent-cyan);
             padding: 10px; background: rgba(10, 14, 39, 0.8);
             border: 1px solid var(--accent-pink); margin-top: 5px;
             cursor: pointer;
@@ -255,6 +258,7 @@
         <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
             <button id="settingsBtn">⚙️ Settings</button>
             <button id="createGameBtn">Create Host</button>
+            <button id="startGameBtn" class="hidden" style="background: linear-gradient(135deg, #00ff00, #008800); color: white;">START GAME</button>
         </div>
 
         <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
@@ -403,7 +407,6 @@
             T: { color: '#a000f0', shape: [[[0,1,0],[1,1,1],[0,0,0]], [[0,1,0],[0,1,1],[0,1,0]], [[0,0,0],[1,1,1],[0,1,0]], [[0,1,0],[1,1,0],[0,1,0]]] },
             Z: { color: '#f00000', shape: [[[1,1,0],[0,1,1],[0,0,0]], [[0,0,1],[0,1,1],[0,1,0]], [[0,0,0],[1,1,0],[0,1,1]], [[0,1,0],[1,1,0],[1,0,0]]] }
         };
-
         const KICKS = {
             JLSTZ: {
                 '0-1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '1-0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
@@ -418,7 +421,6 @@
                 '3-0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]], '0-3': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
             }
         };
-
         // Seeded Random for Deterministic Pieces
         class Random {
             constructor(seed) { this.seed = seed; }
@@ -443,9 +445,8 @@
                 this.dasTimer = 0;
                 this.arrTimer = 0;
                 this.currentDir = 0;
-                
                 // Buffers for IRS (Initial Rotation System) and IHS
-                this.bufferedRotate = null; 
+                this.bufferedRotate = null;
                 this.bufferedHold = false;
                 
                 window.addEventListener('keydown', e => this.onKeyDown(e));
@@ -458,7 +459,6 @@
                 
                 // Prevent scrolling for game keys
                 if (Object.values(keyMap).includes(e.key)) e.preventDefault();
-
                 if (this.keys.get(e.key)) return;
                 this.keys.set(e.key, true);
 
@@ -503,14 +503,12 @@
 
             onKeyUp(e) {
                 this.keys.set(e.key, false);
-                
                 if (e.key === keyMap.LEFT && this.currentDir === -1) this.currentDir = 0;
                 if (e.key === keyMap.RIGHT && this.currentDir === 1) this.currentDir = 0;
             }
 
             update(dt) {
                 if (!this.game.running) return;
-
                 // Handle DAS/ARR
                 if (this.currentDir !== 0) {
                     this.dasTimer += dt;
@@ -572,15 +570,13 @@
                 this.holdPiece = null;
                 this.canHold = true;
                 this.piece = null;
-                
                 this.stats = { pps: 0, apm: 0, b2b: 0, combo: -1, pieces: 0, attacks: 0, start: 0 };
                 // Settings are now loaded from the inputs
                 this.settings = { 
                     arr: parseInt(document.getElementById('arrInput').value), 
                     das: parseInt(document.getElementById('dasInput').value), 
                     sdf: document.getElementById('sdfInput').value === 'inf' ? 'inf' : parseInt(document.getElementById('sdfInput').value) 
-                }; 
-                
+                };
                 this.gravity = 1000; 
                 this.gravityTimer = 0;
                 this.lockDelay = 500;
@@ -623,7 +619,6 @@
                     shape: SHAPES[type].shape[0],
                     lastKick: null
                 };
-                
                 if (this.collide(0, 0, this.piece.shape)) {
                     this.gameOver();
                     return;
@@ -649,13 +644,11 @@
 
             rotate(dir) {
                 if (!this.piece) return;
-                
                 const newR = (this.piece.r + dir) % 4;
                 const nextShape = SHAPES[this.piece.type].shape[newR];
                 
                 const table = this.piece.type === 'I' ? KICKS.I : (this.piece.type === 'O' ? null : KICKS.JLSTZ);
                 const kicks = table ? table[`${this.piece.r}-${newR}`] : [[0,0]];
-                
                 for (let k of kicks) {
                     if (!this.collide(k[0], -k[1], nextShape)) {
                         this.piece.x += k[0];
@@ -694,8 +687,8 @@
                 for (let y = 0; y < shape.length; y++) {
                     for (let x = 0; x < shape[y].length; x++) {
                         if (shape[y][x]) {
-                            const nx = this.piece.x + x + dx;
-                            const ny = this.piece.y + y + dy;
+                             const nx = this.piece.x + x + dx;
+                             const ny = this.piece.y + y + dy;
                             if (nx < 0 || nx >= COLS || ny >= ROWS || (ny >= 0 && this.board[ny][nx])) return true;
                         }
                     }
@@ -764,10 +757,9 @@
                         this.board.splice(idx, 1);
                         this.board.unshift(Array(COLS).fill(0));
                     });
-                    
                     const count = lines.length;
                     let atk = [0, 0, 1, 2, 4][count]; 
-                    if (tSpin) atk = [0, 2, 4, 6][count]; 
+                    if (tSpin) atk = [0, 2, 4, 6][count];
                     if (this.board.every(r => r.every(c => c===0))) atk = 10;
 
                     const b2b = (tSpin || count === 4);
@@ -821,7 +813,6 @@
 
             update(dt) {
                 if (!this.running || !this.isLocal) return;
-
                 this.input.update(dt);
 
                 if (this.piece) {
@@ -942,23 +933,21 @@
         let lastTime = 0;
         let accumulator = 0;
         const STEP = 1000/60;
-
         function init() {
             peer = new Peer({ config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
-            
             peer.on('open', id => {
                 myId = id;
                 document.getElementById('peerIdDisplay').innerText = id;
                 document.getElementById('myPeerId').classList.remove('hidden');
                 addLog(`Your ID: ${id}`);
             });
-
             peer.on('connection', c => {
                 conn = c;
                 setupConnection();
-                addLog("Connected! Waiting for host to start.");
+                addLog("Connected! Press START GAME to begin.");
+                // SHOW START BUTTON WHEN CONNECTED
+                document.getElementById('startGameBtn').classList.remove('hidden');
             });
-            
             updateKeyInputDisplays();
             requestAnimationFrame(loop);
         }
@@ -991,6 +980,17 @@
             document.getElementById('createGameBtn').disabled = true;
         };
 
+        // NEW START GAME BUTTON HANDLER
+        document.getElementById('startGameBtn').onclick = () => {
+            const seed = Date.now();
+            sendNetworkData('start', { seed });
+            startMatch(seed);
+            document.getElementById('gameStatus').innerText = "Playing!";
+            document.getElementById('gameArea').classList.remove('hidden');
+            document.getElementById('startGameBtn').classList.add('hidden');
+            document.getElementById('restartBtn').classList.remove('hidden');
+        };
+
         document.getElementById('joinGameBtn').onclick = () => {
             let id = document.getElementById('opponentPeerId').value;
             if(!id) return;
@@ -1005,7 +1005,7 @@
         };
 
         function startMatch(seed) {
-            player1 = new TetrisGame(1, seed, true); 
+            player1 = new TetrisGame(1, seed, true);
             player2 = new TetrisGame(2, seed, false); 
             player1.running = true;
             player1.stats.start = Date.now();
@@ -1025,7 +1025,6 @@
                 }
             }
             if (player2) player2.draw();
-
             requestAnimationFrame(loop);
         }
 
@@ -1040,7 +1039,6 @@
             let val = document.getElementById('chatInput').value;
             if(val) { sendNetworkData('chat', val); addLog(val, "Me"); document.getElementById('chatInput').value=''; }
         };
-        
         function copyPeerId() {
             navigator.clipboard.writeText(myId);
             addLog("ID Copied");
@@ -1053,12 +1051,10 @@
 
         settingsBtn.onclick = () => settingsModal.classList.remove('hidden');
         closeSettingsBtn.onclick = () => settingsModal.classList.add('hidden');
-
         const bindMap = {
             'bindLeft': 'LEFT', 'bindRight': 'RIGHT', 'bindSoft': 'SOFT', 'bindHard': 'HARD',
             'bindCW': 'CW', 'bindCCW': 'CCW', 'bind180': 'R180', 'bindHold': 'HOLD'
         };
-
         function updateKeyInputDisplays() {
             for (let [id, key] of Object.entries(bindMap)) {
                 let val = keyMap[key];
@@ -1071,7 +1067,6 @@
             const input = document.getElementById(id);
             input.onclick = () => {
                 input.value = "Press key...";
-                
                 const handler = (e) => {
                     e.preventDefault();
                     keyMap[action] = e.key;
