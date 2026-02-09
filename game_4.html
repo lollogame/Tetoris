@@ -556,7 +556,6 @@
         const COLS = 10;
         const ROWS = 20;
         const SPAWN_ROW = -2;
-        const SPAWN_ROTATE_GRACE_MS = 50;
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
@@ -835,11 +834,6 @@
                 this.rotateBuffer = null;
                 this.spawnGrace = false;
                 this.spawnGraceUsed = false;
-                const input = InputManager.getInstance();
-                const graceDir = input.consumeSpawnRotateGrace();
-                if (graceDir) {
-                    this.rotate(graceDir);
-                }
                 this.softDropActive = false;
                 
                 this.pendingGarbage = [];
@@ -881,12 +875,6 @@
                 this.hardDropCooldown = 0;
                 this.lastGravityTime = 0;
                 this.lastActionWasRotation = false;
-                this.rotateBuffer = null;
-                const input = InputManager.getInstance();
-                const graceDir = input.consumeSpawnRotateGrace();
-                if (graceDir) {
-                    this.rotate(graceDir);
-                }
             }
             
             spawnPiece() {
@@ -902,6 +890,7 @@
                 // Reset rotation timing explicitly
                 this.rotationCooldown = 0;
                 this.rotationBuffer = null;
+
                 this.rotateBuffer = null;
 
                 return true;
@@ -929,16 +918,17 @@
             
             consumeRotationBuffer() {
                 if (!this.rotateBuffer) return;
-                
+
                 const age = performance.now() - this.rotateBuffer.time;
                 if (age > ROTATION_BUFFER_MS) {
                     this.rotateBuffer = null;
                     return;
                 }
-                
 
-                this.rotate(this.rotateBuffer.dir);
-                this.rotateBuffer = null;
+                const rotated = this.rotate(this.rotateBuffer.dir);
+                if (rotated) {
+                    this.rotateBuffer = null;
+                }
             }
             
             isValidPosition(x, y, rotation) {
@@ -1274,6 +1264,7 @@
                     // Reset rotation timing explicitly
                     this.rotationCooldown = 0;
                     this.rotationBuffer = null;
+
                     this.rotateBuffer = null;
                 }
                 
@@ -1289,6 +1280,8 @@
                     // Allow exactly one rotation window
                     this.spawnGraceUsed = false;
                 }
+
+                this.consumeRotationBuffer();
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
@@ -1615,7 +1608,6 @@
 
         this.onMoveImmediate = null;
 
-        this.lastRotate = null;
     }
 
     static getInstance() {
@@ -1633,21 +1625,7 @@
         return this.keyBindings;
     }
 
-    recordRotate(dir) {
-        this.lastRotate = { dir, time: performance.now() };
-    }
 
-    consumeSpawnRotateGrace() {
-        if (!this.lastRotate) return null;
-        const age = performance.now() - this.lastRotate.time;
-        if (age <= SPAWN_ROTATE_GRACE_MS) {
-            const dir = this.lastRotate.dir;
-            this.lastRotate = null;
-            return dir;
-        }
-        this.lastRotate = null;
-        return null;
-    }
 
     setupKeyBindings() {
         const actions = Object.keys(this.keyBindings);
@@ -1875,14 +1853,17 @@
             this.gameState1.spawnPiece();
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
-            input.recordRotate('cw');
-            this.gameState1.rotate('cw');
+            const rotated = this.gameState1.rotate('cw');
+            if (!rotated) this.gameState1.bufferRotation('cw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotateCCW) {
-            input.recordRotate('ccw');
-            this.gameState1.rotate('ccw');
+            const rotated = this.gameState1.rotate('ccw');
+            if (!rotated) this.gameState1.bufferRotation('ccw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotate180) {
-            input.recordRotate('180');
-            this.gameState1.rotate('180');
+            const rotated = this.gameState1.rotate('180');
+            if (!rotated) this.gameState1.bufferRotation('180');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
