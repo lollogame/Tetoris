@@ -552,13 +552,9 @@
     <script>
 /* Full replacement <script> for game_4.html
    - Keeps the existing UI unchanged
-   - Soft drop fixed: uses a multiplier (e.g., 6x) or "infinite" mode
-   - "Infinite" soft drop moves piece to lowest position without locking (like hard drop without instant lock)
-   - Soft drop multiplier is applied as gravityMs / multiplier (constant while held)
-   - Prevents page scrolling for game keys
-   - IRS/IHS buffering and SRS kicks retained
-   - T-spin and line attack calculations adjusted to standard mappings with B2B and combo handling
-   Paste this entire <script> block in place of the current script tag.
+   - Restores a correct, robust 7-bag implementation
+   - Keeps IRS/IHS buffering, SRS kicks, DAS/ARR, soft-drop multiplier/infinite
+   - Paste this entire <script> block in place of the current script tag.
 */
 
 /* -------------------------
@@ -673,6 +669,7 @@ function clearCanvas(ctx, w, h){
 
 /* -------------------------
    GameState class
+   - Robust 7-bag implementation
    - Input buffer for IRS/IHS (ms-based)
    - DAS/ARR support
    - SRS rotation with kicks
@@ -712,9 +709,11 @@ class GameState {
 
   reset(){
     this.board = Array.from({length:ROWS}, ()=>Array(COLS).fill(0));
+    // robust 7-bag: bag holds the current shuffled 7 pieces
     this.bag = [];
     this.queue = [];
-    for(let i=0;i<6;i++) this.queue.push(this.getNextPiece());
+    // fill queue with 6 preview pieces (common UI) but draw from a proper 7-bag
+    for(let i=0;i<6;i++) this.queue.push(this.drawFromBag());
     this.currentPiece = null;
     this.currentRotation = 0;
     this.currentX = 3;
@@ -732,15 +731,23 @@ class GameState {
     this.spawnPiece();
   }
 
-  getNextPiece(){
-    if(this.bag.length===0){
+  // Draw a piece from the 7-bag. Refill and shuffle only when bag is empty.
+  drawFromBag(){
+    if(this.bag.length === 0){
+      // refill bag with a fresh 7-bag and shuffle using seeded RNG
       this.bag = [...PIECE_TYPES];
-      for(let i=this.bag.length-1;i>0;i--){
-        const j = this.rng.nextInt(i+1);
+      for(let i=this.bag.length - 1; i > 0; i--){
+        const j = this.rng.nextInt(i + 1);
         [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
       }
     }
+    // pop from the end for efficiency
     return this.bag.pop();
+  }
+
+  getNextPiece(){
+    // kept for compatibility; simply draws from the bag
+    return this.drawFromBag();
   }
 
   getSpawnColumn(type){
@@ -749,8 +756,9 @@ class GameState {
   }
 
   spawnPiece(){
+    // take the next piece from the queue and immediately push a new one from the bag
     const piece = this.queue.shift();
-    this.queue.push(this.getNextPiece());
+    this.queue.push(this.drawFromBag());
     this.currentPiece = piece;
     this.currentRotation = 0;
     this.currentX = this.getSpawnColumn(piece);
@@ -989,7 +997,7 @@ class GameState {
     // Standard-ish attack mapping:
     // Normal clears: 0,1,2,4 for 1..4 lines
     // T-spin: 2,4,6 for 1..3 lines
-    // Perfect clear: 10 (or 8/10 depending) -> use 10
+    // Perfect clear: 10
     let attack = 0;
     if(isAllClear){
       attack = 10;
@@ -1416,14 +1424,12 @@ function getDasMs(){ return parseInt(document.getElementById('das')?.value || '1
 function getArrMs(){ return parseInt(document.getElementById('arr')?.value || '0', 10); }
 function getDcdMs(){ return parseInt(document.getElementById('dcd')?.value || '0', 10); }
 function getSoftDropSetting(){
-  // UI may provide numeric multiplier or the string "infinite"
   const el = document.getElementById('softDropRate');
   if(!el) return { type:'mult', value:1 };
   const v = (el.value || '').toString().trim().toLowerCase();
   if(v === 'infinite' || v === 'inf' || v === '∞') return { type:'infinite' };
   const n = parseFloat(v);
   if(!isNaN(n) && n > 0) return { type:'mult', value: n };
-  // fallback: numeric multiplier 1
   return { type:'mult', value: 1 };
 }
 
@@ -1435,22 +1441,18 @@ const GAME_KEYS = new Set([
 ]);
 
 document.addEventListener('keydown', (e)=>{
-  // If an input element is focused, ignore game keys
   const active = document.activeElement;
   if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
     return;
   }
 
-  // Prevent default for game keys to stop page scrolling
   if(GAME_KEYS.has(e.key)) e.preventDefault();
 
   if(!gameRunning || !gameState1) return;
 
-  // Avoid processing repeated keydown events for initial action (we still track held state)
   const wasHeld = !!keysHeld[e.key];
   keysHeld[e.key] = true;
 
-  // left/right: immediate move + start DAS
   if(e.key === keyBindings.left){
     if(!wasHeld) gameState1.move(-1);
     dasState[e.key] = { dasTimer:0, arrTimer:0, direction:-1 };
@@ -1458,20 +1460,16 @@ document.addEventListener('keydown', (e)=>{
     if(!wasHeld) gameState1.move(1);
     dasState[e.key] = { dasTimer:0, arrTimer:0, direction:1 };
   } else if(e.key === keyBindings.softDrop){
-    // immediate soft drop on press
-    // handle "infinite" mode: move to bottom once on initial press
     const s = getSoftDropSetting();
     if(s.type === 'infinite'){
       if(!gameState1._softDropInfiniteActive){
-        // move piece to lowest position without locking
         let gy = gameState1.currentY;
         while(gameState1.isValidPosition(gameState1.currentX, gy+1, gameState1.currentRotation)) gy++;
         gameState1.currentY = gy;
         gameState1._softDropInfiniteActive = true;
-        // do not lock; allow normal lock delay to apply
       }
     } else {
-      // immediate single soft drop
+      // immediate single soft drop on press
       gameState1.softDrop();
     }
   } else if(e.key === keyBindings.hardDrop){
@@ -1496,7 +1494,6 @@ document.addEventListener('keydown', (e)=>{
 document.addEventListener('keyup', (e)=>{
   delete keysHeld[e.key];
   delete dasState[e.key];
-  // release infinite soft drop flag when soft drop key released
   if(e.key === keyBindings.softDrop && gameState1){
     gameState1._softDropInfiniteActive = false;
     gameState1._softDropTimer = 0;
@@ -1510,7 +1507,6 @@ setInterval(()=>{
   const arrMs = getArrMs();
   const tick = 16; // ms per tick
 
-  // DAS/ARR
   for(const k in dasState){
     const s = dasState[k];
     s.dasTimer += tick;
@@ -1523,13 +1519,11 @@ setInterval(()=>{
     }
   }
 
-  // Soft drop while held
   if(keysHeld[keyBindings.softDrop]){
     const setting = getSoftDropSetting();
     if(setting.type === 'infinite'){
-      // already handled on initial keydown; nothing to do each tick
+      // nothing per-tick; initial press already moved piece to bottom
     } else {
-      // multiplier: compute interval = gravityMs / multiplier
       const mult = Math.max(0.0001, setting.value || 1);
       const interval = Math.max(1, gameState1.gravityMs / mult);
       gameState1._softDropTimer = (gameState1._softDropTimer || 0) + tick;
@@ -1572,6 +1566,7 @@ window.__gameState1 = () => gameState1;
 window.__gameState2 = () => gameState2;
 window.__makePeer = makePeer;
 </script>
+
     
 </body>
 </html>
