@@ -406,7 +406,7 @@
                     <input type="number" id="das" value="167" min="0" max="500">
                 </div>
                 <div class="control-item">
-                    <label>DCD (ms)</label>
+                    <label>DCD (ms, 0 = hold)</label>
                     <input type="number" id="dcd" value="0" min="0" max="100">
                 </div>
                 <div class="control-item">
@@ -1692,17 +1692,17 @@
                 
                 if (movementState.direction !== 0) {
                     movementState.das += deltaTime;
-                    if (movementState.dcd > 0) {
-                        movementState.dcd -= deltaTime;
-                    }
                     
                     if (movementState.das >= dasDelay) {
-                        if (movementState.dcd <= 0) {
+                        if (arrDelay === 0) {
+                            while (gameState1.move(movementState.direction)) {
+                                // move to wall instantly
+                            }
+                        } else {
                             movementState.arr += deltaTime;
-                            
-                            if (arrDelay === 0 || movementState.arr >= arrDelay) {
-                                gameState1.move(movementState.direction);
-                                movementState.arr = 0;
+                            while (movementState.arr >= arrDelay) {
+                                if (!gameState1.move(movementState.direction)) break;
+                                movementState.arr -= arrDelay;
                             }
                         }
                     }
@@ -1735,54 +1735,82 @@
             right: false,
             direction: 0,
             lastPressed: 0,
+            blockedDir: 0,
+            blockedUntil: 0,
+            blockedHold: false,
             das: 0,
-            arr: 0,
-            dcd: 0
+            arr: 0
         };
         
-        function recomputeMovement(triggerImmediate) {
-            let newDirection = 0;
-            if (movementState.left && movementState.right) {
-                newDirection = movementState.lastPressed;
-            } else if (movementState.left) {
-                newDirection = -1;
-            } else if (movementState.right) {
-                newDirection = 1;
+        function setBlock(dir) {
+            movementState.blockedDir = dir;
+            const dcdValue = parseInt(document.getElementById('dcd').value);
+            if (dcdValue <= 0) {
+                movementState.blockedHold = true;
+                movementState.blockedUntil = 0;
+            } else {
+                movementState.blockedHold = false;
+                movementState.blockedUntil = nowMs() + dcdValue;
             }
+        }
+        
+        function isBlocked(dir) {
+            if (movementState.blockedDir !== dir) return false;
+            if (movementState.blockedHold) return true;
+            if (movementState.blockedUntil > 0) {
+                if (nowMs() < movementState.blockedUntil) return true;
+                movementState.blockedDir = 0;
+                movementState.blockedUntil = 0;
+                movementState.blockedHold = false;
+                return false;
+            }
+            return false;
+        }
+        
+        function computeActiveDirection() {
+            const leftActive = movementState.left && !isBlocked(-1);
+            const rightActive = movementState.right && !isBlocked(1);
             
-            if (newDirection !== movementState.direction) {
-                movementState.direction = newDirection;
-                movementState.das = 0;
-                movementState.arr = 0;
-                movementState.dcd = parseInt(document.getElementById('dcd').value);
-                
-                if (triggerImmediate && newDirection !== 0 && gameState1) {
-                    gameState1.move(newDirection);
-                }
+            if (leftActive && rightActive) return movementState.lastPressed;
+            if (leftActive) return -1;
+            if (rightActive) return 1;
+            return 0;
+        }
+        
+        function setDirection(newDirection, triggerImmediate) {
+            if (newDirection === movementState.direction) return;
+            movementState.direction = newDirection;
+            movementState.das = 0;
+            movementState.arr = 0;
+            
+            if (triggerImmediate && newDirection !== 0 && gameState1) {
+                gameState1.move(newDirection);
             }
+        }
+        
+        function recomputeMovement(triggerImmediate) {
+            const newDirection = computeActiveDirection();
+            setDirection(newDirection, triggerImmediate);
         }
         
         document.addEventListener('keydown', (e) => {
             if (!gameRunning || !gameState1) return;
             
-            // Prevent key repeat from triggering multiple times
-            if (keysHeld[e.key]) return;
+            if (e.repeat) return;
             keysHeld[e.key] = true;
             
             if (e.key === keyBindings.left) {
                 e.preventDefault();
-                if (!movementState.left) {
-                    movementState.left = true;
-                    movementState.lastPressed = -1;
-                    recomputeMovement(true);
-                }
+                movementState.left = true;
+                movementState.lastPressed = -1;
+                setBlock(1);
+                recomputeMovement(true);
             } else if (e.key === keyBindings.right) {
                 e.preventDefault();
-                if (!movementState.right) {
-                    movementState.right = true;
-                    movementState.lastPressed = 1;
-                    recomputeMovement(true);
-                }
+                movementState.right = true;
+                movementState.lastPressed = 1;
+                setBlock(-1);
+                recomputeMovement(true);
             } else if (e.key === keyBindings.softDrop) {
                 e.preventDefault();
                 gameState1.softDropActive = true;
@@ -1840,13 +1868,41 @@
             
             if (e.key === keyBindings.left) {
                 movementState.left = false;
+                if (movementState.blockedDir === -1) {
+                    movementState.blockedDir = 0;
+                    movementState.blockedUntil = 0;
+                    movementState.blockedHold = false;
+                }
                 recomputeMovement(false);
             } else if (e.key === keyBindings.right) {
                 movementState.right = false;
+                if (movementState.blockedDir === 1) {
+                    movementState.blockedDir = 0;
+                    movementState.blockedUntil = 0;
+                    movementState.blockedHold = false;
+                }
                 recomputeMovement(false);
             }
             
             if (gameState1 && e.key === keyBindings.softDrop) {
+                gameState1.softDropActive = false;
+            }
+        });
+        
+        window.addEventListener('blur', () => {
+            for (const key in keysHeld) {
+                delete keysHeld[key];
+            }
+            movementState.left = false;
+            movementState.right = false;
+            movementState.direction = 0;
+            movementState.lastPressed = 0;
+            movementState.blockedDir = 0;
+            movementState.blockedUntil = 0;
+            movementState.blockedHold = false;
+            movementState.das = 0;
+            movementState.arr = 0;
+            if (gameState1) {
                 gameState1.softDropActive = false;
             }
         });
