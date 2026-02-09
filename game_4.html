@@ -550,1023 +550,1209 @@
     </div>
     
     <script>
-/* Full replacement <script> for game_4.html
-   - Keeps the existing UI unchanged
-   - Restores a correct, robust 7-bag implementation
-   - Keeps IRS/IHS buffering, SRS kicks, DAS/ARR, soft-drop multiplier/infinite
-   - Paste this entire <script> block in place of the current script tag.
-*/
-
-/* -------------------------
-   Constants & Utilities
-   ------------------------- */
-const COLS = 10, ROWS = 20;
-const BLOCK_SIZE = 32;
-const PREVIEW_BLOCK_SIZE = 16;
-const STATE_SEND_INTERVAL = 50; // ms for sending state to opponent
-
-function nowMs(){ return performance.now(); }
-function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
-
-/* -------------------------
-   Seeded RNG (LCG)
-   ------------------------- */
-class SeededRandom {
-  constructor(seed=Date.now()|0){ this.seed = seed >>> 0; }
-  next(){
-    this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
-    return this.seed / 0x100000000;
-  }
-  nextInt(max){ return Math.floor(this.next() * max); }
-}
-
-/* -------------------------
-   SRS Kick Tables & Shapes
-   ------------------------- */
-const KICK_TABLE = {
-  JLSTZ: {
-    "0->R":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-    "R->0":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
-    "R->2":[[0,0],[1,0],[1,-1],[0,2],[1,2]],
-    "2->R":[[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-    "2->L":[[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-    "L->2":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-    "L->0":[[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-    "0->L":[[0,0],[1,0],[1,1],[0,-2],[1,-2]]
-  },
-  I: {
-    "0->R":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-    "R->0":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-    "R->2":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-    "2->R":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-    "2->L":[[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-    "L->2":[[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-    "L->0":[[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-    "0->L":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
-  },
-  O: {
-    "0->R":[[0,0]], "R->0":[[0,0]], "R->2":[[0,0]], "2->R":[[0,0]],
-    "2->L":[[0,0]], "L->2":[[0,0]], "L->0":[[0,0]], "0->L":[[0,0]]
-  }
-};
-
-const SHAPES = {
-  I: { color:'#00f0f0', shape:[
-    [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-    [[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]],
-    [[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]],
-    [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]]
-  ]},
-  O: { color:'#f0f000', shape:[
-    [[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]],[[1,1],[1,1]]
-  ]},
-  T: { color:'#a000f0', shape:[
-    [[0,1,0],[1,1,1],[0,0,0]],
-    [[0,1,0],[0,1,1],[0,1,0]],
-    [[0,0,0],[1,1,1],[0,1,0]],
-    [[0,1,0],[1,1,0],[0,1,0]]
-  ]},
-  S: { color:'#00f000', shape:[
-    [[0,1,1],[1,1,0],[0,0,0]],
-    [[0,1,0],[0,1,1],[0,0,1]],
-    [[0,0,0],[0,1,1],[1,1,0]],
-    [[1,0,0],[1,1,0],[0,1,0]]
-  ]},
-  Z: { color:'#f00000', shape:[
-    [[1,1,0],[0,1,1],[0,0,0]],
-    [[0,0,1],[0,1,1],[0,1,0]],
-    [[0,0,0],[1,1,0],[0,1,1]],
-    [[0,1,0],[1,1,0],[1,0,0]]
-  ]},
-  J: { color:'#0000f0', shape:[
-    [[1,0,0],[1,1,1],[0,0,0]],
-    [[0,1,1],[0,1,0],[0,1,0]],
-    [[0,0,0],[1,1,1],[0,0,1]],
-    [[0,1,0],[0,1,0],[1,1,0]]
-  ]},
-  L: { color:'#f0a000', shape:[
-    [[0,0,1],[1,1,1],[0,0,0]],
-    [[0,1,0],[0,1,0],[0,1,1]],
-    [[0,0,0],[1,1,1],[1,0,0]],
-    [[1,1,0],[0,1,0],[0,1,0]]
-  ]}
-};
-
-const PIECE_TYPES = Object.keys(SHAPES);
-
-/* -------------------------
-   Helper drawing functions
-   ------------------------- */
-function drawBlock(ctx, x, y, color, alpha=1){
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = color;
-  ctx.fillRect(x+1, y+1, BLOCK_SIZE-2, BLOCK_SIZE-2);
-  ctx.globalAlpha = 1;
-}
-function clearCanvas(ctx, w, h){
-  ctx.clearRect(0,0,w,h);
-}
-
-/* -------------------------
-   GameState class
-   - Robust 7-bag implementation
-   - Input buffer for IRS/IHS (ms-based)
-   - DAS/ARR support
-   - SRS rotation with kicks
-   - Soft drop multiplier / infinite mode
-   ------------------------- */
-class GameState {
-  constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed){
-    this.canvas = document.getElementById(canvasId);
-    this.ctx = this.canvas.getContext('2d');
-    this.holdCanvas = document.getElementById(holdCanvasId);
-    this.holdCtx = this.holdCanvas?.getContext('2d');
-    this.queueCanvas = document.getElementById(queueCanvasId);
-    this.queueCtx = this.queueCanvas?.getContext('2d');
-    this.playerId = playerId;
-    this.rng = new SeededRandom(seed || (Date.now()|0));
-    this.reset();
-    // Input buffer for IRS/IHS
-    this.inputBuffer = []; // {type:'rotate'|'hold'|'move'|'harddrop', dir?, dx?, time}
-    this.inputBufferMaxAge = 250; // ms
-    this.spawnCooldownMs = 60; // ms window where inputs are buffered
-    this.spawnCooldownTimer = 0;
-    // DAS/ARR state
-    this.dasDirection = 0; // -1 left, 1 right, 0 none
-    this.dasTimer = 0;
-    this.arrTimer = 0;
-    // other timers
-    this.gravityTimer = 0;
-    this.lockDelayTimer = 0;
-    this.lockDelayMs = 500;
-    this.lockResetCount = 0;
-    this.maxLockResets = 15;
-    this.hardDropCooldownMs = 0;
-    // soft drop internal timers
-    this._softDropTimer = 0;
-    this._softDropInfiniteActive = false;
-  }
-
-  reset(){
-    this.board = Array.from({length:ROWS}, ()=>Array(COLS).fill(0));
-    // robust 7-bag: bag holds the current shuffled 7 pieces
-    this.bag = [];
-    this.queue = [];
-    // fill queue with 6 preview pieces (common UI) but draw from a proper 7-bag
-    for(let i=0;i<6;i++) this.queue.push(this.drawFromBag());
-    this.currentPiece = null;
-    this.currentRotation = 0;
-    this.currentX = 3;
-    this.currentY = 0;
-    this.holdPiece = null;
-    this.canHold = true;
-    this.piecesPlaced = 0;
-    this.attacksSent = 0;
-    this.b2bCounter = 0;
-    this.comboCounter = -1;
-    this.lastClearWasB2B = false;
-    this.pendingGarbage = [];
-    this.gameStartTime = nowMs();
-    this.gravityMs = 800;
-    this.spawnPiece();
-  }
-
-  // Draw a piece from the 7-bag. Refill and shuffle only when bag is empty.
-  drawFromBag(){
-    if(this.bag.length === 0){
-      // refill bag with a fresh 7-bag and shuffle using seeded RNG
-      this.bag = [...PIECE_TYPES];
-      for(let i=this.bag.length - 1; i > 0; i--){
-        const j = this.rng.nextInt(i + 1);
-        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
-      }
-    }
-    // pop from the end for efficiency
-    return this.bag.pop();
-  }
-
-  getNextPiece(){
-    // kept for compatibility; simply draws from the bag
-    return this.drawFromBag();
-  }
-
-  getSpawnColumn(type){
-    const spawnCols = { O:4, T:3, Z:3, I:3, L:3, J:3, S:3 };
-    return spawnCols[type] || 3;
-  }
-
-  spawnPiece(){
-    // take the next piece from the queue and immediately push a new one from the bag
-    const piece = this.queue.shift();
-    this.queue.push(this.drawFromBag());
-    this.currentPiece = piece;
-    this.currentRotation = 0;
-    this.currentX = this.getSpawnColumn(piece);
-    this.currentY = 0;
-    this.canHold = true;
-    this.lockDelayTimer = 0;
-    this.lockResetCount = 0;
-    this.isTouchingGround = false;
-    // start spawn cooldown (ms)
-    this.spawnCooldownTimer = this.spawnCooldownMs;
-    // reset soft-drop infinite flag on spawn
-    this._softDropInfiniteActive = false;
-    this._softDropTimer = 0;
-  }
-
-  processSpawnBuffer(){
-    const now = nowMs();
-    this.inputBuffer = this.inputBuffer.filter(it => now - it.time <= this.inputBufferMaxAge);
-    while(this.inputBuffer.length){
-      const it = this.inputBuffer.shift();
-      if(it.type === 'rotate'){
-        if(this.rotate(it.dir)) return;
-      } else if(it.type === 'hold'){
-        if(this.holdCurrentPiece()) return;
-      } else if(it.type === 'move'){
-        this.move(it.dx);
-      } else if(it.type === 'harddrop'){
-        if(this.hardDrop()) return;
-      }
-    }
-  }
-
-  rotate(direction){
-    if(this.spawnCooldownTimer > 0){
-      this.inputBuffer.push({ type:'rotate', dir:direction, time: nowMs() });
-      return false;
-    }
-
-    const oldR = this.currentRotation;
-    let newR;
-    if(direction === 'cw') newR = (oldR + 1) % 4;
-    else if(direction === 'ccw') newR = (oldR + 3) % 4;
-    else newR = (oldR + 2) % 4;
-
-    const rotations = ['0','R','2','L'];
-    const key = `${rotations[oldR]}->${rotations[newR]}`;
-    const kickSet = (this.currentPiece === 'I') ? KICK_TABLE.I :
-                    (this.currentPiece === 'O') ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
-    const kicks = kickSet[key] || [[0,0]];
-
-    for(const [dx,dy] of kicks){
-      const testX = this.currentX + dx;
-      const testY = this.currentY - dy;
-      if(this.isValidPosition(testX, testY, newR)){
-        this.currentX = testX;
-        this.currentY = testY;
-        this.currentRotation = newR;
-        if(this.isTouchingGround && this.lockResetCount < this.maxLockResets){
-          this.lockDelayTimer = 0;
-          this.lockResetCount++;
+        // Game Constants
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 32;
+        const PREVIEW_BLOCK_SIZE = 16;
+        
+        // Seeded Random Number Generator for synchronized piece generation
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                // Linear Congruential Generator
+                this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
+                return this.seed / 0x7fffffff;
+            }
+            
+            nextInt(max) {
+                return Math.floor(this.next() * max);
+            }
         }
-        return true;
-      }
-    }
-    return false;
-  }
-
-  isValidPosition(x, y, rotation){
-    const shape = SHAPES[this.currentPiece].shape[rotation];
-    for(let r=0;r<shape.length;r++){
-      for(let c=0;c<shape[r].length;c++){
-        if(!shape[r][c]) continue;
-        const gx = x + c, gy = y + r;
-        if(gx < 0 || gx >= COLS || gy >= ROWS) return false;
-        if(gy >= 0 && this.board[gy][gx]) return false;
-      }
-    }
-    return true;
-  }
-
-  move(dx){
-    if(this.spawnCooldownTimer > 0){
-      this.inputBuffer.push({ type:'move', dx:dx, time: nowMs() });
-      return false;
-    }
-    if(this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)){
-      this.currentX += dx;
-      if(this.isTouchingGround && this.lockResetCount < this.maxLockResets){
-        this.lockDelayTimer = 0;
-        this.lockResetCount++;
-      }
-      return true;
-    }
-    return false;
-  }
-
-  softDrop(){
-    if(this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)){
-      this.currentY++;
-      return true;
-    }
-    return false;
-  }
-
-  hardDrop(){
-    if(this.spawnCooldownTimer > 0){
-      this.inputBuffer.push({ type:'harddrop', time: nowMs() });
-      return false;
-    }
-    while(this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
-    return this.lockPiece();
-  }
-
-  holdCurrentPiece(){
-    if(this.spawnCooldownTimer > 0){
-      this.inputBuffer.push({ type:'hold', time: nowMs() });
-      return false;
-    }
-    if(!this.canHold) return false;
-    if(this.holdPiece === null){
-      this.holdPiece = this.currentPiece;
-      this.spawnPiece();
-    } else {
-      const prev = this.holdPiece;
-      this.holdPiece = this.currentPiece;
-      this.currentPiece = prev;
-      this.currentRotation = 0;
-      this.currentX = this.getSpawnColumn(this.currentPiece);
-      this.currentY = 0;
-      this.spawnCooldownTimer = this.spawnCooldownMs;
-    }
-    this.canHold = false;
-    return true;
-  }
-
-  lockPiece(){
-    const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
-    for(let r=0;r<shape.length;r++){
-      for(let c=0;c<shape[r].length;c++){
-        if(!shape[r][c]) continue;
-        const gx = this.currentX + c, gy = this.currentY + r;
-        if(gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS){
-          this.board[gy][gx] = this.currentPiece;
-        } else if(gy < 0){
-          return false;
+        
+        // Game seed - will be shared between players
+        let gameSeed = null;
+        
+        // PeerJS connection
+        let peer = null;
+        let conn = null;
+        let isHost = false;
+        let myPeerId = null;
+        
+        // SRS Kick Table from https://harddrop.com/wiki/SRS
+        const KICK_TABLE = {
+            'JLSTZ': {
+                '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                'R->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                'R->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                '2->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                '2->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+                'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
+            },
+            'I': {
+                '0->R': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                'R->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                'R->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+                '2->R': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                '2->L': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
+            },
+            'O': {
+                '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]],
+                '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
+            }
+        };
+        
+        // Tetromino shapes and colors
+        const SHAPES = {
+            'I': {
+                shape: [
+                    [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
+                    [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]],
+                    [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]],
+                    [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]
+                ],
+                color: '#00f0f0'
+            },
+            'O': {
+                shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]],
+                color: '#f0f000'
+            },
+            'T': {
+                shape: [
+                    [[0,1,0], [1,1,1], [0,0,0]],
+                    [[0,1,0], [0,1,1], [0,1,0]],
+                    [[0,0,0], [1,1,1], [0,1,0]],
+                    [[0,1,0], [1,1,0], [0,1,0]]
+                ],
+                color: '#a000f0'
+            },
+            'S': {
+                shape: [
+                    [[0,1,1], [1,1,0], [0,0,0]],
+                    [[0,1,0], [0,1,1], [0,0,1]],
+                    [[0,0,0], [0,1,1], [1,1,0]],
+                    [[1,0,0], [1,1,0], [0,1,0]]
+                ],
+                color: '#00f000'
+            },
+            'Z': {
+                shape: [
+                    [[1,1,0], [0,1,1], [0,0,0]],
+                    [[0,0,1], [0,1,1], [0,1,0]],
+                    [[0,0,0], [1,1,0], [0,1,1]],
+                    [[0,1,0], [1,1,0], [1,0,0]]
+                ],
+                color: '#f00000'
+            },
+            'J': {
+                shape: [
+                    [[1,0,0], [1,1,1], [0,0,0]],
+                    [[0,1,1], [0,1,0], [0,1,0]],
+                    [[0,0,0], [1,1,1], [0,0,1]],
+                    [[0,1,0], [0,1,0], [1,1,0]]
+                ],
+                color: '#0000f0'
+            },
+            'L': {
+                shape: [
+                    [[0,0,1], [1,1,1], [0,0,0]],
+                    [[0,1,0], [0,1,0], [0,1,1]],
+                    [[0,0,0], [1,1,1], [1,0,0]],
+                    [[1,1,0], [0,1,0], [0,1,0]]
+                ],
+                color: '#f0a000'
+            }
+        };
+        
+        // Game State
+        class GameState {
+            constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.holdCanvas = document.getElementById(holdCanvasId);
+                this.holdCtx = this.holdCanvas.getContext('2d');
+                this.queueCanvas = document.getElementById(queueCanvasId);
+                this.queueCtx = this.queueCanvas.getContext('2d');
+                this.playerId = playerId;
+                
+                // Initialize seeded random generator
+                this.rng = new SeededRandom(seed);
+                
+                this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+                this.currentPiece = null;
+                this.currentX = 0;
+                this.currentY = 0;
+                this.currentRotation = 0;
+                this.holdPiece = null;
+                this.canHold = true;
+                this.bag = [];
+                this.queue = [];
+                this.gravity = 1000;
+                this.lastGravityTime = 0;
+                this.gameStartTime = Date.now();
+                
+                this.lockDelay = 500;
+                this.lockDelayTimer = 0;
+                this.isTouchingGround = false;
+                this.maxLockResets = 15;
+                this.lockResetCount = 0;
+                this.hardDropCooldown = 0;
+                this.hardDropCooldownFrames = 10;
+                
+                this.piecesPlaced = 0;
+                this.attacksSent = 0;
+                this.b2bCounter = 0;
+                this.comboCounter = -1;
+                this.lastClearWasB2B = false;
+                
+                this.dasTimer = 0;
+                this.dasDirection = null;
+                this.arrTimer = 0;
+                this.dcdTimer = 0;
+                this.softDropActive = false;
+                
+                // Track last move for T-spin detection
+                this.lastMoveWasRotation = false;
+                
+                // Garbage queue system
+                this.pendingGarbage = [];
+                this.garbageCanceled = 0;
+                
+                this.initQueue();
+            }
+            
+            initQueue() {
+                for (let i = 0; i < 6; i++) {
+                    this.queue.push(this.getNextPiece());
+                }
+            }
+            
+            getNextPiece() {
+                if (this.bag.length === 0) {
+                    this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+                    // Fisher-Yates shuffle with seeded random
+                    for (let i = this.bag.length - 1; i > 0; i--) {
+                        const j = this.rng.nextInt(i + 1);
+                        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
+                    }
+                }
+                return this.bag.pop();
+            }
+            
+            getSpawnColumn(pieceType) {
+                // Spawn columns based on piece type
+                const spawnColumns = {
+                    'O': 4,  // Column 5 (0-indexed: 4)
+                    'T': 3,  // Column 4 (0-indexed: 3)
+                    'Z': 3,  // Column 4
+                    'I': 3,  // Column 4
+                    'L': 3,  // Column 4
+                    'J': 3,  // Column 4
+                    'S': 3   // Column 4
+                };
+                return spawnColumns[pieceType] || 3;
+            }
+            
+            spawnPiece() {
+                const pieceType = this.queue.shift();
+                this.queue.push(this.getNextPiece());
+                this.currentPiece = pieceType;
+                this.currentRotation = 0;
+                this.currentX = this.getSpawnColumn(pieceType);
+                this.currentY = 0;
+                this.canHold = true;
+                this.lockDelayTimer = 0;
+                this.lockResetCount = 0;
+                this.isTouchingGround = false;
+                this.hardDropCooldown = 0;
+                this.lastMoveWasRotation = false; // Reset on spawn
+                
+                // Allow piece to spawn even if overlapping - player can move/rotate it
+                // Only game over if piece locks while overlapping
+                return true;
+            }
+            
+            isValidPosition(x, y, rotation) {
+                const shape = SHAPES[this.currentPiece].shape[rotation];
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            const newX = x + col;
+                            const newY = y + row;
+                            if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
+                            if (newY >= 0 && this.board[newY][newX]) return false;
+                        }
+                    }
+                }
+                return true;
+            }
+            
+            rotate(direction) {
+                const oldRotation = this.currentRotation;
+                let newRotation;
+                
+                if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
+                else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
+                else if (direction === '180') newRotation = (oldRotation + 2) % 4;
+                
+                const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
+                                   this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+                const rotations = ['0', 'R', '2', 'L'];
+                const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
+                const kicks = kickTable[kickKey] || [[0, 0]];
+                
+                for (const [dx, dy] of kicks) {
+                    if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newRotation)) {
+                        this.currentX += dx;
+                        this.currentY -= dy;
+                        this.currentRotation = newRotation;
+                        this.lastMoveWasRotation = true; // Mark that rotation happened
+                        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+                            this.lockDelayTimer = 0;
+                            this.lockResetCount++;
+                        }
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            move(dx) {
+                if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
+                    this.currentX += dx;
+                    this.lastMoveWasRotation = false; // Movement, not rotation
+                    if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+                        this.lockDelayTimer = 0;
+                        this.lockResetCount++;
+                    }
+                    return true;
+                }
+                return false;
+            }
+            
+            softDrop() {
+                const sdf = document.getElementById('sdf').value;
+                const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
+                
+                if (multiplier === Infinity) {
+                    // Instant drop like hard drop but don't lock
+                    while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                        this.currentY++;
+                    }
+                    this.lastMoveWasRotation = false;
+                    return true;
+                } else {
+                    // Normal soft drop - just move down one cell if possible
+                    if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                        this.currentY++;
+                        this.lastMoveWasRotation = false;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            hardDrop() {
+                const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+                if (preventMissdrop && this.hardDropCooldown > 0) return true;
+                
+                while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                    this.currentY++;
+                }
+                this.lastMoveWasRotation = false; // Hard drop is not rotation
+                return this.lockPiece(); // Return lock result (false = game over)
+            }
+            
+            lockPiece() {
+                // Store piece info BEFORE locking for spin detection
+                const pieceType = this.currentPiece;
+                const pieceX = this.currentX;
+                const pieceY = this.currentY;
+                const pieceRotation = this.currentRotation;
+                const wasRotation = this.lastMoveWasRotation;
+                
+                const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+                
+                // Check if piece is overlapping blocks when trying to lock
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            const boardY = this.currentY + row;
+                            const boardX = this.currentX + col;
+                            
+                            // Game over if piece locks while overlapping existing blocks
+                            if (boardY >= 0 && this.board[boardY][boardX]) {
+                                return false; // Signal game over
+                            }
+                            
+                            if (boardY >= 0) {
+                                this.board[boardY][boardX] = this.currentPiece;
+                            }
+                        }
+                    }
+                }
+                
+                this.piecesPlaced++;
+                this.dcdTimer = parseInt(document.getElementById('dcd').value);
+                this.lockDelayTimer = 0;
+                this.lockResetCount = 0;
+                this.isTouchingGround = false;
+                
+                // Pass the piece info to clearLines for spin detection
+                this.clearLines(pieceType, pieceX, pieceY, pieceRotation, wasRotation);
+                return true; // Lock successful
+            }
+            
+            clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation, lastMoveWasRotation) {
+                const clearedRows = [];
+                
+                // Find all filled rows
+                for (let row = 0; row < ROWS; row++) {
+                    if (this.board[row].every(cell => cell !== 0)) {
+                        clearedRows.push(row);
+                    }
+                }
+                
+                const linesCleared = clearedRows.length;
+                
+                if (linesCleared > 0) {
+                    // Remove all cleared rows at once
+                    for (let i = clearedRows.length - 1; i >= 0; i--) {
+                        this.board.splice(clearedRows[i], 1);
+                    }
+                    
+                    // Add empty rows at the top
+                    for (let i = 0; i < linesCleared; i++) {
+                        this.board.unshift(Array(COLS).fill(0));
+                    }
+                    
+                    // Check spin using the stored piece position and last move type
+                    const isSpin = this.checkSpin(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation, lastMoveWasRotation);
+                    const isAllClear = this.board.every(row => row.every(cell => cell === 0));
+                    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPieceType);
+                    
+                    // B2B logic
+                    const isB2BMove = linesCleared === 4 || isSpin;
+                    if (isB2BMove) {
+                        if (this.lastClearWasB2B) {
+                            this.b2bCounter++;
+                            const b2bBonus = Math.floor(this.b2bCounter / 5);
+                            attack += b2bBonus;
+                        } else {
+                            this.b2bCounter = 1;
+                        }
+                        this.lastClearWasB2B = true;
+                    } else {
+                        this.b2bCounter = 0;
+                        this.lastClearWasB2B = false;
+                    }
+                    
+                    // Combo logic
+                    this.comboCounter++;
+                    if (this.comboCounter >= 4) attack += 1;
+                    
+                    // Garbage canceling
+                    if (this.pendingGarbage.length > 0) {
+                        let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
+                        
+                        if (attack >= totalPending) {
+                            // Cancel all pending garbage and send remaining attack
+                            attack -= totalPending;
+                            this.pendingGarbage = [];
+                            addChatMessage(`Canceled ${totalPending} garbage lines!`, 'System');
+                        } else {
+                            // Cancel part of pending garbage
+                            let remaining = attack;
+                            this.pendingGarbage = this.pendingGarbage.filter(g => {
+                                if (remaining >= g.lines) {
+                                    remaining -= g.lines;
+                                    return false;
+                                } else if (remaining > 0) {
+                                    g.lines -= remaining;
+                                    remaining = 0;
+                                    return true;
+                                }
+                                return true;
+                            });
+                            addChatMessage(`Canceled ${attack} garbage lines!`, 'System');
+                            attack = 0;
+                        }
+                    }
+                    
+                    this.attacksSent += attack;
+                    if (attack > 0) {
+                        this.sendAttack(attack);
+                    }
+                } else {
+                    this.comboCounter = -1;
+                    
+                    // Apply pending garbage when placing a piece without clearing
+                    if (this.pendingGarbage.length > 0) {
+                        this.applyGarbage();
+                    }
+                }
+                
+                this.updateStats();
+            }
+            
+            checkSpin(pieceType, pieceX, pieceY, pieceRotation, lastMoveWasRotation) {
+                // Only check for spins if last move was a rotation
+                if (!lastMoveWasRotation) return false;
+                
+                if (pieceType === 'T') {
+                    return this.checkTSpin(pieceX, pieceY, pieceRotation);
+                }
+                // For other pieces, could implement other spin detection
+                return false;
+            }
+            
+            checkTSpin(pieceX, pieceY, pieceRotation) {
+                // T-spin detection using 3-corner rule
+                // Check corners of the T-piece bounding box (3x3 grid)
+                // We need to check BEFORE the piece was added to board, but it's already there
+                // So we'll check against the current board state but ignore T pieces in corners
+                
+                const corners = [
+                    [pieceX, pieceY],           // Top-left
+                    [pieceX + 2, pieceY],       // Top-right
+                    [pieceX, pieceY + 2],       // Bottom-left
+                    [pieceX + 2, pieceY + 2]    // Bottom-right
+                ];
+                
+                let filledCorners = 0;
+                for (const [x, y] of corners) {
+                    // Check if corner is out of bounds or filled
+                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) {
+                        filledCorners++;
+                    } else if (this.board[y][x] !== 0) {
+                        filledCorners++;
+                    }
+                }
+                
+                // T-spin requires at least 3 out of 4 corners to be filled
+                return filledCorners >= 3;
+            }
+            
+            calculateAttack(lines, isSpin, isAllClear, pieceType) {
+                let attack = 0;
+                
+                if (isAllClear) {
+                    attack = lines === 4 ? 10 : 8;
+                } else if (pieceType === 'T' && isSpin) {
+                    // T-Spin attack values
+                    if (lines === 1) attack = 2;
+                    else if (lines === 2) attack = 4;
+                    else if (lines === 3) attack = 6;
+                } else if (isSpin) {
+                    // Other piece spins
+                    attack = lines;
+                } else {
+                    // Normal clears
+                    if (lines === 4) attack = 4;
+                    else if (lines === 3) attack = 2;
+                    else if (lines === 2) attack = 1;
+                }
+                
+                return attack;
+            }
+            
+            sendAttack(lines) {
+                if (conn && conn.open && lines > 0) {
+                    // Cap at 10 lines per attack
+                    const cappedLines = Math.min(lines, 10);
+                    conn.send({
+                        type: 'attack',
+                        lines: cappedLines
+                    });
+                }
+            }
+            
+            receiveAttack(lines) {
+                // Add to pending garbage queue with seeded random hole
+                this.pendingGarbage.push({
+                    lines: lines,
+                    hole: this.rng.nextInt(COLS)
+                });
+            }
+            
+            applyGarbage() {
+                if (this.pendingGarbage.length === 0) return;
+                
+                let totalLines = 0;
+                let alignedHole = null;
+                
+                // Group consecutive attacks
+                for (const garbage of this.pendingGarbage) {
+                    totalLines += garbage.lines;
+                    
+                    // For attacks of 2+ lines, align the hole
+                    if (garbage.lines >= 2) {
+                        alignedHole = garbage.hole;
+                    }
+                }
+                
+                // Remove rows from top
+                for (let i = 0; i < totalLines && i < ROWS; i++) {
+                    this.board.shift();
+                }
+                
+                // Add garbage rows at bottom
+                let linesAdded = 0;
+                for (const garbage of this.pendingGarbage) {
+                    const useAlignedHole = garbage.lines >= 2;
+                    const hole = useAlignedHole ? garbage.hole : this.rng.nextInt(COLS);
+                    
+                    for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
+                        const garbageLine = Array(COLS).fill('G');
+                        garbageLine[hole] = 0;
+                        this.board.push(garbageLine);
+                        linesAdded++;
+                    }
+                }
+                
+                addChatMessage(`Received ${totalLines} garbage lines!`, 'System');
+                this.pendingGarbage = [];
+            }
+            
+            holdCurrentPiece() {
+                if (!this.canHold) return false;
+                
+                if (this.holdPiece === null) {
+                    this.holdPiece = this.currentPiece;
+                    this.spawnPiece();
+                } else {
+                    const temp = this.holdPiece;
+                    this.holdPiece = this.currentPiece;
+                    this.currentPiece = temp;
+                    this.currentRotation = 0;
+                    this.currentX = this.getSpawnColumn(temp);
+                    this.currentY = 0;
+                }
+                
+                this.canHold = false;
+                this.lastMoveWasRotation = false; // Reset on hold
+                return true;
+            }
+            
+            updateStats() {
+                const elapsed = (Date.now() - this.gameStartTime) / 1000;
+                const pps = this.piecesPlaced / elapsed;
+                const apm = (this.attacksSent / elapsed) * 60;
+                
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
+            }
+            
+            getState() {
+                // Return current game state for opponent to display
+                return {
+                    board: this.board.map(row => [...row]),
+                    currentPiece: this.currentPiece,
+                    currentX: this.currentX,
+                    currentY: this.currentY,
+                    currentRotation: this.currentRotation,
+                    holdPiece: this.holdPiece,
+                    queue: [...this.queue],
+                    piecesPlaced: this.piecesPlaced,
+                    attacksSent: this.attacksSent,
+                    b2bCounter: this.b2bCounter,
+                    comboCounter: this.comboCounter
+                };
+            }
+            
+            setState(state) {
+                // Update opponent's displayed state
+                this.board = state.board.map(row => [...row]);
+                this.currentPiece = state.currentPiece;
+                this.currentX = state.currentX;
+                this.currentY = state.currentY;
+                this.currentRotation = state.currentRotation;
+                this.holdPiece = state.holdPiece;
+                this.queue = [...state.queue];
+                this.piecesPlaced = state.piecesPlaced;
+                this.attacksSent = state.attacksSent;
+                this.b2bCounter = state.b2bCounter;
+                this.comboCounter = state.comboCounter;
+                
+                // Update stats display
+                const elapsed = (Date.now() - this.gameStartTime) / 1000;
+                const pps = this.piecesPlaced / elapsed;
+                const apm = (this.attacksSent / elapsed) * 60;
+                
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter;
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter);
+            }
+            
+            draw() {
+                this.ctx.fillStyle = '#0a0e27';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                this.ctx.strokeStyle = 'rgba(139, 157, 195, 0.1)';
+                this.ctx.lineWidth = 1;
+                for (let i = 0; i <= COLS; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(i * BLOCK_SIZE, 0);
+                    this.ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                for (let i = 0; i <= ROWS; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, i * BLOCK_SIZE);
+                    this.ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (this.board[row][col]) {
+                            const color = this.board[row][col] === 'G' ? '#666666' : 
+                                         SHAPES[this.board[row][col]].color;
+                            this.drawBlock(this.ctx, col * BLOCK_SIZE, row * BLOCK_SIZE, color);
+                        }
+                    }
+                }
+                
+                if (this.currentPiece) {
+                    let ghostY = this.currentY;
+                    while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
+                        ghostY++;
+                    }
+                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, ghostY, 
+                                  this.currentRotation, 0.3);
+                }
+                
+                if (this.currentPiece) {
+                    this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, 
+                                  this.currentRotation);
+                }
+                
+                this.drawHold();
+                this.drawQueue();
+            }
+            
+            drawBlock(ctx, x, y, color, alpha = 1.0) {
+                ctx.fillStyle = color;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, 6);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.fillRect(x + 2, y + BLOCK_SIZE - 8, BLOCK_SIZE - 4, 6);
+                ctx.globalAlpha = 1.0;
+            }
+            
+            drawPiece(ctx, pieceType, x, y, rotation, alpha = 1.0) {
+                const shape = SHAPES[pieceType].shape[rotation];
+                const color = SHAPES[pieceType].color;
+                
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            this.drawBlock(ctx, (x + col) * BLOCK_SIZE, 
+                                         (y + row) * BLOCK_SIZE, color, alpha);
+                        }
+                    }
+                }
+            }
+            
+            drawHold() {
+                this.holdCtx.fillStyle = '#0a0e27';
+                this.holdCtx.fillRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
+                
+                if (this.holdPiece) {
+                    const shape = SHAPES[this.holdPiece].shape[0];
+                    const color = SHAPES[this.holdPiece].color;
+                    const offsetX = (this.holdCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
+                    const offsetY = (this.holdCanvas.height - shape.length * PREVIEW_BLOCK_SIZE) / 2;
+                    
+                    for (let row = 0; row < shape.length; row++) {
+                        for (let col = 0; col < shape[row].length; col++) {
+                            if (shape[row][col]) {
+                                this.holdCtx.fillStyle = color;
+                                this.holdCtx.fillRect(
+                                    offsetX + col * PREVIEW_BLOCK_SIZE,
+                                    offsetY + row * PREVIEW_BLOCK_SIZE,
+                                    PREVIEW_BLOCK_SIZE - 1,
+                                    PREVIEW_BLOCK_SIZE - 1
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            
+            drawQueue() {
+                this.queueCtx.fillStyle = '#0a0e27';
+                this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
+                
+                for (let i = 0; i < 6; i++) {
+                    const pieceType = this.queue[i];
+                    const shape = SHAPES[pieceType].shape[0];
+                    const color = SHAPES[pieceType].color;
+                    const offsetX = (this.queueCanvas.width - shape[0].length * PREVIEW_BLOCK_SIZE) / 2;
+                    const offsetY = i * 80 + (80 - shape.length * PREVIEW_BLOCK_SIZE) / 2;
+                    
+                    for (let row = 0; row < shape.length; row++) {
+                        for (let col = 0; col < shape[row].length; col++) {
+                            if (shape[row][col]) {
+                                this.queueCtx.fillStyle = color;
+                                this.queueCtx.fillRect(
+                                    offsetX + col * PREVIEW_BLOCK_SIZE,
+                                    offsetY + row * PREVIEW_BLOCK_SIZE,
+                                    PREVIEW_BLOCK_SIZE - 1,
+                                    PREVIEW_BLOCK_SIZE - 1
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
-      }
-    }
-    this.piecesPlaced++;
-    this.lockDelayTimer = 0;
-    this.lockResetCount = 0;
-    this.isTouchingGround = false;
-    this.clearLines(this.currentPiece, this.currentX, this.currentY, this.currentRotation);
-    this.spawnPiece();
-    return true;
-  }
-
-  clearLines(lastPieceType, lastX, lastY, lastRotation){
-    const cleared = [];
-    for(let r=0;r<ROWS;r++){
-      if(this.board[r].every(cell => cell !== 0)) cleared.push(r);
-    }
-    const lines = cleared.length;
-    if(lines > 0){
-      for(let i=cleared.length-1;i>=0;i--) this.board.splice(cleared[i],1);
-      for(let i=0;i<lines;i++) this.board.unshift(Array(COLS).fill(0));
-      const isSpin = (lastPieceType === 'T') && this.checkTSpin(lastX, lastY);
-      const isAllClear = this.board.every(row => row.every(cell => cell === 0));
-      let attack = this.calculateAttack(lines, isSpin, isAllClear, lastPieceType);
-      const isB2BMove = (lines === 4) || isSpin;
-
-      // B2B bonus: +1 if this move is B2B and previous was also B2B
-      if(isB2BMove && this.lastClearWasB2B) attack += 1;
-
-      // update B2B state
-      this.lastClearWasB2B = isB2BMove;
-
-      // combo bonus: add comboCounter (if >=1)
-      if(this.comboCounter >= 0){
-        attack += Math.max(0, this.comboCounter);
-      }
-
-      // pending garbage cancellation
-      if(this.pendingGarbage.length > 0 && attack > 0){
-        let totalPending = this.pendingGarbage.reduce((s,g)=>s+g.lines,0);
-        if(attack >= totalPending){
-          attack -= totalPending;
-          this.pendingGarbage = [];
-          addChatMessage(`Canceled ${totalPending} garbage lines!`, 'System');
-        } else {
-          let remaining = attack;
-          this.pendingGarbage = this.pendingGarbage.filter(g=>{
-            if(remaining >= g.lines){ remaining -= g.lines; return false; }
-            if(remaining > 0){ g.lines -= remaining; remaining = 0; return true; }
-            return true;
-          });
-          addChatMessage(`Canceled ${attack} garbage lines!`, 'System');
-          attack = 0;
+        
+        // Game state instances
+        let gameState1 = null;
+        let gameState2 = null;
+        let gameRunning = false;
+        
+        // Key bindings
+        const keyBindings = {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            softDrop: 'ArrowDown',
+            hardDrop: ' ',
+            rotateCW: 'ArrowUp',
+            rotateCCW: 'z',
+            rotate180: 'x',
+            hold: 'c'
+        };
+        
+        // Setup key binding listeners
+        Object.keys(keyBindings).forEach(action => {
+            const input = document.getElementById(`key${action.charAt(0).toUpperCase() + action.slice(1)}`);
+            input.addEventListener('click', () => {
+                input.value = 'Press a key...';
+                const listener = (e) => {
+                    e.preventDefault();
+                    keyBindings[action] = e.key;
+                    input.value = e.key;
+                    document.removeEventListener('keydown', listener);
+                };
+                document.addEventListener('keydown', listener);
+            });
+        });
+        
+        // Chat functions
+        function addChatMessage(message, sender = 'System') {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.textContent = `${sender}: ${message}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
-      }
-
-      this.attacksSent += attack;
-      if(attack > 0) this.sendAttack(attack);
-
-      // update combo and b2b counters
-      this.comboCounter = (this.comboCounter >= 0) ? this.comboCounter + 1 : 0;
-      if(isB2BMove){
-        if(this.b2bCounter > 0) this.b2bCounter++;
-        else this.b2bCounter = 1;
-      } else {
-        this.b2bCounter = 0;
-      }
-    } else {
-      this.comboCounter = -1;
-      if(this.pendingGarbage.length > 0) this.applyGarbage();
-      this.lastClearWasB2B = false;
-    }
-    this.updateStats();
-  }
-
-  checkTSpin(x,y){
-    const corners = [
-      [x, y],
-      [x+2, y],
-      [x, y+2],
-      [x+2, y+2]
-    ];
-    let filled = 0;
-    for(const [cx,cy] of corners){
-      if(cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS || this.board[cy][cx]) filled++;
-    }
-    return filled >= 3;
-  }
-
-  calculateAttack(lines, isSpin, isAllClear, pieceType){
-    // Standard-ish attack mapping:
-    // Normal clears: 0,1,2,4 for 1..4 lines
-    // T-spin: 2,4,6 for 1..3 lines
-    // Perfect clear: 10
-    let attack = 0;
-    if(isAllClear){
-      attack = 10;
-    } else if(isSpin){
-      if(lines === 1) attack = 2;
-      else if(lines === 2) attack = 4;
-      else if(lines === 3) attack = 6;
-    } else {
-      if(lines === 1) attack = 0;
-      else if(lines === 2) attack = 1;
-      else if(lines === 3) attack = 2;
-      else if(lines === 4) attack = 4;
-    }
-    return attack;
-  }
-
-  sendAttack(lines){
-    if(conn && conn.open && lines > 0){
-      const capped = Math.min(lines, 10);
-      conn.send({ type:'attack', lines: capped });
-    }
-  }
-
-  receiveAttack(lines){
-    this.pendingGarbage.push({ lines: lines, hole: this.rng.nextInt(COLS) });
-  }
-
-  applyGarbage(){
-    if(this.pendingGarbage.length === 0) return;
-    let total = this.pendingGarbage.reduce((s,g)=>s+g.lines,0);
-    for(let i=0;i<total && i<ROWS;i++) this.board.shift();
-    for(const g of this.pendingGarbage){
-      const hole = g.hole;
-      for(let i=0;i<g.lines;i++){
-        const row = Array(COLS).fill('G');
-        row[hole] = 0;
-        this.board.push(row);
-      }
-    }
-    addChatMessage(`Received ${total} garbage lines!`, 'System');
-    this.pendingGarbage = [];
-  }
-
-  updateStats(){
-    const elapsed = Math.max(1, (nowMs() - this.gameStartTime)/1000);
-    const pps = this.piecesPlaced / elapsed;
-    const apm = (this.attacksSent / elapsed) * 60;
-    const ppsEl = document.getElementById(`pps${this.playerId}`);
-    const apmEl = document.getElementById(`apm${this.playerId}`);
-    const b2bEl = document.getElementById(`b2b${this.playerId}`);
-    const comboEl = document.getElementById(`combo${this.playerId}`);
-    if(ppsEl) ppsEl.textContent = pps.toFixed(2);
-    if(apmEl) apmEl.textContent = apm.toFixed(2);
-    if(b2bEl) b2bEl.textContent = this.b2bCounter;
-    if(comboEl) comboEl.textContent = Math.max(0, this.comboCounter);
-  }
-
-  getState(){
-    return {
-      board: deepClone(this.board),
-      currentPiece: this.currentPiece,
-      currentX: this.currentX,
-      currentY: this.currentY,
-      currentRotation: this.currentRotation,
-      holdPiece: this.holdPiece,
-      queue: [...this.queue],
-      piecesPlaced: this.piecesPlaced,
-      attacksSent: this.attacksSent,
-      b2bCounter: this.b2bCounter,
-      comboCounter: this.comboCounter
-    };
-  }
-
-  setState(state){
-    if(!state) return;
-    this.board = state.board.map(r=>[...r]);
-    this.currentPiece = state.currentPiece;
-    this.currentX = state.currentX;
-    this.currentY = state.currentY;
-    this.currentRotation = state.currentRotation;
-    this.holdPiece = state.holdPiece;
-    this.queue = [...state.queue];
-    this.piecesPlaced = state.piecesPlaced;
-    this.attacksSent = state.attacksSent;
-    this.b2bCounter = state.b2bCounter;
-    this.comboCounter = state.comboCounter;
-    this.updateStats();
-  }
-
-  tick(deltaMs){
-    if(this.spawnCooldownTimer > 0){
-      this.spawnCooldownTimer -= deltaMs;
-      if(this.spawnCooldownTimer <= 0) this.processSpawnBuffer();
-    }
-
-    this.gravityTimer += deltaMs;
-    if(this.gravityTimer >= this.gravityMs){
-      this.gravityTimer = 0;
-      if(!this.softDrop()){
-        this.isTouchingGround = true;
-        this.lockDelayTimer += this.gravityMs;
-        if(this.lockDelayTimer >= this.lockDelayMs || this.lockResetCount >= this.maxLockResets){
-          const ok = this.lockPiece();
-          if(!ok) return false;
+        
+        document.getElementById('sendChatBtn').addEventListener('click', () => {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (message && conn && conn.open) {
+                conn.send({
+                    type: 'chat',
+                    message: message
+                });
+                addChatMessage(message, 'You');
+                input.value = '';
+            }
+        });
+        
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('sendChatBtn').click();
+            }
+        });
+        
+        // PeerJS connection functions
+        function initializePeer() {
+            // Using public PeerJS cloud server
+            peer = new Peer({
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            peer.on('open', (id) => {
+                myPeerId = id;
+                document.getElementById('peerIdDisplay').textContent = id;
+                document.getElementById('myPeerId').classList.remove('hidden');
+                addChatMessage(`Your Peer ID: ${id}`);
+                addChatMessage('Share this ID with your opponent to let them join!');
+            });
+            
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+                addChatMessage('Opponent connected!');
+                document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                
+                // Host generates seed and sends to client
+                gameSeed = Math.floor(Math.random() * 1000000000);
+                addChatMessage(`Generated game seed: ${gameSeed}`, 'System');
+                
+                setTimeout(() => {
+                    conn.send({ 
+                        type: 'start',
+                        seed: gameSeed 
+                    });
+                    startGame();
+                }, 1000);
+            });
+            
+            peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                addChatMessage(`Connection error: ${err.type}`);
+            });
         }
-      } else {
-        this.isTouchingGround = false;
-        this.lockDelayTimer = 0;
-      }
-    }
-    return true;
-  }
-
-  draw(){
-    clearCanvas(this.ctx, this.canvas.width, this.canvas.height);
-    this.ctx.fillStyle = '#0a0e27';
-    this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
-    for(let r=0;r<ROWS;r++){
-      for(let c=0;c<COLS;c++){
-        const cell = this.board[r][c];
-        if(cell){
-          const color = (cell === 'G') ? '#666' : SHAPES[cell].color;
-          drawBlock(this.ctx, c*BLOCK_SIZE, r*BLOCK_SIZE, color);
+        
+        function setupConnection() {
+            conn.on('data', (data) => {
+                if (data.type === 'chat') {
+                    addChatMessage(data.message, 'Opponent');
+                } else if (data.type === 'attack') {
+                    if (gameState1) {
+                        gameState1.receiveAttack(data.lines);
+                    }
+                } else if (data.type === 'start') {
+                    // Client receives seed from host
+                    if (data.seed) {
+                        gameSeed = data.seed;
+                        addChatMessage(`Received game seed: ${gameSeed}`, 'System');
+                    }
+                    startGame();
+                } else if (data.type === 'gameState') {
+                    // Update opponent's board display
+                    if (gameState2) {
+                        gameState2.setState(data.state);
+                    }
+                } else if (data.type === 'restart') {
+                    // Receive new seed for restart
+                    if (data.seed) {
+                        gameSeed = data.seed;
+                    }
+                    restartGame();
+                } else if (data.type === 'gameOver') {
+                    // Opponent lost, you win!
+                    gameRunning = false;
+                    addChatMessage('Opponent lost! You win! 🎉', 'System');
+                    document.getElementById('gameStatus').textContent = 'You Win! 🏆';
+                }
+            });
+            
+            conn.on('close', () => {
+                addChatMessage('Opponent disconnected');
+                document.getElementById('gameStatus').textContent = 'Opponent disconnected';
+                gameRunning = false;
+            });
         }
-      }
-    }
-    if(this.currentPiece){
-      let gy = this.currentY;
-      while(this.isValidPosition(this.currentX, gy+1, this.currentRotation)) gy++;
-      this.drawPiece(this.ctx, this.currentPiece, this.currentX, gy, this.currentRotation, 0.25);
-      this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, this.currentRotation, 1.0);
-    }
-    this.drawHold();
-    this.drawQueue();
-  }
-
-  drawPiece(ctx, pieceType, x, y, rotation, alpha=1){
-    const shape = SHAPES[pieceType].shape[rotation];
-    const color = SHAPES[pieceType].color;
-    for(let r=0;r<shape.length;r++){
-      for(let c=0;c<shape[r].length;c++){
-        if(shape[r][c]){
-          drawBlock(ctx, (x+c)*BLOCK_SIZE, (y+r)*BLOCK_SIZE, color, alpha);
+        
+        function copyPeerId() {
+            const peerId = document.getElementById('peerIdDisplay').textContent;
+            navigator.clipboard.writeText(peerId).then(() => {
+                addChatMessage('Peer ID copied to clipboard!');
+            });
         }
-      }
-    }
-  }
-
-  drawHold(){
-    if(!this.holdCtx) return;
-    clearCanvas(this.holdCtx, this.holdCanvas.width, this.holdCanvas.height);
-    this.holdCtx.fillStyle = '#0a0e27';
-    this.holdCtx.fillRect(0,0,this.holdCanvas.width,this.holdCanvas.height);
-    if(this.holdPiece){
-      const shape = SHAPES[this.holdPiece].shape[0];
-      const color = SHAPES[this.holdPiece].color;
-      const offsetX = (this.holdCanvas.width - shape[0].length*PREVIEW_BLOCK_SIZE)/2;
-      const offsetY = (this.holdCanvas.height - shape.length*PREVIEW_BLOCK_SIZE)/2;
-      for(let r=0;r<shape.length;r++){
-        for(let c=0;c<shape[r].length;c++){
-          if(shape[r][c]){
-            this.holdCtx.fillStyle = color;
-            this.holdCtx.fillRect(offsetX + c*PREVIEW_BLOCK_SIZE, offsetY + r*PREVIEW_BLOCK_SIZE, PREVIEW_BLOCK_SIZE-1, PREVIEW_BLOCK_SIZE-1);
-          }
+        
+        // Button handlers
+        document.getElementById('createGameBtn').addEventListener('click', () => {
+            if (!peer) {
+                initializePeer();
+                isHost = true;
+                document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
+                document.getElementById('createGameBtn').disabled = true;
+            }
+        });
+        
+        document.getElementById('joinGameBtn').addEventListener('click', () => {
+            const opponentId = document.getElementById('opponentPeerId').value.trim();
+            if (!opponentId) {
+                addChatMessage('Please enter an opponent Peer ID');
+                return;
+            }
+            
+            if (!peer) {
+                initializePeer();
+            }
+            
+            setTimeout(() => {
+                conn = peer.connect(opponentId);
+                
+                conn.on('open', () => {
+                    setupConnection();
+                    addChatMessage('Connected to opponent!');
+                    document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
+                    document.getElementById('joinGameBtn').disabled = true;
+                    
+                    // Don't send start - wait for host to send seed and start signal
+                });
+                
+                conn.on('error', (err) => {
+                    addChatMessage(`Failed to connect: ${err}`);
+                });
+            }, 1000);
+        });
+        
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            // Generate new seed for restart
+            gameSeed = Math.floor(Math.random() * 1000000000);
+            addChatMessage(`New game seed: ${gameSeed}`, 'System');
+            
+            if (conn && conn.open) {
+                conn.send({ 
+                    type: 'restart',
+                    seed: gameSeed 
+                });
+            }
+            restartGame();
+        });
+        
+        function restartGame() {
+            gameRunning = false;
+            
+            // Reset and restart
+            setTimeout(() => {
+                startGame();
+                addChatMessage('Game restarted!', 'System');
+            }, 500);
         }
-      }
-    }
-  }
-
-  drawQueue(){
-    if(!this.queueCtx) return;
-    clearCanvas(this.queueCtx, this.queueCanvas.width, this.queueCanvas.height);
-    this.queueCtx.fillStyle = '#0a0e27';
-    this.queueCtx.fillRect(0,0,this.queueCanvas.width,this.queueCanvas.height);
-    for(let i=0;i<6;i++){
-      const piece = this.queue[i];
-      if(!piece) continue;
-      const shape = SHAPES[piece].shape[0];
-      const color = SHAPES[piece].color;
-      const offsetX = (this.queueCanvas.width - shape[0].length*PREVIEW_BLOCK_SIZE)/2;
-      const offsetY = i*80 + (80 - shape.length*PREVIEW_BLOCK_SIZE)/2;
-      for(let r=0;r<shape.length;r++){
-        for(let c=0;c<shape[r].length;c++){
-          if(shape[r][c]){
-            this.queueCtx.fillStyle = color;
-            this.queueCtx.fillRect(offsetX + c*PREVIEW_BLOCK_SIZE, offsetY + r*PREVIEW_BLOCK_SIZE, PREVIEW_BLOCK_SIZE-1, PREVIEW_BLOCK_SIZE-1);
-          }
+        
+        function startGame() {
+            gameRunning = true;
+            document.getElementById('gameArea').classList.remove('hidden');
+            document.getElementById('restartBtn').classList.remove('hidden');
+            document.getElementById('gameStatus').textContent = 'Game in progress!';
+            
+            // Use shared seed for both players
+            if (!gameSeed) {
+                gameSeed = Math.floor(Math.random() * 1000000000);
+                addChatMessage(`Generated game seed: ${gameSeed}`, 'System');
+            }
+            
+            gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, gameSeed);
+            gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, gameSeed);
+            
+            // Sync start time for both boards
+            const startTime = Date.now();
+            gameState1.gameStartTime = startTime;
+            gameState2.gameStartTime = startTime;
+            
+            gameState1.spawnPiece();
+            gameState2.spawnPiece();
+            
+            addChatMessage('Game started! Good luck!');
+            
+            gameLoop();
         }
-      }
-    }
-  }
-}
-
-/* -------------------------
-   Global game instances & loop
-   ------------------------- */
-let gameState1 = null, gameState2 = null;
-let gameRunning = false;
-let lastFrameTime = nowMs();
-let lastStateSend = nowMs();
-
-/* -------------------------
-   UI elements & key bindings
-   ------------------------- */
-const keyBindings = {
-  left: document.getElementById('keyLeft')?.value || 'ArrowLeft',
-  right: document.getElementById('keyRight')?.value || 'ArrowRight',
-  softDrop: document.getElementById('keySoftDrop')?.value || 'ArrowDown',
-  hardDrop: document.getElementById('keyHardDrop')?.value || ' ',
-  rotateCW: document.getElementById('keyRotateCW')?.value || 'ArrowUp',
-  rotateCCW: document.getElementById('keyRotateCCW')?.value || 'z',
-  rotate180: document.getElementById('keyRotate180')?.value || 'x',
-  hold: document.getElementById('keyHold')?.value || 'c'
-};
-
-['left','right','softDrop','hardDrop','rotateCW','rotateCCW','rotate180','hold'].forEach(action=>{
-  const el = document.getElementById('key' + action.charAt(0).toUpperCase() + action.slice(1));
-  if(!el) return;
-  el.addEventListener('click', ()=>{
-    el.value = 'Press a key...';
-    const listener = (e)=>{
-      e.preventDefault();
-      keyBindings[action] = e.key;
-      el.value = e.key;
-      document.removeEventListener('keydown', listener);
-    };
-    document.addEventListener('keydown', listener);
-  });
-});
-
-/* -------------------------
-   Chat helpers
-   ------------------------- */
-function addChatMessage(message, sender='System'){
-  const chatMessages = document.getElementById('chatMessages') || document.getElementById('chat');
-  if(!chatMessages) return;
-  const div = document.createElement('div');
-  div.className = 'chat-message';
-  div.textContent = `${sender}: ${message}`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-document.getElementById('sendChatBtn')?.addEventListener('click', ()=>{
-  const input = document.getElementById('chatInput');
-  if(!input) return;
-  const msg = input.value.trim();
-  if(msg && conn && conn.open){
-    conn.send({ type:'chat', message: msg });
-    addChatMessage(msg, 'You');
-    input.value = '';
-  }
-});
-document.getElementById('chatInput')?.addEventListener('keypress', (e)=>{
-  if(e.key === 'Enter') document.getElementById('sendChatBtn')?.click();
-});
-
-/* -------------------------
-   Compact PeerJS connection
-   ------------------------- */
-let peer = null, conn = null, myPeerId = null, isHost = false, gameSeed = null;
-
-function makePeer(){
-  if(peer) return;
-  peer = new Peer({ config: { iceServers: [{ urls:'stun:stun.l.google.com:19302' }] } });
-  peer.on('open', id=>{
-    myPeerId = id;
-    const disp = document.getElementById('peerIdDisplay');
-    if(disp) disp.textContent = id;
-    document.getElementById('myPeerId')?.classList.remove('hidden');
-    addChatMessage(`Your Peer ID: ${id}`);
-  });
-  peer.on('connection', c=>{
-    conn = c;
-    wireConnection();
-    isHost = true;
-    gameSeed = Math.floor(Math.random()*1e9);
-    addChatMessage(`Generated game seed: ${gameSeed}`, 'System');
-    setTimeout(()=>{
-      if(conn && conn.open) conn.send({ type:'start', seed: gameSeed });
-      startGame();
-    }, 600);
-  });
-  peer.on('error', err=>{
-    addChatMessage(`Peer error: ${err && err.type ? err.type : err}`, 'System');
-  });
-}
-
-function wireConnection(){
-  if(!conn) return;
-  conn.on('data', data=>{
-    if(!data || !data.type) return;
-    switch(data.type){
-      case 'chat': addChatMessage(data.message, 'Opponent'); break;
-      case 'attack': if(gameState1) gameState1.receiveAttack(data.lines); break;
-      case 'start':
-        if(data.seed){ gameSeed = data.seed; addChatMessage(`Received seed: ${gameSeed}`, 'System'); }
-        startGame();
-        break;
-      case 'gameState':
-        if(gameState2) gameState2.setState(data.state);
-        break;
-      case 'restart':
-        if(data.seed) gameSeed = data.seed;
-        restartGame();
-        break;
-      case 'gameOver':
-        gameRunning = false;
-        addChatMessage('Opponent lost! You win!', 'System');
-        document.getElementById('gameStatus').textContent = 'You Win!';
-        break;
-    }
-  });
-  conn.on('close', ()=>{
-    addChatMessage('Opponent disconnected', 'System');
-    document.getElementById('gameStatus').textContent = 'Opponent disconnected';
-    gameRunning = false;
-  });
-  conn.on('error', err=>{
-    addChatMessage(`Connection error: ${err}`, 'System');
-  });
-}
-
-function createGame(){
-  makePeer();
-  document.getElementById('createGameBtn').disabled = true;
-  document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
-}
-
-function joinGame(){
-  const opponentId = document.getElementById('opponentPeerId')?.value.trim();
-  if(!opponentId){ addChatMessage('Please enter an opponent Peer ID', 'System'); return; }
-  makePeer();
-  const tryConnect = ()=>{
-    if(!myPeerId) return setTimeout(tryConnect, 200);
-    conn = peer.connect(opponentId);
-    conn.on('open', ()=>{
-      wireConnection();
-      addChatMessage('Connected to opponent!', 'System');
-      document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
-      document.getElementById('joinGameBtn').disabled = true;
-    });
-    conn.on('error', err=> addChatMessage(`Failed to connect: ${err}`, 'System'));
-  };
-  tryConnect();
-}
-
-document.getElementById('createGameBtn')?.addEventListener('click', createGame);
-document.getElementById('joinGameBtn')?.addEventListener('click', joinGame);
-document.getElementById('restartBtn')?.addEventListener('click', ()=>{
-  gameSeed = Math.floor(Math.random()*1e9);
-  addChatMessage(`New game seed: ${gameSeed}`, 'System');
-  if(conn && conn.open) conn.send({ type:'restart', seed: gameSeed });
-  restartGame();
-});
-
-/* -------------------------
-   Start / Restart logic
-   ------------------------- */
-function restartGame(){
-  gameRunning = false;
-  setTimeout(()=>{ startGame(); addChatMessage('Game restarted!', 'System'); }, 400);
-}
-
-function startGame(){
-  gameRunning = true;
-  document.getElementById('gameArea')?.classList.remove('hidden');
-  document.getElementById('restartBtn')?.classList.remove('hidden');
-  document.getElementById('gameStatus').textContent = 'Game in progress!';
-  if(!gameSeed){ gameSeed = Math.floor(Math.random()*1e9); addChatMessage(`Generated game seed: ${gameSeed}`, 'System'); }
-  gameState1 = new GameState('gameCanvas1','holdCanvas1','queueCanvas1',1, gameSeed);
-  gameState2 = new GameState('gameCanvas2','holdCanvas2','queueCanvas2',2, gameSeed);
-  const startTime = nowMs();
-  gameState1.gameStartTime = startTime;
-  gameState2.gameStartTime = startTime;
-  gameState1.spawnPiece();
-  gameState2.spawnPiece();
-  lastFrameTime = nowMs();
-  lastStateSend = nowMs();
-  requestAnimationFrame(loop);
-  addChatMessage('Game started! Good luck!', 'System');
-}
-
-/* -------------------------
-   Main loop
-   ------------------------- */
-function loop(){
-  if(!gameRunning) return;
-  const t = nowMs();
-  const delta = t - lastFrameTime;
-  lastFrameTime = t;
-
-  if(gameState1){
-    const alive = gameState1.tick(delta);
-    if(alive === false){
-      addChatMessage('You lost! Click Restart to play again.', 'System');
-      document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
-      gameRunning = false;
-      if(conn && conn.open) conn.send({ type:'gameOver' });
-      return;
-    }
-
-    gameState1.draw();
-    if(gameState2) gameState2.draw();
-
-    if(conn && conn.open && (t - lastStateSend) >= STATE_SEND_INTERVAL){
-      conn.send({ type:'gameState', state: gameState1.getState() });
-      lastStateSend = t;
-    }
-  }
-
-  requestAnimationFrame(loop);
-}
-
-/* -------------------------
-   Input handling (DAS/ARR + soft drop multiplier/infinite)
-   - Prevents default browser behavior for game keys
-   - Soft drop multiplier: value is numeric multiplier (e.g., 6) or "infinite"
-   - If "infinite": move piece to lowest position without locking (once per press)
-   ------------------------- */
-const keysHeld = {}; // tracks held keys
-const dasState = {}; // key -> { dasTimer, arrTimer, direction }
-
-function getDasMs(){ return parseInt(document.getElementById('das')?.value || '167', 10); }
-function getArrMs(){ return parseInt(document.getElementById('arr')?.value || '0', 10); }
-function getDcdMs(){ return parseInt(document.getElementById('dcd')?.value || '0', 10); }
-function getSoftDropSetting(){
-  const el = document.getElementById('softDropRate');
-  if(!el) return { type:'mult', value:1 };
-  const v = (el.value || '').toString().trim().toLowerCase();
-  if(v === 'infinite' || v === 'inf' || v === '∞') return { type:'infinite' };
-  const n = parseFloat(v);
-  if(!isNaN(n) && n > 0) return { type:'mult', value: n };
-  return { type:'mult', value: 1 };
-}
-
-// Helper: keys that should prevent default to avoid page scrolling
-const GAME_KEYS = new Set([
-  keyBindings.left, keyBindings.right, keyBindings.softDrop,
-  keyBindings.hardDrop, keyBindings.rotateCW, keyBindings.rotateCCW,
-  keyBindings.rotate180, keyBindings.hold, ' ', 'Shift'
-]);
-
-document.addEventListener('keydown', (e)=>{
-  const active = document.activeElement;
-  if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-    return;
-  }
-
-  if(GAME_KEYS.has(e.key)) e.preventDefault();
-
-  if(!gameRunning || !gameState1) return;
-
-  const wasHeld = !!keysHeld[e.key];
-  keysHeld[e.key] = true;
-
-  if(e.key === keyBindings.left){
-    if(!wasHeld) gameState1.move(-1);
-    dasState[e.key] = { dasTimer:0, arrTimer:0, direction:-1 };
-  } else if(e.key === keyBindings.right){
-    if(!wasHeld) gameState1.move(1);
-    dasState[e.key] = { dasTimer:0, arrTimer:0, direction:1 };
-  } else if(e.key === keyBindings.softDrop){
-    const s = getSoftDropSetting();
-    if(s.type === 'infinite'){
-      if(!gameState1._softDropInfiniteActive){
-        let gy = gameState1.currentY;
-        while(gameState1.isValidPosition(gameState1.currentX, gy+1, gameState1.currentRotation)) gy++;
-        gameState1.currentY = gy;
-        gameState1._softDropInfiniteActive = true;
-      }
-    } else {
-      // immediate single soft drop on press
-      gameState1.softDrop();
-    }
-  } else if(e.key === keyBindings.hardDrop){
-    const success = gameState1.hardDrop();
-    if(!success){
-      addChatMessage('You lost! Click Restart to play again.', 'System');
-      document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
-      gameRunning = false;
-      if(conn && conn.open) conn.send({ type:'gameOver' });
-    }
-  } else if(e.key === keyBindings.rotateCW){
-    gameState1.rotate('cw');
-  } else if(e.key === keyBindings.rotateCCW){
-    gameState1.rotate('ccw');
-  } else if(e.key === keyBindings.rotate180){
-    gameState1.rotate('180');
-  } else if(e.key === keyBindings.hold){
-    gameState1.holdCurrentPiece();
-  }
-});
-
-document.addEventListener('keyup', (e)=>{
-  delete keysHeld[e.key];
-  delete dasState[e.key];
-  if(e.key === keyBindings.softDrop && gameState1){
-    gameState1._softDropInfiniteActive = false;
-    gameState1._softDropTimer = 0;
-  }
-});
-
-/* DAS/ARR + soft-drop processing loop (runs ~60Hz) */
-setInterval(()=>{
-  if(!gameRunning || !gameState1) return;
-  const dasMs = getDasMs();
-  const arrMs = getArrMs();
-  const tick = 16; // ms per tick
-
-  for(const k in dasState){
-    const s = dasState[k];
-    s.dasTimer += tick;
-    if(s.dasTimer >= dasMs){
-      s.arrTimer += tick;
-      if(arrMs === 0 || s.arrTimer >= arrMs){
-        gameState1.move(s.direction);
-        s.arrTimer = 0;
-      }
-    }
-  }
-
-  if(keysHeld[keyBindings.softDrop]){
-    const setting = getSoftDropSetting();
-    if(setting.type === 'infinite'){
-      // nothing per-tick; initial press already moved piece to bottom
-    } else {
-      const mult = Math.max(0.0001, setting.value || 1);
-      const interval = Math.max(1, gameState1.gravityMs / mult);
-      gameState1._softDropTimer = (gameState1._softDropTimer || 0) + tick;
-      while(gameState1._softDropTimer >= interval){
-        gameState1._softDropTimer -= interval;
-        gameState1.softDrop();
-      }
-    }
-  } else {
-    if(gameState1) gameState1._softDropTimer = 0;
-  }
-}, 16);
-
-/* -------------------------
-   Prevent default on wheel and space when game area focused
-   ------------------------- */
-window.addEventListener('keydown', (e)=>{
-  if(GAME_KEYS.has(e.key)) e.preventDefault();
-}, { passive: false });
-
-/* -------------------------
-   Peer ID copy helper
-   ------------------------- */
-function copyPeerId(){
-  const peerId = document.getElementById('peerIdDisplay')?.textContent || '';
-  if(peerId) navigator.clipboard.writeText(peerId).then(()=> addChatMessage('Peer ID copied to clipboard!', 'System'));
-}
-window.copyPeerId = copyPeerId;
-
-/* -------------------------
-   Initialize small welcome messages
-   ------------------------- */
-addChatMessage('Welcome to Tetris Online Battle!');
-addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
-
-/* -------------------------
-   Expose internals for debugging (optional)
-   ------------------------- */
-window.__gameState1 = () => gameState1;
-window.__gameState2 = () => gameState2;
-window.__makePeer = makePeer;
-</script>
-
-    
+        
+        // Game loop
+        let lastTime = 0;
+        let lastStateSendTime = 0;
+        const STATE_SEND_INTERVAL = 50; // Send state every 50ms
+        
+        function gameLoop(timestamp = 0) {
+            if (!gameRunning) return;
+            
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            // Update Player 1
+            if (gameState1) {
+                if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
+                
+                // DCD timer countdown
+                if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
+                
+                const wasTouching = gameState1.isTouchingGround;
+                gameState1.isTouchingGround = !gameState1.isValidPosition(
+                    gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
+                );
+                
+                if (gameState1.isTouchingGround && !wasTouching) {
+                    gameState1.lockDelayTimer = 0;
+                }
+                
+                gameState1.lastGravityTime += deltaTime;
+                
+                if (gameState1.isTouchingGround) {
+                    gameState1.lockDelayTimer += deltaTime;
+                    
+                    if (gameState1.lockDelayTimer >= gameState1.lockDelay || 
+                        gameState1.lockResetCount >= gameState1.maxLockResets) {
+                        
+                        const lockSuccess = gameState1.lockPiece();
+                        
+                        if (!lockSuccess) {
+                            // Game over - piece locked while overlapping
+                            addChatMessage('You lost! Click Restart to play again.', 'System');
+                            document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
+                            gameRunning = false;
+                            
+                            // Notify opponent that you lost
+                            if (conn && conn.open) {
+                                conn.send({ type: 'gameOver' });
+                            }
+                            return;
+                        }
+                        
+                        const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+                        if (preventMissdrop) {
+                            gameState1.hardDropCooldown = gameState1.hardDropCooldownFrames;
+                        }
+                        
+                        gameState1.spawnPiece();
+                        gameState1.lastGravityTime = 0;
+                    }
+                } else {
+                    if (gameState1.lastGravityTime >= gameState1.gravity) {
+                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
+                                                       gameState1.currentRotation)) {
+                            gameState1.currentY++;
+                        }
+                        gameState1.lastGravityTime = 0;
+                    }
+                }
+                
+                // Process DAS/ARR for held movement keys
+                const dasDelay = parseInt(document.getElementById('das').value);
+                const arrDelay = parseInt(document.getElementById('arr').value);
+                
+                for (const key in dasTimers) {
+                    const timer = dasTimers[key];
+                    timer.das += deltaTime;
+                    
+                    if (timer.das >= dasDelay) {
+                        timer.arr += deltaTime;
+                        
+                        if (arrDelay === 0 || timer.arr >= arrDelay) {
+                            if (timer.direction) {
+                                gameState1.move(timer.direction);
+                            }
+                            timer.arr = 0;
+                        }
+                    }
+                }
+                
+                gameState1.draw();
+                
+                // Send game state to opponent periodically
+                if (conn && conn.open && timestamp - lastStateSendTime > STATE_SEND_INTERVAL) {
+                    conn.send({
+                        type: 'gameState',
+                        state: gameState1.getState()
+                    });
+                    lastStateSendTime = timestamp;
+                }
+            }
+            
+            // Draw opponent's board (received via network)
+            if (gameState2) {
+                gameState2.draw();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Input handling with DAS/ARR
+        const keysHeld = {};
+        const dasTimers = {};
+        
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning || !gameState1) return;
+            
+            // Prevent key repeat from triggering multiple times
+            if (keysHeld[e.key]) return;
+            keysHeld[e.key] = true;
+            
+            // Block inputs during DCD cooldown
+            const isDCDActive = gameState1.dcdTimer > 0;
+            
+            if (e.key === keyBindings.left) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.move(-1);
+                    dasTimers[e.key] = { das: 0, arr: 0, direction: -1 };
+                }
+            } else if (e.key === keyBindings.right) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.move(1);
+                    dasTimers[e.key] = { das: 0, arr: 0, direction: 1 };
+                }
+            } else if (e.key === keyBindings.softDrop) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.softDrop();
+                }
+            } else if (e.key === keyBindings.hardDrop) {
+                e.preventDefault();
+                const success = gameState1.hardDrop();
+                
+                if (!success) {
+                    // Game over from hard drop
+                    addChatMessage('You lost! Click Restart to play again.', 'System');
+                    document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
+                    gameRunning = false;
+                    
+                    // Notify opponent that you lost
+                    if (conn && conn.open) {
+                        conn.send({ type: 'gameOver' });
+                    }
+                }
+                
+                gameState1.spawnPiece();
+            } else if (e.key === keyBindings.rotateCW) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.rotate('cw');
+                }
+            } else if (e.key === keyBindings.rotateCCW) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.rotate('ccw');
+                }
+            } else if (e.key === keyBindings.rotate180) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.rotate('180');
+                }
+            } else if (e.key === keyBindings.hold) {
+                e.preventDefault();
+                if (!isDCDActive) {
+                    gameState1.holdCurrentPiece();
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            delete keysHeld[e.key];
+            delete dasTimers[e.key];
+        });
+        
+        // Initialize
+        addChatMessage('Welcome to Tetris Online Battle!');
+        addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
+    </script>
 </body>
 </html>
