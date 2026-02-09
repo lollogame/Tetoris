@@ -881,7 +881,7 @@
                 this.canHold = true;
                 this.applyInitialRotation();
                 this.consumeRotationBuffer();
-                this.rotationBuffer = null;
+                this.rotateBuffer = null;
                 this.rotationCooldown = 0;
 
                 return true;
@@ -1233,7 +1233,6 @@
                 if (this.holdPiece === null) {
                     this.holdPiece = this.currentPiece;
                     this.spawnPiece();
-                    InputManager.getInstance().resetOnSpawn();
 
                 } else {
                     const temp = this.holdPiece;
@@ -1243,6 +1242,7 @@
                     this.consumeRotationBuffer();
                 }
                 
+                InputManager.getInstance().resetOnSpawn();
                 this.canHold = false;
                 return true;
             }
@@ -1699,6 +1699,9 @@
         };
         this.heldKeys = {};
     }
+            resetOnSpawn() {
+    this.resetMovementOnSpawn();
+}
             resetMovementOnSpawn() {
     this.move.dasTimer = 0;
     this.move.arrTimer = 0;
@@ -1885,6 +1888,8 @@
                 InputManager.getInstance().reset();
                 ChatManager.addMessage('Game started! Good luck!');
                 
+                this.lastTime = 0;
+                this.lastStateSendTime = 0;
                 this.gameLoop();
             }
             
@@ -1912,7 +1917,7 @@
             gameLoop(timestamp = 0) {
                 if (!this.gameRunning) return;
                 
-                const deltaTime = timestamp - this.lastTime;
+                const deltaTime = this.lastTime === 0 ? 0 : (timestamp - this.lastTime);
                 this.lastTime = timestamp;
                 
                 GameSettings.getInstance().update();
