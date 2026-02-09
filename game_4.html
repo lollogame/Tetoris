@@ -718,9 +718,8 @@
                 this.arrTimer = 0;
                 this.dcdTimer = 0;
                 this.softDropActive = false;
-                
-                // Track last move for T-spin detection
-                this.lastMoveWasRotation = false;
+                this.softDropTimer = 0;
+                this.lastActionWasRotation = false;
                 
                 // Garbage queue system
                 this.pendingGarbage = [];
@@ -761,19 +760,39 @@
                 return spawnColumns[pieceType] || 3;
             }
             
-            spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(this.getNextPiece());
+            resetPieceState(pieceType) {
                 this.currentPiece = pieceType;
                 this.currentRotation = 0;
                 this.currentX = this.getSpawnColumn(pieceType);
                 this.currentY = 0;
-                this.canHold = true;
                 this.lockDelayTimer = 0;
                 this.lockResetCount = 0;
                 this.isTouchingGround = false;
                 this.hardDropCooldown = 0;
-                this.lastMoveWasRotation = false; // Reset on spawn
+                this.lastGravityTime = 0;
+                this.softDropTimer = 0;
+                this.lastActionWasRotation = false;
+            }
+            
+            applyInitialRotation() {
+                if (!this.currentPiece) return;
+                if (typeof keysHeld === 'undefined') return;
+                
+                if (keysHeld[keyBindings.rotate180]) {
+                    this.rotate('180');
+                } else if (keysHeld[keyBindings.rotateCW]) {
+                    this.rotate('cw');
+                } else if (keysHeld[keyBindings.rotateCCW]) {
+                    this.rotate('ccw');
+                }
+            }
+            
+            spawnPiece() {
+                const pieceType = this.queue.shift();
+                this.queue.push(this.getNextPiece());
+                this.resetPieceState(pieceType);
+                this.canHold = true;
+                this.applyInitialRotation();
                 
                 // Allow piece to spawn even if overlapping - player can move/rotate it
                 // Only game over if piece locks while overlapping
@@ -814,7 +833,8 @@
                         this.currentX += dx;
                         this.currentY -= dy;
                         this.currentRotation = newRotation;
-                        this.lastMoveWasRotation = true; // Mark that rotation happened
+                        this.lastActionWasRotation = true;
+                        // Don't apply DCD for rotation - only for hard drop
                         if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
                             this.lockResetCount++;
@@ -828,7 +848,7 @@
             move(dx) {
                 if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
                     this.currentX += dx;
-                    this.lastMoveWasRotation = false; // Movement, not rotation
+                    this.lastActionWasRotation = false;
                     if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
                         this.lockDelayTimer = 0;
                         this.lockResetCount++;
@@ -847,13 +867,11 @@
                     while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                         this.currentY++;
                     }
-                    this.lastMoveWasRotation = false;
                     return true;
                 } else {
                     // Normal soft drop - just move down one cell if possible
                     if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                         this.currentY++;
-                        this.lastMoveWasRotation = false;
                         return true;
                     }
                 }
@@ -867,7 +885,6 @@
                 while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                     this.currentY++;
                 }
-                this.lastMoveWasRotation = false; // Hard drop is not rotation
                 return this.lockPiece(); // Return lock result (false = game over)
             }
             
@@ -877,7 +894,6 @@
                 const pieceX = this.currentX;
                 const pieceY = this.currentY;
                 const pieceRotation = this.currentRotation;
-                const wasRotation = this.lastMoveWasRotation;
                 
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
                 
@@ -906,12 +922,13 @@
                 this.lockResetCount = 0;
                 this.isTouchingGround = false;
                 
-                // Pass the piece info to clearLines for spin detection
-                this.clearLines(pieceType, pieceX, pieceY, pieceRotation, wasRotation);
+                // Determine spin before clearing lines (board still intact)
+                const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
+                this.clearLines(pieceType, isSpin);
                 return true; // Lock successful
             }
             
-            clearLines(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation, lastMoveWasRotation) {
+            clearLines(lastPieceType, isSpin) {
                 const clearedRows = [];
                 
                 // Find all filled rows
@@ -934,8 +951,6 @@
                         this.board.unshift(Array(COLS).fill(0));
                     }
                     
-                    // Check spin using the stored piece position and last move type
-                    const isSpin = this.checkSpin(lastPieceType, lastPieceX, lastPieceY, lastPieceRotation, lastMoveWasRotation);
                     const isAllClear = this.board.every(row => row.every(cell => cell === 0));
                     let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPieceType);
                     
@@ -944,8 +959,7 @@
                     if (isB2BMove) {
                         if (this.lastClearWasB2B) {
                             this.b2bCounter++;
-                            const b2bBonus = Math.floor(this.b2bCounter / 5);
-                            attack += b2bBonus;
+                            attack += 1;
                         } else {
                             this.b2bCounter = 1;
                         }
@@ -1003,41 +1017,31 @@
                 this.updateStats();
             }
             
-            checkSpin(pieceType, pieceX, pieceY, pieceRotation, lastMoveWasRotation) {
-                // Only check for spins if last move was a rotation
-                if (!lastMoveWasRotation) return false;
-                
+            checkSpin(pieceType, pieceX, pieceY, pieceRotation) {
                 if (pieceType === 'T') {
-                    return this.checkTSpin(pieceX, pieceY, pieceRotation);
+                    if (!this.lastActionWasRotation) return false;
+                    return this.checkTSpin(pieceX, pieceY);
                 }
                 // For other pieces, could implement other spin detection
                 return false;
             }
             
-            checkTSpin(pieceX, pieceY, pieceRotation) {
-                // T-spin detection using 3-corner rule
-                // Check corners of the T-piece bounding box (3x3 grid)
-                // We need to check BEFORE the piece was added to board, but it's already there
-                // So we'll check against the current board state but ignore T pieces in corners
-                
+            checkTSpin(pieceX, pieceY) {
+                // T-spin detection: check if 3 out of 4 corners are filled
                 const corners = [
-                    [pieceX, pieceY],           // Top-left
-                    [pieceX + 2, pieceY],       // Top-right
-                    [pieceX, pieceY + 2],       // Bottom-left
-                    [pieceX + 2, pieceY + 2]    // Bottom-right
+                    [pieceX, pieceY],
+                    [pieceX + 2, pieceY],
+                    [pieceX, pieceY + 2],
+                    [pieceX + 2, pieceY + 2]
                 ];
                 
                 let filledCorners = 0;
                 for (const [x, y] of corners) {
-                    // Check if corner is out of bounds or filled
-                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) {
-                        filledCorners++;
-                    } else if (this.board[y][x] !== 0) {
+                    if (x < 0 || x >= COLS || y < 0 || y >= ROWS || this.board[y][x]) {
                         filledCorners++;
                     }
                 }
                 
-                // T-spin requires at least 3 out of 4 corners to be filled
                 return filledCorners >= 3;
             }
             
@@ -1047,15 +1051,12 @@
                 if (isAllClear) {
                     attack = lines === 4 ? 10 : 8;
                 } else if (pieceType === 'T' && isSpin) {
-                    // T-Spin attack values
                     if (lines === 1) attack = 2;
                     else if (lines === 2) attack = 4;
                     else if (lines === 3) attack = 6;
                 } else if (isSpin) {
-                    // Other piece spins
                     attack = lines;
                 } else {
-                    // Normal clears
                     if (lines === 4) attack = 4;
                     else if (lines === 3) attack = 2;
                     else if (lines === 2) attack = 1;
@@ -1131,14 +1132,11 @@
                 } else {
                     const temp = this.holdPiece;
                     this.holdPiece = this.currentPiece;
-                    this.currentPiece = temp;
-                    this.currentRotation = 0;
-                    this.currentX = this.getSpawnColumn(temp);
-                    this.currentY = 0;
+                    this.resetPieceState(temp);
+                    this.applyInitialRotation();
                 }
                 
                 this.canHold = false;
-                this.lastMoveWasRotation = false; // Reset on hold
                 return true;
             }
             
@@ -1581,9 +1579,6 @@
             if (gameState1) {
                 if (gameState1.hardDropCooldown > 0) gameState1.hardDropCooldown--;
                 
-                // DCD timer countdown
-                if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
-                
                 const wasTouching = gameState1.isTouchingGround;
                 gameState1.isTouchingGround = !gameState1.isValidPosition(
                     gameState1.currentX, gameState1.currentY + 1, gameState1.currentRotation
@@ -1591,6 +1586,7 @@
                 
                 if (gameState1.isTouchingGround && !wasTouching) {
                     gameState1.lockDelayTimer = 0;
+                    gameState1.lastGravityTime = 0;
                 }
                 
                 gameState1.lastGravityTime += deltaTime;
@@ -1625,14 +1621,39 @@
                         gameState1.lastGravityTime = 0;
                     }
                 } else {
-                    if (gameState1.lastGravityTime >= gameState1.gravity) {
-                        if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
-                                                       gameState1.currentRotation)) {
+                    const sdfValue = document.getElementById('sdf').value;
+                    let fallInterval = gameState1.gravity;
+                    let useSonicDrop = false;
+                    
+                    if (gameState1.softDropActive) {
+                        if (sdfValue === 'inf') {
+                            useSonicDrop = true;
+                        } else {
+                            const multiplier = Math.max(1, parseFloat(sdfValue));
+                            fallInterval = gameState1.gravity / multiplier;
+                        }
+                    }
+                    
+                    if (useSonicDrop) {
+                        while (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
+                                                           gameState1.currentRotation)) {
                             gameState1.currentY++;
                         }
                         gameState1.lastGravityTime = 0;
+                    } else if (gameState1.lastGravityTime >= fallInterval) {
+                        while (gameState1.lastGravityTime >= fallInterval) {
+                            if (gameState1.isValidPosition(gameState1.currentX, gameState1.currentY + 1, 
+                                                           gameState1.currentRotation)) {
+                                gameState1.currentY++;
+                            } else {
+                                break;
+                            }
+                            gameState1.lastGravityTime -= fallInterval;
+                        }
                     }
                 }
+                
+                if (gameState1.dcdTimer > 0) gameState1.dcdTimer -= deltaTime;
                 
                 // Process DAS/ARR for held movement keys
                 const dasDelay = parseInt(document.getElementById('das').value);
@@ -1685,26 +1706,18 @@
             if (keysHeld[e.key]) return;
             keysHeld[e.key] = true;
             
-            // Block inputs during DCD cooldown
-            const isDCDActive = gameState1.dcdTimer > 0;
-            
             if (e.key === keyBindings.left) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.move(-1);
-                    dasTimers[e.key] = { das: 0, arr: 0, direction: -1 };
-                }
+                gameState1.move(-1);
+                dasTimers[e.key] = { das: 0, arr: 0, direction: -1 };
             } else if (e.key === keyBindings.right) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.move(1);
-                    dasTimers[e.key] = { das: 0, arr: 0, direction: 1 };
-                }
+                gameState1.move(1);
+                dasTimers[e.key] = { das: 0, arr: 0, direction: 1 };
             } else if (e.key === keyBindings.softDrop) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.softDrop();
-                }
+                gameState1.softDropActive = true;
+                gameState1.softDrop();
             } else if (e.key === keyBindings.hardDrop) {
                 e.preventDefault();
                 const success = gameState1.hardDrop();
@@ -1719,35 +1732,32 @@
                     if (conn && conn.open) {
                         conn.send({ type: 'gameOver' });
                     }
+                    return;
                 }
                 
                 gameState1.spawnPiece();
             } else if (e.key === keyBindings.rotateCW) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.rotate('cw');
-                }
+                gameState1.rotate('cw');
             } else if (e.key === keyBindings.rotateCCW) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.rotate('ccw');
-                }
+                gameState1.rotate('ccw');
             } else if (e.key === keyBindings.rotate180) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.rotate('180');
-                }
+                gameState1.rotate('180');
             } else if (e.key === keyBindings.hold) {
                 e.preventDefault();
-                if (!isDCDActive) {
-                    gameState1.holdCurrentPiece();
-                }
+                gameState1.holdCurrentPiece();
             }
         });
         
         document.addEventListener('keyup', (e) => {
             delete keysHeld[e.key];
             delete dasTimers[e.key];
+            
+            if (gameState1 && e.key === keyBindings.softDrop) {
+                gameState1.softDropActive = false;
+            }
         });
         
         // Initialize
