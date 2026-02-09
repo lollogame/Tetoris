@@ -833,6 +833,8 @@
                 
                 this.lastActionWasRotation = false;
                 this.rotateBuffer = null;
+                this.spawnGrace = false;
+                this.spawnGraceUsed = false;
                 const input = InputManager.getInstance();
                 const graceDir = input.consumeSpawnRotateGrace();
                 if (graceDir) {
@@ -894,6 +896,14 @@
                 this.canHold = true;
                 this.rotationCooldown = 0;
 
+                this.spawnGrace = true;
+                this.spawnGraceUsed = false;
+
+                // Reset rotation timing explicitly
+                this.rotationCooldown = 0;
+                this.rotationBuffer = null;
+                this.rotateBuffer = null;
+
                 return true;
             }
             
@@ -951,6 +961,13 @@
             rotate(direction) {
                 if (!this.currentPiece) return false;
                 
+                const lockDelayExpired = this.isTouchingGround &&
+                    (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets);
+                
+                if ((!this.spawnGrace || this.spawnGraceUsed) && lockDelayExpired) {
+                    return false;
+                }
+                
                 const oldRotation = this.currentRotation;
                 let newRotation;
                 
@@ -973,6 +990,9 @@
                         this.currentY -= dy;
                         this.currentRotation = newRotation;
                         this.lastActionWasRotation = true;
+                        if (this.spawnGrace) {
+                            this.spawnGraceUsed = true;
+                        }
                         
                         if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
                             this.lockDelayTimer = 0;
@@ -1248,6 +1268,13 @@
                     const temp = this.holdPiece;
                     this.holdPiece = this.currentPiece;
                     this.resetPieceState(temp);
+                    this.spawnGrace = true;
+                    this.spawnGraceUsed = false;
+
+                    // Reset rotation timing explicitly
+                    this.rotationCooldown = 0;
+                    this.rotationBuffer = null;
+                    this.rotateBuffer = null;
                 }
                 
                 InputManager.getInstance().resetOnSpawn();
@@ -1257,6 +1284,11 @@
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
+                
+                if (this.spawnGrace) {
+                    // Allow exactly one rotation window
+                    this.spawnGraceUsed = false;
+                }
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
@@ -1318,6 +1350,10 @@
                             this.lastGravityTime -= fallInterval;
                         }
                     }
+                }
+                
+                if (this.spawnGrace) {
+                    this.spawnGrace = false;
                 }
                 
                 return true;
