@@ -1538,155 +1538,164 @@
         }
         
         class InputManager {
-            static instance = null;
-            
-            constructor() {
-                this.heldKeys = {};
-                this.keyBindings = {
-                    left: 'ArrowLeft',
-                    right: 'ArrowRight',
-                    softDrop: 'ArrowDown',
-                    hardDrop: ' ',
-                    rotateCW: 'ArrowUp',
-                    rotateCCW: 'z',
-                    rotate180: 'x',
-                    hold: 'c'
+    static instance = null;
+
+    constructor() {
+        this.heldKeys = {};
+
+        this.keyBindings = {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            softDrop: 'ArrowDown',
+            hardDrop: ' ',
+            rotateCW: 'ArrowUp',
+            rotateCCW: 'z',
+            rotate180: 'x',
+            hold: 'c'
+        };
+
+        this.move = {
+            left: false,
+            right: false,
+            direction: 0,
+            lastDirection: 0,
+            dasTimer: 0,
+            arrTimer: 0,
+            dcdTimer: 0
+        };
+
+        this.onMoveImmediate = null;
+    }
+
+    static getInstance() {
+        if (!InputManager.instance) {
+            InputManager.instance = new InputManager();
+        }
+        return InputManager.instance;
+    }
+
+    getHeldKeys() {
+        return this.heldKeys;
+    }
+
+    getKeyBindings() {
+        return this.keyBindings;
+    }
+
+    setupKeyBindings() {
+        const actions = Object.keys(this.keyBindings);
+
+        actions.forEach(action => {
+            const inputId = `key${action.charAt(0).toUpperCase()}${action.slice(1)}`;
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            input.addEventListener('click', () => {
+                input.value = 'Press a key...';
+                const listener = (e) => {
+                    e.preventDefault();
+                    this.keyBindings[action] = e.key;
+                    input.value = e.key;
+                    document.removeEventListener('keydown', listener);
                 };
-                
-                this.movementState = {
-                    left: false,
-                    right: false,
-                    direction: 0,
-                    lastPressed: 0,
-                    das: 0,
-                    arr: 0,
-                    dcd: 0
-                };
-            }
-            
-            static getInstance() {
-                if (!InputManager.instance) {
-                    InputManager.instance = new InputManager();
-                }
-                return InputManager.instance;
-            }
-            
-            getHeldKeys() {
-                return this.heldKeys;
-            }
-            
-            getKeyBindings() {
-                return this.keyBindings;
-            }
-            
-            getMovementState() {
-                return this.movementState;
-            }
-            
-            setupKeyBindings() {
-                const actions = ['left', 'right', 'softDrop', 'hardDrop', 'rotateCW', 'rotateCCW', 'rotate180', 'hold'];
-                
-                actions.forEach(action => {
-                    const inputId = `key${action.charAt(0).toUpperCase() + action.slice(1)}`;
-                    const input = document.getElementById(inputId);
-                    
-                    input.addEventListener('click', () => {
-                        input.value = 'Press a key...';
-                        const listener = (e) => {
-                            e.preventDefault();
-                            this.keyBindings[action] = e.key;
-                            input.value = e.key;
-                            document.removeEventListener('keydown', listener);
-                        };
-                        document.addEventListener('keydown', listener);
-                    });
-                });
-            }
-            
-            handleKeyDown(key) {
-                if (this.heldKeys[key]) return;
-                this.heldKeys[key] = true;
-            }
-            
-            handleKeyUp(key) {
-                delete this.heldKeys[key];
-            }
-            
-            updateMovement(key, isDown) {
-                if (key === this.keyBindings.left) {
-                    if (isDown && !this.movementState.left) {
-                        this.movementState.left = true;
-                        this.movementState.lastPressed = -1;
-                        this.recomputeMovement(true);
-                    } else if (!isDown) {
-                        this.movementState.left = false;
-                        this.recomputeMovement(false);
-                    }
-                } else if (key === this.keyBindings.right) {
-                    if (isDown && !this.movementState.right) {
-                        this.movementState.right = true;
-                        this.movementState.lastPressed = 1;
-                        this.recomputeMovement(true);
-                    } else if (!isDown) {
-                        this.movementState.right = false;
-                        this.recomputeMovement(false);
-                    }
-                }
-            }
-            
-            recomputeMovement(triggerImmediate) {
-                let newDirection = 0;
-                
-                if (this.movementState.left && this.movementState.right) {
-                    newDirection = this.movementState.lastPressed;
-                } else if (this.movementState.left) {
-                    newDirection = -1;
-                } else if (this.movementState.right) {
-                    newDirection = 1;
-                }
-                
-                if (newDirection !== this.movementState.direction) {
-                    this.movementState.direction = newDirection;
-                    this.movementState.das = 0;
-                    this.movementState.arr = 0;
-                    this.movementState.dcd = GameSettings.getInstance().dcd;
-                }
-            }
-            
-            processMovement(deltaTime, moveCallback) {
-                if (this.movementState.direction === 0) return;
-                
-                const settings = GameSettings.getInstance();
-                this.movementState.das += deltaTime;
-                
-                if (this.movementState.dcd > 0) {
-                    this.movementState.dcd -= deltaTime;
-                }
-                
-                if (this.movementState.das >= settings.das) {
-                    if (this.movementState.dcd <= 0) {
-                        this.movementState.arr += deltaTime;
-                        
-                        if (settings.arr === 0 || this.movementState.arr >= settings.arr) {
-                            moveCallback(this.movementState.direction);
-                            this.movementState.arr = 0;
-                        }
-                    }
-                }
-            }
-            
-            reset() {
-                this.movementState = {
-                    left: false,
-                    right: false,
-                    direction: 0,
-                    lastPressed: 0,
-                    das: 0,
-                    arr: 0,
-                    dcd: 0
-                };
+                document.addEventListener('keydown', listener);
+            });
+        });
+    }
+
+    handleKeyDown(key) {
+        if (this.heldKeys[key]) return;
+        this.heldKeys[key] = true;
+
+        const b = this.keyBindings;
+
+        if (key === b.left) this.setDirection(-1);
+        if (key === b.right) this.setDirection(1);
+    }
+
+    handleKeyUp(key) {
+        delete this.heldKeys[key];
+
+        const b = this.keyBindings;
+
+        if (key === b.left) this.move.left = false;
+        if (key === b.right) this.move.right = false;
+
+        this.recomputeDirection();
+    }
+
+    setDirection(dir) {
+        if (dir === -1) this.move.left = true;
+        if (dir === 1) this.move.right = true;
+
+        this.move.lastDirection = dir;
+        this.recomputeDirection(true);
+    }
+
+    recomputeDirection(immediate = false) {
+        let newDir = 0;
+
+        if (this.move.left && this.move.right) {
+            newDir = this.move.lastDirection;
+        } else if (this.move.left) {
+            newDir = -1;
+        } else if (this.move.right) {
+            newDir = 1;
+        }
+
+        if (newDir !== this.move.direction) {
+            this.move.direction = newDir;
+            this.move.dasTimer = 0;
+            this.move.arrTimer = 0;
+            this.move.dcdTimer = GameSettings.getInstance().dcd;
+
+            if (newDir !== 0 && immediate && this.onMoveImmediate) {
+                this.onMoveImmediate(newDir); // ✅ FIRST TAP
             }
         }
+    }
+
+    processMovement(deltaTime, moveFn) {
+        if (this.move.direction === 0) return;
+
+        const settings = GameSettings.getInstance();
+
+        if (this.move.dcdTimer > 0) {
+            this.move.dcdTimer -= deltaTime;
+            return;
+        }
+
+        this.move.dasTimer += deltaTime;
+
+        if (this.move.dasTimer < settings.das) return;
+
+        // ✅ ARR = 0 → instant slide (TETR.IO)
+        if (settings.arr === 0) {
+            while (moveFn(this.move.direction)) {}
+            return;
+        }
+
+        this.move.arrTimer += deltaTime;
+        if (this.move.arrTimer >= settings.arr) {
+            moveFn(this.move.direction);
+            this.move.arrTimer = 0;
+        }
+    }
+
+    reset() {
+        this.move = {
+            left: false,
+            right: false,
+            direction: 0,
+            lastDirection: 0,
+            dasTimer: 0,
+            arrTimer: 0,
+            dcdTimer: 0
+        };
+        this.heldKeys = {};
+    }
+}
+
         
         // ========================================================================
         // Game Controller
@@ -1762,64 +1771,47 @@
                 ChatManager.addMessage('Click "Create Game" to host or enter a Peer ID to join.');
             }
             
-            setupInput() {
-                InputManager.getInstance().setupKeyBindings();
-                
-                document.addEventListener('keydown', (e) => {
-                    if (!this.gameRunning || !this.gameState1) return;
-                    
-                    const input = InputManager.getInstance();
-                    const bindings = input.getKeyBindings();
-                    
-                    input.handleKeyDown(e.key);
-                    
-                    if (e.key === bindings.left || e.key === bindings.right) {
-                        e.preventDefault();
-                        input.updateMovement(e.key, true);
-                        const direction = e.key === bindings.left ? -1 : 1;
-                        this.gameState1.move(direction);
-                    } else if (e.key === bindings.softDrop) {
-                        e.preventDefault();
-                        this.gameState1.setSoftDropActive(true);
-                        this.gameState1.softDrop();
-                    } else if (e.key === bindings.hardDrop) {
-                        e.preventDefault();
-                        const success = this.gameState1.hardDrop();
-                        if (!success) {
-                            this.handleGameOver();
-                            return;
-                        }
-                        this.gameState1.spawnPiece();
-                    } else if (e.key === bindings.rotateCW) {
-                        e.preventDefault();
-                        const rotated = this.gameState1.rotate('cw');
-                        if (!rotated) this.gameState1.bufferRotation('cw');
-                    } else if (e.key === bindings.rotateCCW) {
-                        e.preventDefault();
-                        const rotated = this.gameState1.rotate('ccw');
-                        if (!rotated) this.gameState1.bufferRotation('ccw');
-                    } else if (e.key === bindings.rotate180) {
-                        e.preventDefault();
-                        const rotated = this.gameState1.rotate('180');
-                        if (!rotated) this.gameState1.bufferRotation('180');
-                    } else if (e.key === bindings.hold) {
-                        e.preventDefault();
-                        this.gameState1.holdCurrentPiece();
-                    }
-                });
-                
-                document.addEventListener('keyup', (e) => {
-                    const input = InputManager.getInstance();
-                    const bindings = input.getKeyBindings();
-                    
-                    input.handleKeyUp(e.key);
-                    input.updateMovement(e.key, false);
-                    
-                    if (this.gameState1 && e.key === bindings.softDrop) {
-                        this.gameState1.setSoftDropActive(false);
-                    }
-                });
-            }
+           setupInput() {
+    const input = InputManager.getInstance();
+    input.setupKeyBindings();
+
+    input.onMoveImmediate = (dx) => {
+        if (this.gameState1) this.gameState1.move(dx);
+    };
+
+    document.addEventListener('keydown', (e) => {
+        if (!this.gameRunning || !this.gameState1) return;
+
+        const b = input.getKeyBindings();
+        input.handleKeyDown(e.key);
+
+        if (Object.values(b).includes(e.key)) e.preventDefault();
+
+        if (e.key === b.softDrop) {
+            this.gameState1.setSoftDropActive(true);
+        } else if (e.key === b.hardDrop) {
+            this.gameState1.hardDrop();
+            this.gameState1.spawnPiece();
+        } else if (e.key === b.rotateCW) {
+            if (!this.gameState1.rotate('cw')) this.gameState1.bufferRotation('cw');
+        } else if (e.key === b.rotateCCW) {
+            if (!this.gameState1.rotate('ccw')) this.gameState1.bufferRotation('ccw');
+        } else if (e.key === b.rotate180) {
+            if (!this.gameState1.rotate('180')) this.gameState1.bufferRotation('180');
+        } else if (e.key === b.hold) {
+            this.gameState1.holdCurrentPiece();
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        input.handleKeyUp(e.key);
+
+        if (this.gameState1 && e.key === input.getKeyBindings().softDrop) {
+            this.gameState1.setSoftDropActive(false);
+        }
+    });
+}
+
             
             handleNetworkMessage(msg) {
                 if (msg.type === 'chat') {
@@ -1909,9 +1901,15 @@
                 GameSettings.getInstance().update();
                 
                 if (this.gameState1) {
-                    InputManager.getInstance().processMovement(deltaTime, (dx) => {
-                        this.gameState1.move(dx);
-                    });
+                    const input = InputManager.getInstance();
+
+// Soft drop has priority
+if (!this.gameState1.softDropActive) {
+    input.processMovement(deltaTime, (dx) => {
+        return this.gameState1.move(dx);
+    });
+}
+
                     
                     const success = this.gameState1.update(deltaTime);
                     if (!success) {
