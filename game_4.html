@@ -1690,18 +1690,20 @@
                 const dasDelay = parseInt(document.getElementById('das').value);
                 const arrDelay = parseInt(document.getElementById('arr').value);
                 
-                for (const key in dasTimers) {
-                    const timer = dasTimers[key];
-                    timer.das += deltaTime;
+                if (movementState.direction !== 0) {
+                    movementState.das += deltaTime;
+                    if (movementState.dcd > 0) {
+                        movementState.dcd -= deltaTime;
+                    }
                     
-                    if (timer.das >= dasDelay) {
-                        timer.arr += deltaTime;
-                        
-                        if (arrDelay === 0 || timer.arr >= arrDelay) {
-                            if (timer.direction) {
-                                gameState1.move(timer.direction);
+                    if (movementState.das >= dasDelay) {
+                        if (movementState.dcd <= 0) {
+                            movementState.arr += deltaTime;
+                            
+                            if (arrDelay === 0 || movementState.arr >= arrDelay) {
+                                gameState1.move(movementState.direction);
+                                movementState.arr = 0;
                             }
-                            timer.arr = 0;
                         }
                     }
                 }
@@ -1728,7 +1730,37 @@
         
         // Input handling with DAS/ARR
         const keysHeld = {};
-        const dasTimers = {};
+        const movementState = {
+            left: false,
+            right: false,
+            direction: 0,
+            lastPressed: 0,
+            das: 0,
+            arr: 0,
+            dcd: 0
+        };
+        
+        function recomputeMovement(triggerImmediate) {
+            let newDirection = 0;
+            if (movementState.left && movementState.right) {
+                newDirection = movementState.lastPressed;
+            } else if (movementState.left) {
+                newDirection = -1;
+            } else if (movementState.right) {
+                newDirection = 1;
+            }
+            
+            if (newDirection !== movementState.direction) {
+                movementState.direction = newDirection;
+                movementState.das = 0;
+                movementState.arr = 0;
+                movementState.dcd = parseInt(document.getElementById('dcd').value);
+                
+                if (triggerImmediate && newDirection !== 0 && gameState1) {
+                    gameState1.move(newDirection);
+                }
+            }
+        }
         
         document.addEventListener('keydown', (e) => {
             if (!gameRunning || !gameState1) return;
@@ -1739,12 +1771,18 @@
             
             if (e.key === keyBindings.left) {
                 e.preventDefault();
-                gameState1.move(-1);
-                dasTimers[e.key] = { das: 0, arr: 0, direction: -1 };
+                if (!movementState.left) {
+                    movementState.left = true;
+                    movementState.lastPressed = -1;
+                    recomputeMovement(true);
+                }
             } else if (e.key === keyBindings.right) {
                 e.preventDefault();
-                gameState1.move(1);
-                dasTimers[e.key] = { das: 0, arr: 0, direction: 1 };
+                if (!movementState.right) {
+                    movementState.right = true;
+                    movementState.lastPressed = 1;
+                    recomputeMovement(true);
+                }
             } else if (e.key === keyBindings.softDrop) {
                 e.preventDefault();
                 gameState1.softDropActive = true;
@@ -1799,7 +1837,14 @@
         
         document.addEventListener('keyup', (e) => {
             delete keysHeld[e.key];
-            delete dasTimers[e.key];
+            
+            if (e.key === keyBindings.left) {
+                movementState.left = false;
+                recomputeMovement(false);
+            } else if (e.key === keyBindings.right) {
+                movementState.right = false;
+                recomputeMovement(false);
+            }
             
             if (gameState1 && e.key === keyBindings.softDrop) {
                 gameState1.softDropActive = false;
