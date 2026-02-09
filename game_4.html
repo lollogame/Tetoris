@@ -550,12 +550,11 @@
     </div>
     
     <script>
-/* Rewritten game script for game_4.html
-   - Keeps the existing UI (IDs/classes unchanged)
-   - Fixes IRS/IHS with an input buffer (ms-based)
-   - Improves rotation responsiveness (SRS kicks + buffered inputs)
-   - Implements DAS/ARR and DCD basics
-   - Shorter, clearer PeerJS connection logic
+/* Full replacement <script> for game_4.html
+   - Keeps the existing UI unchanged
+   - Fixes soft drop hold (continuous soft drop while key held)
+   - Prevents page scrolling for game keys (space, arrows, shift, etc.)
+   - Keeps IRS/IHS buffering and other improvements from prior rewrite
    Paste this entire <script> block in place of the current script tag.
 */
 
@@ -585,7 +584,6 @@ class SeededRandom {
 
 /* -------------------------
    SRS Kick Tables & Shapes
-   (kept compatible with original file)
    ------------------------- */
 const KICK_TABLE = {
   JLSTZ: {
@@ -609,7 +607,6 @@ const KICK_TABLE = {
     "0->L":[[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
   },
   O: {
-    // O has no kicks (identity)
     "0->R":[[0,0]], "R->0":[[0,0]], "R->2":[[0,0]], "2->R":[[0,0]],
     "2->L":[[0,0]], "L->2":[[0,0]], "L->0":[[0,0]], "0->L":[[0,0]]
   }
@@ -683,9 +680,9 @@ class GameState {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.holdCanvas = document.getElementById(holdCanvasId);
-    this.holdCtx = this.holdCanvas.getContext('2d');
+    this.holdCtx = this.holdCanvas?.getContext('2d');
     this.queueCanvas = document.getElementById(queueCanvasId);
-    this.queueCtx = this.queueCanvas.getContext('2d');
+    this.queueCtx = this.queueCanvas?.getContext('2d');
     this.playerId = playerId;
     this.rng = new SeededRandom(seed || (Date.now()|0));
     this.reset();
@@ -732,7 +729,6 @@ class GameState {
   getNextPiece(){
     if(this.bag.length===0){
       this.bag = [...PIECE_TYPES];
-      // Fisher-Yates shuffle with seeded RNG
       for(let i=this.bag.length-1;i>0;i--){
         const j = this.rng.nextInt(i+1);
         [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
@@ -759,34 +755,27 @@ class GameState {
     this.isTouchingGround = false;
     // start spawn cooldown (ms)
     this.spawnCooldownTimer = this.spawnCooldownMs;
-    // keep inputBuffer (we don't clear it) so IRS/IHS works
   }
 
-  // Input buffer processing when spawn cooldown ends
   processSpawnBuffer(){
     const now = nowMs();
     this.inputBuffer = this.inputBuffer.filter(it => now - it.time <= this.inputBufferMaxAge);
     while(this.inputBuffer.length){
       const it = this.inputBuffer.shift();
       if(it.type === 'rotate'){
-        if(this.rotate(it.dir)) return; // rotation consumed
+        if(this.rotate(it.dir)) return;
       } else if(it.type === 'hold'){
         if(this.holdCurrentPiece()) return;
       } else if(it.type === 'move'){
         this.move(it.dx);
-        // continue processing moves (do not consume rotation buffer)
       } else if(it.type === 'harddrop'){
         if(this.hardDrop()) return;
       }
     }
   }
 
-  // SRS rotation with kicks
   rotate(direction){
-    // direction: 'cw' | 'ccw' | '180'
-    // If spawn cooldown active, buffer rotation (IRS)
     if(this.spawnCooldownTimer > 0){
-      // only queue one rotation (keep latest)
       this.inputBuffer.push({ type:'rotate', dir:direction, time: nowMs() });
       return false;
     }
@@ -810,7 +799,6 @@ class GameState {
         this.currentX = testX;
         this.currentY = testY;
         this.currentRotation = newR;
-        // lock reset if touching ground
         if(this.isTouchingGround && this.lockResetCount < this.maxLockResets){
           this.lockDelayTimer = 0;
           this.lockResetCount++;
@@ -835,7 +823,6 @@ class GameState {
   }
 
   move(dx){
-    // If spawn cooldown active, buffer move (so player can press during spawn)
     if(this.spawnCooldownTimer > 0){
       this.inputBuffer.push({ type:'move', dx:dx, time: nowMs() });
       return false;
@@ -860,7 +847,6 @@ class GameState {
   }
 
   hardDrop(){
-    // If spawn cooldown active, buffer harddrop
     if(this.spawnCooldownTimer > 0){
       this.inputBuffer.push({ type:'harddrop', time: nowMs() });
       return false;
@@ -870,7 +856,6 @@ class GameState {
   }
 
   holdCurrentPiece(){
-    // IHS: buffer hold if spawn cooldown active
     if(this.spawnCooldownTimer > 0){
       this.inputBuffer.push({ type:'hold', time: nowMs() });
       return false;
@@ -886,7 +871,6 @@ class GameState {
       this.currentRotation = 0;
       this.currentX = this.getSpawnColumn(this.currentPiece);
       this.currentY = 0;
-      // after swapping, start spawn cooldown to allow immediate inputs to be buffered
       this.spawnCooldownTimer = this.spawnCooldownMs;
     }
     this.canHold = false;
@@ -902,7 +886,6 @@ class GameState {
         if(gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS){
           this.board[gy][gx] = this.currentPiece;
         } else if(gy < 0){
-          // piece locked above top -> game over
           return false;
         }
       }
@@ -912,7 +895,6 @@ class GameState {
     this.lockResetCount = 0;
     this.isTouchingGround = false;
     this.clearLines(this.currentPiece, this.currentX, this.currentY, this.currentRotation);
-    // spawn next piece
     this.spawnPiece();
     return true;
   }
@@ -924,10 +906,8 @@ class GameState {
     }
     const lines = cleared.length;
     if(lines > 0){
-      // remove rows
       for(let i=cleared.length-1;i>=0;i--) this.board.splice(cleared[i],1);
       for(let i=0;i<lines;i++) this.board.unshift(Array(COLS).fill(0));
-      // T-spin detection (simplified)
       const isSpin = (lastPieceType === 'T') && this.checkTSpin(lastX, lastY);
       const isAllClear = this.board.every(row => row.every(cell => cell === 0));
       let attack = this.calculateAttack(lines, isSpin, isAllClear, lastPieceType);
@@ -942,7 +922,6 @@ class GameState {
       }
       this.comboCounter = (this.comboCounter >= 0) ? this.comboCounter + 1 : 0;
       if(this.comboCounter >= 4) attack += 1;
-      // pending garbage cancellation
       if(this.pendingGarbage.length > 0 && attack > 0){
         let totalPending = this.pendingGarbage.reduce((s,g)=>s+g.lines,0);
         if(attack >= totalPending){
@@ -970,7 +949,6 @@ class GameState {
   }
 
   checkTSpin(x,y){
-    // simplified T-spin corner check
     const corners = [
       [x, y],
       [x+2, y],
@@ -1077,44 +1055,33 @@ class GameState {
   }
 
   tick(deltaMs){
-    // spawn cooldown timer
     if(this.spawnCooldownTimer > 0){
       this.spawnCooldownTimer -= deltaMs;
       if(this.spawnCooldownTimer <= 0) this.processSpawnBuffer();
     }
 
-    // gravity
     this.gravityTimer += deltaMs;
     if(this.gravityTimer >= this.gravityMs){
       this.gravityTimer = 0;
       if(!this.softDrop()){
-        // touching ground
         this.isTouchingGround = true;
         this.lockDelayTimer += this.gravityMs;
         if(this.lockDelayTimer >= this.lockDelayMs || this.lockResetCount >= this.maxLockResets){
           const ok = this.lockPiece();
-          if(!ok){
-            // game over
-            return false;
-          }
+          if(!ok) return false;
         }
       } else {
         this.isTouchingGround = false;
         this.lockDelayTimer = 0;
       }
     }
-
-    // DAS/ARR handling (called externally by input loop)
     return true;
   }
 
   draw(){
-    // main canvas
     clearCanvas(this.ctx, this.canvas.width, this.canvas.height);
-    // grid background
     this.ctx.fillStyle = '#0a0e27';
     this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
-    // draw board cells
     for(let r=0;r<ROWS;r++){
       for(let c=0;c<COLS;c++){
         const cell = this.board[r][c];
@@ -1124,14 +1091,12 @@ class GameState {
         }
       }
     }
-    // ghost
     if(this.currentPiece){
       let gy = this.currentY;
       while(this.isValidPosition(this.currentX, gy+1, this.currentRotation)) gy++;
       this.drawPiece(this.ctx, this.currentPiece, this.currentX, gy, this.currentRotation, 0.25);
       this.drawPiece(this.ctx, this.currentPiece, this.currentX, this.currentY, this.currentRotation, 1.0);
     }
-    // hold & queue
     this.drawHold();
     this.drawQueue();
   }
@@ -1203,7 +1168,6 @@ let lastStateSend = nowMs();
 
 /* -------------------------
    UI elements & key bindings
-   (keep same IDs as original HTML)
    ------------------------- */
 const keyBindings = {
   left: document.getElementById('keyLeft')?.value || 'ArrowLeft',
@@ -1216,7 +1180,6 @@ const keyBindings = {
   hold: document.getElementById('keyHold')?.value || 'c'
 };
 
-// allow changing key bindings (existing UI behavior)
 ['left','right','softDrop','hardDrop','rotateCW','rotateCCW','rotate180','hold'].forEach(action=>{
   const el = document.getElementById('key' + action.charAt(0).toUpperCase() + action.slice(1));
   if(!el) return;
@@ -1236,7 +1199,7 @@ const keyBindings = {
    Chat helpers
    ------------------------- */
 function addChatMessage(message, sender='System'){
-  const chatMessages = document.getElementById('chatMessages');
+  const chatMessages = document.getElementById('chatMessages') || document.getElementById('chat');
   if(!chatMessages) return;
   const div = document.createElement('div');
   div.className = 'chat-message';
@@ -1394,7 +1357,6 @@ function loop(){
   lastFrameTime = t;
 
   if(gameState1){
-    // tick game state (gravity, spawn cooldown)
     const alive = gameState1.tick(delta);
     if(alive === false){
       addChatMessage('You lost! Click Restart to play again.', 'System');
@@ -1404,11 +1366,9 @@ function loop(){
       return;
     }
 
-    // DAS/ARR timers handled by input loop; here we just draw and send state
     gameState1.draw();
     if(gameState2) gameState2.draw();
 
-    // send state periodically
     if(conn && conn.open && (t - lastStateSend) >= STATE_SEND_INTERVAL){
       conn.send({ type:'gameState', state: gameState1.getState() });
       lastStateSend = t;
@@ -1419,35 +1379,52 @@ function loop(){
 }
 
 /* -------------------------
-   Input handling (DAS/ARR + buffering)
-   - Uses keydown/keyup and per-key timers
+   Input handling (DAS/ARR + soft drop hold)
+   - Prevents default browser behavior for game keys
+   - Soft drop is applied continuously while held
    ------------------------- */
-const keysHeld = {};
+const keysHeld = {}; // tracks held keys
 const dasState = {}; // key -> { dasTimer, arrTimer, direction }
 
 function getDasMs(){ return parseInt(document.getElementById('das')?.value || '167', 10); }
 function getArrMs(){ return parseInt(document.getElementById('arr')?.value || '0', 10); }
 function getDcdMs(){ return parseInt(document.getElementById('dcd')?.value || '0', 10); }
+function getSoftDropMs(){ return parseInt(document.getElementById('softDropRate')?.value || '50', 10); } // ms between soft-drop ticks when held
+
+// Helper: keys that should prevent default to avoid page scrolling
+const GAME_KEYS = new Set([
+  keyBindings.left, keyBindings.right, keyBindings.softDrop,
+  keyBindings.hardDrop, keyBindings.rotateCW, keyBindings.rotateCCW,
+  keyBindings.rotate180, keyBindings.hold, ' ', 'Shift'
+]);
 
 document.addEventListener('keydown', (e)=>{
+  // If an input element is focused, ignore game keys
+  const active = document.activeElement;
+  if(active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+    return;
+  }
+
+  // Prevent default for game keys to stop page scrolling
+  if(GAME_KEYS.has(e.key)) e.preventDefault();
+
   if(!gameRunning || !gameState1) return;
-  if(keysHeld[e.key]) return; // ignore repeats
+
+  // Avoid processing repeated keydown events for initial action (we still track held state)
+  const wasHeld = !!keysHeld[e.key];
   keysHeld[e.key] = true;
 
-  // left/right start immediate move and start DAS
+  // left/right: immediate move + start DAS
   if(e.key === keyBindings.left){
-    e.preventDefault();
-    gameState1.move(-1);
+    if(!wasHeld) gameState1.move(-1);
     dasState[e.key] = { dasTimer:0, arrTimer:0, direction:-1 };
   } else if(e.key === keyBindings.right){
-    e.preventDefault();
-    gameState1.move(1);
+    if(!wasHeld) gameState1.move(1);
     dasState[e.key] = { dasTimer:0, arrTimer:0, direction:1 };
   } else if(e.key === keyBindings.softDrop){
-    e.preventDefault();
+    // immediate soft drop on press; continuous handled by interval below
     gameState1.softDrop();
   } else if(e.key === keyBindings.hardDrop){
-    e.preventDefault();
     const success = gameState1.hardDrop();
     if(!success){
       addChatMessage('You lost! Click Restart to play again.', 'System');
@@ -1455,57 +1432,63 @@ document.addEventListener('keydown', (e)=>{
       gameRunning = false;
       if(conn && conn.open) conn.send({ type:'gameOver' });
     }
-    // spawn handled by lockPiece -> spawnPiece
   } else if(e.key === keyBindings.rotateCW){
-    e.preventDefault();
     gameState1.rotate('cw');
   } else if(e.key === keyBindings.rotateCCW){
-    e.preventDefault();
     gameState1.rotate('ccw');
   } else if(e.key === keyBindings.rotate180){
-    e.preventDefault();
     gameState1.rotate('180');
   } else if(e.key === keyBindings.hold){
-    e.preventDefault();
     gameState1.holdCurrentPiece();
   }
 });
 
-// keyup: stop DAS
 document.addEventListener('keyup', (e)=>{
   delete keysHeld[e.key];
   delete dasState[e.key];
 });
 
-// DAS/ARR processing loop (runs independently at ~60Hz)
+/* DAS/ARR + soft-drop processing loop (runs ~60Hz) */
 setInterval(()=>{
   if(!gameRunning || !gameState1) return;
   const dasMs = getDasMs();
   const arrMs = getArrMs();
+  const softMs = getSoftDropMs();
   const tick = 16; // ms per tick
+
+  // DAS/ARR
   for(const k in dasState){
     const s = dasState[k];
     s.dasTimer += tick;
     if(s.dasTimer >= dasMs){
       s.arrTimer += tick;
       if(arrMs === 0 || s.arrTimer >= arrMs){
-        // perform repeated move
         gameState1.move(s.direction);
         s.arrTimer = 0;
       }
     }
   }
+
+  // Soft drop while held
+  if(keysHeld[keyBindings.softDrop]){
+    // accumulate a soft-drop timer on the gameState object to keep it per-player
+    if(!gameState1._softDropTimer) gameState1._softDropTimer = 0;
+    gameState1._softDropTimer += tick;
+    while(gameState1._softDropTimer >= softMs){
+      gameState1._softDropTimer -= softMs;
+      gameState1.softDrop();
+    }
+  } else {
+    if(gameState1) gameState1._softDropTimer = 0;
+  }
 }, 16);
 
 /* -------------------------
-   Periodic spawn-cooldown processing
-   (ensures buffered inputs are applied promptly)
+   Prevent default on wheel and space when game area focused
    ------------------------- */
-setInterval(()=>{
-  if(gameState1 && gameState1.spawnCooldownTimer > 0){
-    // spawnCooldownTimer is decremented in tick; nothing to do here
-  }
-}, 50);
+window.addEventListener('keydown', (e)=>{
+  if(GAME_KEYS.has(e.key)) e.preventDefault();
+}, { passive: false });
 
 /* -------------------------
    Peer ID copy helper
@@ -1514,10 +1497,6 @@ function copyPeerId(){
   const peerId = document.getElementById('peerIdDisplay')?.textContent || '';
   if(peerId) navigator.clipboard.writeText(peerId).then(()=> addChatMessage('Peer ID copied to clipboard!', 'System'));
 }
-
-/* -------------------------
-   Connect UI wiring (copy existing HTML behavior)
-   ------------------------- */
 window.copyPeerId = copyPeerId;
 
 /* -------------------------
@@ -1527,13 +1506,13 @@ addChatMessage('Welcome to Tetris Online Battle!');
 addChatMessage('Click "Create Game" to host or enter a Peer ID to join.');
 
 /* -------------------------
-   Expose some internals for debugging (optional)
+   Expose internals for debugging (optional)
    ------------------------- */
 window.__gameState1 = () => gameState1;
 window.__gameState2 = () => gameState2;
 window.__makePeer = makePeer;
-
 </script>
+
 
 </body>
 </html>
