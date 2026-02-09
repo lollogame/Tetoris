@@ -881,6 +881,9 @@
                 this.canHold = true;
                 this.applyInitialRotation();
                 this.consumeRotationBuffer();
+                this.rotationBuffer = null;
+                this.rotationCooldown = 0;
+
                 return true;
             }
             
@@ -1230,6 +1233,8 @@
                 if (this.holdPiece === null) {
                     this.holdPiece = this.currentPiece;
                     this.spawnPiece();
+                    InputManager.getInstance().resetOnSpawn();
+
                 } else {
                     const temp = this.holdPiece;
                     this.holdPiece = this.currentPiece;
@@ -1694,6 +1699,17 @@
         };
         this.heldKeys = {};
     }
+            resetMovementOnSpawn() {
+    this.move.dasTimer = 0;
+    this.move.arrTimer = 0;
+    this.move.dcdTimer = GameSettings.getInstance().dcd;
+
+    // Re-trigger immediate movement if a direction is held
+    if (this.move.direction !== 0 && this.onMoveImmediate) {
+        this.onMoveImmediate(this.move.direction);
+    }
+}
+
 }
 
         
@@ -1792,6 +1808,7 @@
         } else if (e.key === b.hardDrop) {
             this.gameState1.hardDrop();
             this.gameState1.spawnPiece();
+            InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
             if (!this.gameState1.rotate('cw')) this.gameState1.bufferRotation('cw');
         } else if (e.key === b.rotateCCW) {
