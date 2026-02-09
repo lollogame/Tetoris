@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Multiplayer - TypeScript Edition</title>
+    <title>Tetris Multiplayer - Optimized Edition</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
@@ -436,8 +436,8 @@
         
         <div id="myPeerId" class="hidden">
             <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
-            <div class="peer-id-value" id="peerIdDisplay" onclick="copyPeerId()">Connecting...</div>
-            <button class="copy-btn" onclick="copyPeerId()">📋 Copy ID</button>
+            <div class="peer-id-value" id="peerIdDisplay" onclick="window.copyPeerId()">Connecting...</div>
+            <button class="copy-btn" onclick="window.copyPeerId()">📋 Copy ID</button>
         </div>
         
         <div class="connection-panel">
@@ -549,97 +549,20 @@
         </div>
     </div>
     
-    <script type="text/typescript">
-        // ============================================================================
-        // TYPE DEFINITIONS
-        // ============================================================================
+    <script>
+        'use strict';
         
-        type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
-        type CellValue = 0 | PieceType | 'G';
-        type Board = CellValue[][];
-        type Rotation = 0 | 1 | 2 | 3;
-        type RotationState = '0' | 'R' | '2' | 'L';
-        type RotationDirection = 'cw' | 'ccw' | '180';
-        type Shape = number[][][];
-        
-        interface TetrominoData {
-            shape: Shape;
-            color: string;
-        }
-        
-        interface KickOffset {
-            [key: string]: [number, number][];
-        }
-        
-        interface GameSettings {
-            arr: number;
-            das: number;
-            dcd: number;
-            sdf: number | 'inf';
-            preventMissdrop: boolean;
-        }
-        
-        interface KeyBindings {
-            left: string;
-            right: string;
-            softDrop: string;
-            hardDrop: string;
-            rotateCW: string;
-            rotateCCW: string;
-            rotate180: string;
-            hold: string;
-        }
-        
-        interface GameStateSnapshot {
-            board: Board;
-            currentPiece: PieceType | null;
-            currentX: number;
-            currentY: number;
-            currentRotation: Rotation;
-            holdPiece: PieceType | null;
-            queue: PieceType[];
-            piecesPlaced: number;
-            attacksSent: number;
-            b2bCounter: number;
-            comboCounter: number;
-        }
-        
-        interface NetworkMessage {
-            type: 'chat' | 'attack' | 'start' | 'gameState' | 'restart' | 'gameOver';
-            message?: string;
-            lines?: number;
-            seed?: number;
-            state?: GameStateSnapshot;
-        }
-        
-        interface GarbageEntry {
-            lines: number;
-            hole: number;
-        }
-        
-        interface RotationBuffer {
-            dir: RotationDirection;
-            time: number;
-        }
-        
-        // ============================================================================
-        // CONSTANTS
-        // ============================================================================
-        
+        // Constants
         const COLS = 10;
         const ROWS = 20;
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
         const STATE_SEND_INTERVAL = 50;
+        const ROTATION_STATES = ['0', 'R', '2', 'L'];
         
-        const ROTATION_STATES: RotationState[] = ['0', 'R', '2', 'L'];
-        
-        // ============================================================================
-        // SRS KICK TABLES
-        // ============================================================================
-        
-        const KICK_TABLE: Record<string, KickOffset> = {
+        // SRS Kick Tables
+        const KICK_TABLE = {
             'JLSTZ': {
                 '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
                 'R->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
@@ -666,11 +589,8 @@
             }
         };
         
-        // ============================================================================
-        // TETROMINO SHAPES
-        // ============================================================================
-        
-        const SHAPES: Record<PieceType, TetrominoData> = {
+        // Tetromino Shapes
+        const SHAPES = {
             'I': {
                 shape: [
                     [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
@@ -731,55 +651,48 @@
             }
         };
         
-        const SPAWN_COLUMNS: Record<PieceType, number> = {
+        const SPAWN_COLUMNS = {
             'O': 4, 'T': 3, 'Z': 3, 'I': 3, 'L': 3, 'J': 3, 'S': 3
         };
         
-        // ============================================================================
-        // UTILITY CLASSES
-        // ============================================================================
+        // ========================================================================
+        // Seeded Random Number Generator
+        // ========================================================================
         
         class SeededRandom {
-            private seed: number;
-            
-            constructor(seed: number) {
+            constructor(seed) {
                 this.seed = seed;
             }
             
-            next(): number {
+            next() {
                 this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
                 return this.seed / 0x7fffffff;
             }
             
-            nextInt(max: number): number {
+            nextInt(max) {
                 return Math.floor(this.next() * max);
             }
         }
         
-        // ============================================================================
-        // RENDERER CLASS
-        // ============================================================================
+        // ========================================================================
+        // Tetris Renderer
+        // ========================================================================
         
         class TetrisRenderer {
-            private ctx: CanvasRenderingContext2D;
-            private holdCtx: CanvasRenderingContext2D;
-            private queueCtx: CanvasRenderingContext2D;
-            
-            constructor(
-                private canvas: HTMLCanvasElement,
-                private holdCanvas: HTMLCanvasElement,
-                private queueCanvas: HTMLCanvasElement
-            ) {
-                this.ctx = canvas.getContext('2d')!;
-                this.holdCtx = holdCanvas.getContext('2d')!;
-                this.queueCtx = queueCanvas.getContext('2d')!;
+            constructor(canvas, holdCanvas, queueCanvas) {
+                this.canvas = canvas;
+                this.holdCanvas = holdCanvas;
+                this.queueCanvas = queueCanvas;
+                this.ctx = canvas.getContext('2d');
+                this.holdCtx = holdCanvas.getContext('2d');
+                this.queueCtx = queueCanvas.getContext('2d');
             }
             
-            drawBoard(board: Board): void {
+            drawBoard(board) {
+                // Clear and draw grid
                 this.ctx.fillStyle = '#0a0e27';
                 this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
-                // Draw grid
                 this.ctx.strokeStyle = 'rgba(139, 157, 195, 0.1)';
                 this.ctx.lineWidth = 1;
                 
@@ -797,24 +710,22 @@
                     this.ctx.stroke();
                 }
                 
-                // Draw board cells
+                // Draw cells
                 for (let row = 0; row < ROWS; row++) {
                     for (let col = 0; col < COLS; col++) {
                         if (board[row][col]) {
-                            const color = board[row][col] === 'G' 
-                                ? '#666666' 
-                                : SHAPES[board[row][col] as PieceType].color;
+                            const color = board[row][col] === 'G' ? '#666666' : SHAPES[board[row][col]].color;
                             this.drawBlock(col * BLOCK_SIZE, row * BLOCK_SIZE, color);
                         }
                     }
                 }
             }
             
-            drawGhostPiece(piece: PieceType, x: number, ghostY: number, rotation: Rotation): void {
+            drawGhostPiece(piece, x, ghostY, rotation) {
                 this.drawPiece(piece, x, ghostY, rotation, 0.3);
             }
             
-            drawPiece(piece: PieceType, x: number, y: number, rotation: Rotation, alpha: number = 1.0): void {
+            drawPiece(piece, x, y, rotation, alpha = 1.0) {
                 const shape = SHAPES[piece].shape[rotation];
                 const color = SHAPES[piece].color;
                 
@@ -827,23 +738,18 @@
                 }
             }
             
-            private drawBlock(x: number, y: number, color: string, alpha: number = 1.0): void {
+            drawBlock(x, y, color, alpha = 1.0) {
                 this.ctx.fillStyle = color;
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
-                
-                // Highlight
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
                 this.ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, 6);
-                
-                // Shadow
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                 this.ctx.fillRect(x + 2, y + BLOCK_SIZE - 8, BLOCK_SIZE - 4, 6);
-                
                 this.ctx.globalAlpha = 1.0;
             }
             
-            drawHold(piece: PieceType | null): void {
+            drawHold(piece) {
                 this.holdCtx.fillStyle = '#0a0e27';
                 this.holdCtx.fillRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
                 
@@ -852,31 +758,17 @@
                 }
             }
             
-            drawQueue(queue: PieceType[]): void {
+            drawQueue(queue) {
                 this.queueCtx.fillStyle = '#0a0e27';
                 this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
                 
                 for (let i = 0; i < Math.min(6, queue.length); i++) {
                     const offsetY = i * 80;
-                    this.drawPreviewPiece(
-                        this.queueCtx,
-                        queue[i],
-                        this.queueCanvas.width,
-                        80,
-                        0,
-                        offsetY
-                    );
+                    this.drawPreviewPiece(this.queueCtx, queue[i], this.queueCanvas.width, 80, 0, offsetY);
                 }
             }
             
-            private drawPreviewPiece(
-                ctx: CanvasRenderingContext2D,
-                piece: PieceType,
-                containerWidth: number,
-                containerHeight: number,
-                offsetX: number = 0,
-                offsetY: number = 0
-            ): void {
+            drawPreviewPiece(ctx, piece, containerWidth, containerHeight, offsetX = 0, offsetY = 0) {
                 const shape = SHAPES[piece].shape[0];
                 const color = SHAPES[piece].color;
                 const pieceWidth = shape[0].length * PREVIEW_BLOCK_SIZE;
@@ -900,93 +792,76 @@
             }
         }
         
-        // ============================================================================
-        // GAME STATE CLASS
-        // ============================================================================
+        // ========================================================================
+        // Game State
+        // ========================================================================
         
         class GameState {
-            private board: Board = [];
-            private currentPiece: PieceType | null = null;
-            private currentX: number = 0;
-            private currentY: number = 0;
-            private currentRotation: Rotation = 0;
-            private holdPiece: PieceType | null = null;
-            private canHold: boolean = true;
-            private bag: PieceType[] = [];
-            private queue: PieceType[] = [];
-            private rng: SeededRandom;
-            private renderer: TetrisRenderer;
-            
-            // Timing
-            private readonly gravity = 1000;
-            private lastGravityTime = 0;
-            private gameStartTime: number;
-            private readonly lockDelay = 500;
-            private lockDelayTimer = 0;
-            private isTouchingGround = false;
-            private maxLockResets = 15;
-            private lockResetCount = 0;
-            private hardDropCooldown = 0;
-            private readonly hardDropCooldownFrames = 10;
-            private dcdTimer = 0;
-            
-            // Stats
-            private piecesPlaced = 0;
-            private attacksSent = 0;
-            private b2bCounter = 0;
-            private comboCounter = -1;
-            private lastClearWasB2B = false;
-            
-            // Input state
-            private lastActionWasRotation = false;
-            private rotateBuffer: RotationBuffer | null = null;
-            private softDropActive = false;
-            
-            // Garbage
-            private pendingGarbage: GarbageEntry[] = [];
-            
-            constructor(
-                canvasId: string,
-                holdCanvasId: string,
-                queueCanvasId: string,
-                private playerId: number,
-                seed: number
-            ) {
+            constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
+                this.playerId = playerId;
                 this.rng = new SeededRandom(seed);
                 this.gameStartTime = Date.now();
-                this.initBoard();
-                this.initQueue();
                 
-                const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-                const holdCanvas = document.getElementById(holdCanvasId) as HTMLCanvasElement;
-                const queueCanvas = document.getElementById(queueCanvasId) as HTMLCanvasElement;
+                this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+                this.currentPiece = null;
+                this.currentX = 0;
+                this.currentY = 0;
+                this.currentRotation = 0;
+                this.holdPiece = null;
+                this.canHold = true;
+                this.bag = [];
+                this.queue = [];
+                
+                this.gravity = 1000;
+                this.lastGravityTime = 0;
+                this.lockDelay = 500;
+                this.lockDelayTimer = 0;
+                this.isTouchingGround = false;
+                this.maxLockResets = 15;
+                this.lockResetCount = 0;
+                this.hardDropCooldown = 0;
+                this.hardDropCooldownFrames = 10;
+                this.dcdTimer = 0;
+                
+                this.piecesPlaced = 0;
+                this.attacksSent = 0;
+                this.b2bCounter = 0;
+                this.comboCounter = -1;
+                this.lastClearWasB2B = false;
+                
+                this.lastActionWasRotation = false;
+                this.rotateBuffer = null;
+                this.softDropActive = false;
+                
+                this.pendingGarbage = [];
+                
+                const canvas = document.getElementById(canvasId);
+                const holdCanvas = document.getElementById(holdCanvasId);
+                const queueCanvas = document.getElementById(queueCanvasId);
                 
                 this.renderer = new TetrisRenderer(canvas, holdCanvas, queueCanvas);
+                
+                this.initQueue();
             }
             
-            private initBoard(): void {
-                this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
-            }
-            
-            private initQueue(): void {
+            initQueue() {
                 for (let i = 0; i < 6; i++) {
                     this.queue.push(this.getNextPiece());
                 }
             }
             
-            private getNextPiece(): PieceType {
+            getNextPiece() {
                 if (this.bag.length === 0) {
                     this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-                    // Fisher-Yates shuffle
                     for (let i = this.bag.length - 1; i > 0; i--) {
                         const j = this.rng.nextInt(i + 1);
                         [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
                     }
                 }
-                return this.bag.pop()!;
+                return this.bag.pop();
             }
             
-            private resetPieceState(piece: PieceType): void {
+            resetPieceState(piece) {
                 this.currentPiece = piece;
                 this.currentRotation = 0;
                 this.currentX = SPAWN_COLUMNS[piece];
@@ -999,8 +874,8 @@
                 this.lastActionWasRotation = false;
             }
             
-            spawnPiece(): boolean {
-                const pieceType = this.queue.shift()!;
+            spawnPiece() {
+                const pieceType = this.queue.shift();
                 this.queue.push(this.getNextPiece());
                 this.resetPieceState(pieceType);
                 this.canHold = true;
@@ -1009,11 +884,12 @@
                 return true;
             }
             
-            private applyInitialRotation(): void {
+            applyInitialRotation() {
                 if (!this.currentPiece) return;
                 
-                const heldKeys = InputManager.getInstance().getHeldKeys();
-                const bindings = InputManager.getInstance().getKeyBindings();
+                const input = InputManager.getInstance();
+                const heldKeys = input.getHeldKeys();
+                const bindings = input.getKeyBindings();
                 
                 if (heldKeys[bindings.rotate180]) {
                     this.rotate('180');
@@ -1024,11 +900,11 @@
                 }
             }
             
-            bufferRotation(direction: RotationDirection): void {
+            bufferRotation(direction) {
                 this.rotateBuffer = { dir: direction, time: performance.now() };
             }
             
-            private consumeRotationBuffer(): void {
+            consumeRotationBuffer() {
                 if (!this.rotateBuffer) return;
                 
                 const age = performance.now() - this.rotateBuffer.time;
@@ -1037,8 +913,9 @@
                     return;
                 }
                 
-                const heldKeys = InputManager.getInstance().getHeldKeys();
-                const bindings = InputManager.getInstance().getKeyBindings();
+                const input = InputManager.getInstance();
+                const heldKeys = input.getHeldKeys();
+                const bindings = input.getKeyBindings();
                 
                 if (heldKeys[bindings.rotateCW] || heldKeys[bindings.rotateCCW] || heldKeys[bindings.rotate180]) {
                     this.rotateBuffer = null;
@@ -1049,7 +926,7 @@
                 this.rotateBuffer = null;
             }
             
-            isValidPosition(x: number, y: number, rotation: Rotation): boolean {
+            isValidPosition(x, y, rotation) {
                 if (!this.currentPiece) return false;
                 
                 const shape = SHAPES[this.currentPiece].shape[rotation];
@@ -1066,18 +943,18 @@
                 return true;
             }
             
-            rotate(direction: RotationDirection): boolean {
+            rotate(direction) {
                 if (!this.currentPiece) return false;
                 
                 const oldRotation = this.currentRotation;
-                let newRotation: Rotation;
+                let newRotation;
                 
                 if (direction === 'cw') {
-                    newRotation = ((oldRotation + 1) % 4) as Rotation;
+                    newRotation = (oldRotation + 1) % 4;
                 } else if (direction === 'ccw') {
-                    newRotation = ((oldRotation + 3) % 4) as Rotation;
+                    newRotation = (oldRotation + 3) % 4;
                 } else {
-                    newRotation = ((oldRotation + 2) % 4) as Rotation;
+                    newRotation = (oldRotation + 2) % 4;
                 }
                 
                 const kickTable = this.currentPiece === 'I' ? KICK_TABLE.I :
@@ -1102,7 +979,7 @@
                 return false;
             }
             
-            move(dx: number): boolean {
+            move(dx) {
                 if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
                     this.currentX += dx;
                     this.lastActionWasRotation = false;
@@ -1116,7 +993,7 @@
                 return false;
             }
             
-            softDrop(): boolean {
+            softDrop() {
                 const settings = GameSettings.getInstance();
                 
                 if (settings.sdf === 'inf') {
@@ -1133,7 +1010,7 @@
                 return false;
             }
             
-            hardDrop(): boolean {
+            hardDrop() {
                 const settings = GameSettings.getInstance();
                 
                 if (settings.preventMissdrop && this.hardDropCooldown > 0) {
@@ -1146,7 +1023,7 @@
                 return this.lockPiece();
             }
             
-            private lockPiece(): boolean {
+            lockPiece() {
                 if (!this.currentPiece) return false;
                 
                 const pieceType = this.currentPiece;
@@ -1156,7 +1033,6 @@
                 
                 const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
                 
-                // Check for overlaps (game over condition)
                 for (let row = 0; row < shape.length; row++) {
                     for (let col = 0; col < shape[row].length; col++) {
                         if (shape[row][col]) {
@@ -1164,7 +1040,7 @@
                             const boardX = this.currentX + col;
                             
                             if (boardY >= 0 && this.board[boardY][boardX]) {
-                                return false; // Game over
+                                return false;
                             }
                             
                             if (boardY >= 0) {
@@ -1185,14 +1061,14 @@
                 return true;
             }
             
-            private checkSpin(pieceType: PieceType, x: number, y: number, rotation: Rotation): boolean {
+            checkSpin(pieceType, x, y, rotation) {
                 if (pieceType === 'T' && this.lastActionWasRotation) {
                     return this.checkTSpin(x, y);
                 }
                 return false;
             }
             
-            private checkTSpin(x: number, y: number): boolean {
+            checkTSpin(x, y) {
                 const corners = [[x, y], [x + 2, y], [x, y + 2], [x + 2, y + 2]];
                 let filledCorners = 0;
                 
@@ -1205,8 +1081,8 @@
                 return filledCorners >= 3;
             }
             
-            private clearLines(lastPiece: PieceType, isSpin: boolean): void {
-                const clearedRows: number[] = [];
+            clearLines(lastPiece, isSpin) {
+                const clearedRows = [];
                 
                 for (let row = 0; row < ROWS; row++) {
                     if (this.board[row].every(cell => cell !== 0)) {
@@ -1217,12 +1093,10 @@
                 const linesCleared = clearedRows.length;
                 
                 if (linesCleared > 0) {
-                    // Remove cleared rows
                     for (let i = clearedRows.length - 1; i >= 0; i--) {
                         this.board.splice(clearedRows[i], 1);
                     }
                     
-                    // Add empty rows at top
                     for (let i = 0; i < linesCleared; i++) {
                         this.board.unshift(Array(COLS).fill(0));
                     }
@@ -1230,7 +1104,6 @@
                     const isAllClear = this.board.every(row => row.every(cell => cell === 0));
                     let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
                     
-                    // B2B logic
                     const isB2BMove = linesCleared === 4 || isSpin;
                     if (isB2BMove) {
                         if (this.lastClearWasB2B) {
@@ -1245,11 +1118,9 @@
                         this.lastClearWasB2B = false;
                     }
                     
-                    // Combo logic
                     this.comboCounter++;
                     if (this.comboCounter >= 4) attack += 1;
                     
-                    // Garbage canceling
                     attack = this.handleGarbageCanceling(attack);
                     
                     this.attacksSent += attack;
@@ -1267,7 +1138,7 @@
                 this.updateStats();
             }
             
-            private handleGarbageCanceling(attack: number): number {
+            handleGarbageCanceling(attack) {
                 if (this.pendingGarbage.length === 0) return attack;
                 
                 const totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
@@ -1296,7 +1167,7 @@
                 return attack;
             }
             
-            private calculateAttack(lines: number, isSpin: boolean, isAllClear: boolean, pieceType: PieceType): number {
+            calculateAttack(lines, isSpin, isAllClear, pieceType) {
                 if (isAllClear) {
                     return lines === 4 ? 10 : 8;
                 }
@@ -1312,18 +1183,18 @@
                 return attackTable[lines] || 0;
             }
             
-            receiveAttack(lines: number): void {
+            receiveAttack(lines) {
                 this.pendingGarbage.push({
                     lines: lines,
                     hole: this.rng.nextInt(COLS)
                 });
             }
             
-            private applyGarbage(): void {
+            applyGarbage() {
                 if (this.pendingGarbage.length === 0) return;
                 
                 let totalLines = 0;
-                let alignedHole: number | null = null;
+                let alignedHole = null;
                 
                 for (const garbage of this.pendingGarbage) {
                     totalLines += garbage.lines;
@@ -1332,19 +1203,17 @@
                     }
                 }
                 
-                // Remove rows from top
                 for (let i = 0; i < totalLines && i < ROWS; i++) {
                     this.board.shift();
                 }
                 
-                // Add garbage rows at bottom
                 let linesAdded = 0;
                 for (const garbage of this.pendingGarbage) {
                     const useAlignedHole = garbage.lines >= 2;
                     const hole = useAlignedHole && alignedHole !== null ? alignedHole : this.rng.nextInt(COLS);
                     
                     for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
-                        const garbageLine: CellValue[] = Array(COLS).fill('G');
+                        const garbageLine = Array(COLS).fill('G');
                         garbageLine[hole] = 0;
                         this.board.push(garbageLine);
                         linesAdded++;
@@ -1355,7 +1224,7 @@
                 this.pendingGarbage = [];
             }
             
-            holdCurrentPiece(): boolean {
+            holdCurrentPiece() {
                 if (!this.canHold || !this.currentPiece) return false;
                 
                 if (this.holdPiece === null) {
@@ -1373,14 +1242,12 @@
                 return true;
             }
             
-            update(deltaTime: number): boolean {
+            update(deltaTime) {
                 if (!this.currentPiece) return true;
                 
-                // Update cooldowns
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
                 
-                // Check ground contact
                 const wasTouching = this.isTouchingGround;
                 this.isTouchingGround = !this.isValidPosition(
                     this.currentX,
@@ -1395,13 +1262,12 @@
                 
                 this.lastGravityTime += deltaTime;
                 
-                // Lock delay or gravity
                 if (this.isTouchingGround) {
                     this.lockDelayTimer += deltaTime;
                     
                     if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
                         const lockSuccess = this.lockPiece();
-                        if (!lockSuccess) return false; // Game over
+                        if (!lockSuccess) return false;
                         
                         const settings = GameSettings.getInstance();
                         if (settings.preventMissdrop) {
@@ -1420,7 +1286,7 @@
                         if (settings.sdf === 'inf') {
                             useSonicDrop = true;
                         } else {
-                            fallInterval = this.gravity / Math.max(1, settings.sdf as number);
+                            fallInterval = this.gravity / Math.max(1, settings.sdf);
                         }
                     }
                     
@@ -1444,33 +1310,30 @@
                 return true;
             }
             
-            setSoftDropActive(active: boolean): void {
+            setSoftDropActive(active) {
                 this.softDropActive = active;
             }
             
-            private updateStats(): void {
+            updateStats() {
                 const elapsed = (Date.now() - this.gameStartTime) / 1000;
                 const pps = this.piecesPlaced / elapsed;
                 const apm = (this.attacksSent / elapsed) * 60;
                 
-                document.getElementById(`pps${this.playerId}`)!.textContent = pps.toFixed(2);
-                document.getElementById(`apm${this.playerId}`)!.textContent = apm.toFixed(2);
-                document.getElementById(`b2b${this.playerId}`)!.textContent = this.b2bCounter.toString();
-                document.getElementById(`combo${this.playerId}`)!.textContent = Math.max(0, this.comboCounter).toString();
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
             }
             
-            draw(): void {
+            draw() {
                 this.renderer.drawBoard(this.board);
                 
                 if (this.currentPiece) {
-                    // Draw ghost piece
                     let ghostY = this.currentY;
                     while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
                         ghostY++;
                     }
                     this.renderer.drawGhostPiece(this.currentPiece, this.currentX, ghostY, this.currentRotation);
-                    
-                    // Draw current piece
                     this.renderer.drawPiece(this.currentPiece, this.currentX, this.currentY, this.currentRotation);
                 }
                 
@@ -1478,7 +1341,7 @@
                 this.renderer.drawQueue(this.queue);
             }
             
-            getState(): GameStateSnapshot {
+            getState() {
                 return {
                     board: this.board.map(row => [...row]),
                     currentPiece: this.currentPiece,
@@ -1494,7 +1357,7 @@
                 };
             }
             
-            setState(state: GameStateSnapshot): void {
+            setState(state) {
                 this.board = state.board.map(row => [...row]);
                 this.currentPiece = state.currentPiece;
                 this.currentX = state.currentX;
@@ -1511,52 +1374,54 @@
                 const pps = this.piecesPlaced / elapsed;
                 const apm = (this.attacksSent / elapsed) * 60;
                 
-                document.getElementById(`pps${this.playerId}`)!.textContent = pps.toFixed(2);
-                document.getElementById(`apm${this.playerId}`)!.textContent = apm.toFixed(2);
-                document.getElementById(`b2b${this.playerId}`)!.textContent = this.b2bCounter.toString();
-                document.getElementById(`combo${this.playerId}`)!.textContent = Math.max(0, this.comboCounter).toString();
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
             }
             
-            setGameStartTime(time: number): void {
+            setGameStartTime(time) {
                 this.gameStartTime = time;
             }
         }
         
-        // ============================================================================
-        // SINGLETON MANAGERS
-        // ============================================================================
+        // ========================================================================
+        // Singleton Managers
+        // ========================================================================
         
         class GameSettings {
-            private static instance: GameSettings;
+            static instance = null;
             
-            arr: number = 0;
-            das: number = 167;
-            dcd: number = 0;
-            sdf: number | 'inf' = 6;
-            preventMissdrop: boolean = true;
+            constructor() {
+                this.arr = 0;
+                this.das = 167;
+                this.dcd = 0;
+                this.sdf = 6;
+                this.preventMissdrop = true;
+            }
             
-            static getInstance(): GameSettings {
+            static getInstance() {
                 if (!GameSettings.instance) {
                     GameSettings.instance = new GameSettings();
                 }
                 return GameSettings.instance;
             }
             
-            update(): void {
-                this.arr = parseInt((document.getElementById('arr') as HTMLInputElement).value);
-                this.das = parseInt((document.getElementById('das') as HTMLInputElement).value);
-                this.dcd = parseInt((document.getElementById('dcd') as HTMLInputElement).value);
+            update() {
+                this.arr = parseInt(document.getElementById('arr').value);
+                this.das = parseInt(document.getElementById('das').value);
+                this.dcd = parseInt(document.getElementById('dcd').value);
                 
-                const sdfValue = (document.getElementById('sdf') as HTMLSelectElement).value;
+                const sdfValue = document.getElementById('sdf').value;
                 this.sdf = sdfValue === 'inf' ? 'inf' : parseFloat(sdfValue);
                 
-                this.preventMissdrop = (document.getElementById('preventMissdrop') as HTMLSelectElement).value === 'true';
+                this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
             }
         }
         
         class ChatManager {
-            static addMessage(message: string, sender: string = 'System'): void {
-                const chatMessages = document.getElementById('chatMessages')!;
+            static addMessage(message, sender = 'System') {
+                const chatMessages = document.getElementById('chatMessages');
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'chat-message';
                 messageDiv.textContent = `${sender}: ${message}`;
@@ -1566,24 +1431,27 @@
         }
         
         class NetworkManager {
-            private static instance: NetworkManager;
-            private peer: any = null;
-            private conn: any = null;
-            private isHost: boolean = false;
-            private myPeerId: string | null = null;
-            private onMessageCallback: ((msg: NetworkMessage) => void) | null = null;
+            static instance = null;
             
-            static getInstance(): NetworkManager {
+            constructor() {
+                this.peer = null;
+                this.conn = null;
+                this.isHost = false;
+                this.myPeerId = null;
+                this.onMessageCallback = null;
+            }
+            
+            static getInstance() {
                 if (!NetworkManager.instance) {
                     NetworkManager.instance = new NetworkManager();
                 }
                 return NetworkManager.instance;
             }
             
-            initialize(onMessage: (msg: NetworkMessage) => void): void {
+            initialize(onMessage) {
                 this.onMessageCallback = onMessage;
                 
-                this.peer = new (window as any).Peer({
+                this.peer = new Peer({
                     config: {
                         iceServers: [
                             { urls: 'stun:stun.l.google.com:19302' },
@@ -1592,19 +1460,19 @@
                     }
                 });
                 
-                this.peer.on('open', (id: string) => {
+                this.peer.on('open', (id) => {
                     this.myPeerId = id;
-                    document.getElementById('peerIdDisplay')!.textContent = id;
-                    document.getElementById('myPeerId')!.classList.remove('hidden');
+                    document.getElementById('peerIdDisplay').textContent = id;
+                    document.getElementById('myPeerId').classList.remove('hidden');
                     ChatManager.addMessage(`Your Peer ID: ${id}`);
                     ChatManager.addMessage('Share this ID with your opponent to let them join!');
                 });
                 
-                this.peer.on('connection', (connection: any) => {
+                this.peer.on('connection', (connection) => {
                     this.conn = connection;
                     this.setupConnection();
                     ChatManager.addMessage('Opponent connected!');
-                    document.getElementById('gameStatus')!.textContent = 'Connected! Starting game...';
+                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
                     
                     const seed = Math.floor(Math.random() * 1000000000);
                     ChatManager.addMessage(`Generated game seed: ${seed}`, 'System');
@@ -1617,31 +1485,31 @@
                     }, 1000);
                 });
                 
-                this.peer.on('error', (err: any) => {
+                this.peer.on('error', (err) => {
                     console.error('PeerJS error:', err);
                     ChatManager.addMessage(`Connection error: ${err.type}`);
                 });
             }
             
-            connect(peerId: string): void {
+            connect(peerId) {
                 setTimeout(() => {
                     this.conn = this.peer.connect(peerId);
                     
                     this.conn.on('open', () => {
                         this.setupConnection();
                         ChatManager.addMessage('Connected to opponent!');
-                        document.getElementById('gameStatus')!.textContent = 'Connected! Waiting for host to start...';
-                        (document.getElementById('joinGameBtn') as HTMLButtonElement).disabled = true;
+                        document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
+                        document.getElementById('joinGameBtn').disabled = true;
                     });
                     
-                    this.conn.on('error', (err: any) => {
+                    this.conn.on('error', (err) => {
                         ChatManager.addMessage(`Failed to connect: ${err}`);
                     });
                 }, 1000);
             }
             
-            private setupConnection(): void {
-                this.conn.on('data', (data: NetworkMessage) => {
+            setupConnection() {
+                this.conn.on('data', (data) => {
                     if (this.onMessageCallback) {
                         this.onMessageCallback(data);
                     }
@@ -1649,62 +1517,65 @@
                 
                 this.conn.on('close', () => {
                     ChatManager.addMessage('Opponent disconnected');
-                    document.getElementById('gameStatus')!.textContent = 'Opponent disconnected';
+                    document.getElementById('gameStatus').textContent = 'Opponent disconnected';
                 });
             }
             
-            send(message: NetworkMessage): void {
+            send(message) {
                 if (this.conn && this.conn.open) {
                     this.conn.send(message);
                 }
             }
             
-            sendAttack(lines: number): void {
+            sendAttack(lines) {
                 const cappedLines = Math.min(lines, 10);
                 this.send({ type: 'attack', lines: cappedLines });
             }
             
-            isConnected(): boolean {
+            isConnected() {
                 return this.conn && this.conn.open;
             }
         }
         
         class InputManager {
-            private static instance: InputManager;
-            private heldKeys: Record<string, boolean> = {};
-            private keyBindings: KeyBindings = {
-                left: 'ArrowLeft',
-                right: 'ArrowRight',
-                softDrop: 'ArrowDown',
-                hardDrop: ' ',
-                rotateCW: 'ArrowUp',
-                rotateCCW: 'z',
-                rotate180: 'x',
-                hold: 'c'
-            };
+            static instance = null;
             
-            private movementState = {
-                left: false,
-                right: false,
-                direction: 0,
-                lastPressed: 0,
-                das: 0,
-                arr: 0,
-                dcd: 0
-            };
+            constructor() {
+                this.heldKeys = {};
+                this.keyBindings = {
+                    left: 'ArrowLeft',
+                    right: 'ArrowRight',
+                    softDrop: 'ArrowDown',
+                    hardDrop: ' ',
+                    rotateCW: 'ArrowUp',
+                    rotateCCW: 'z',
+                    rotate180: 'x',
+                    hold: 'c'
+                };
+                
+                this.movementState = {
+                    left: false,
+                    right: false,
+                    direction: 0,
+                    lastPressed: 0,
+                    das: 0,
+                    arr: 0,
+                    dcd: 0
+                };
+            }
             
-            static getInstance(): InputManager {
+            static getInstance() {
                 if (!InputManager.instance) {
                     InputManager.instance = new InputManager();
                 }
                 return InputManager.instance;
             }
             
-            getHeldKeys(): Record<string, boolean> {
+            getHeldKeys() {
                 return this.heldKeys;
             }
             
-            getKeyBindings(): KeyBindings {
+            getKeyBindings() {
                 return this.keyBindings;
             }
             
@@ -1712,19 +1583,16 @@
                 return this.movementState;
             }
             
-            setupKeyBindings(): void {
-                const actions: (keyof KeyBindings)[] = [
-                    'left', 'right', 'softDrop', 'hardDrop',
-                    'rotateCW', 'rotateCCW', 'rotate180', 'hold'
-                ];
+            setupKeyBindings() {
+                const actions = ['left', 'right', 'softDrop', 'hardDrop', 'rotateCW', 'rotateCCW', 'rotate180', 'hold'];
                 
                 actions.forEach(action => {
                     const inputId = `key${action.charAt(0).toUpperCase() + action.slice(1)}`;
-                    const input = document.getElementById(inputId) as HTMLInputElement;
+                    const input = document.getElementById(inputId);
                     
                     input.addEventListener('click', () => {
                         input.value = 'Press a key...';
-                        const listener = (e: KeyboardEvent) => {
+                        const listener = (e) => {
                             e.preventDefault();
                             this.keyBindings[action] = e.key;
                             input.value = e.key;
@@ -1735,16 +1603,16 @@
                 });
             }
             
-            handleKeyDown(key: string): void {
+            handleKeyDown(key) {
                 if (this.heldKeys[key]) return;
                 this.heldKeys[key] = true;
             }
             
-            handleKeyUp(key: string): void {
+            handleKeyUp(key) {
                 delete this.heldKeys[key];
             }
             
-            updateMovement(key: string, isDown: boolean): void {
+            updateMovement(key, isDown) {
                 if (key === this.keyBindings.left) {
                     if (isDown && !this.movementState.left) {
                         this.movementState.left = true;
@@ -1766,7 +1634,7 @@
                 }
             }
             
-            private recomputeMovement(triggerImmediate: boolean): void {
+            recomputeMovement(triggerImmediate) {
                 let newDirection = 0;
                 
                 if (this.movementState.left && this.movementState.right) {
@@ -1782,14 +1650,10 @@
                     this.movementState.das = 0;
                     this.movementState.arr = 0;
                     this.movementState.dcd = GameSettings.getInstance().dcd;
-                    
-                    if (triggerImmediate && newDirection !== 0) {
-                        // Movement will be triggered by game controller
-                    }
                 }
             }
             
-            processMovement(deltaTime: number, moveCallback: (dx: number) => void): void {
+            processMovement(deltaTime, moveCallback) {
                 if (this.movementState.direction === 0) return;
                 
                 const settings = GameSettings.getInstance();
@@ -1811,7 +1675,7 @@
                 }
             }
             
-            reset(): void {
+            reset() {
                 this.movementState = {
                     left: false,
                     right: false,
@@ -1824,41 +1688,40 @@
             }
         }
         
-        // ============================================================================
-        // GAME CONTROLLER
-        // ============================================================================
+        // ========================================================================
+        // Game Controller
+        // ========================================================================
         
         class GameController {
-            private gameState1: GameState | null = null;
-            private gameState2: GameState | null = null;
-            private gameRunning = false;
-            private gameSeed: number | null = null;
-            private lastTime = 0;
-            private lastStateSendTime = 0;
-            private animationFrameId: number | null = null;
-            
             constructor() {
+                this.gameState1 = null;
+                this.gameState2 = null;
+                this.gameRunning = false;
+                this.gameSeed = null;
+                this.lastTime = 0;
+                this.lastStateSendTime = 0;
+                this.animationFrameId = null;
+                
                 this.setupUI();
-                this.setupNetworking();
                 this.setupInput();
             }
             
-            private setupUI(): void {
-                (window as any).copyPeerId = () => {
-                    const peerId = document.getElementById('peerIdDisplay')!.textContent;
+            setupUI() {
+                window.copyPeerId = () => {
+                    const peerId = document.getElementById('peerIdDisplay').textContent;
                     navigator.clipboard.writeText(peerId).then(() => {
                         ChatManager.addMessage('Peer ID copied to clipboard!');
                     });
                 };
                 
-                document.getElementById('createGameBtn')!.addEventListener('click', () => {
+                document.getElementById('createGameBtn').addEventListener('click', () => {
                     NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
-                    document.getElementById('gameStatus')!.textContent = 'Waiting for opponent to join...';
-                    (document.getElementById('createGameBtn') as HTMLButtonElement).disabled = true;
+                    document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
+                    document.getElementById('createGameBtn').disabled = true;
                 });
                 
-                document.getElementById('joinGameBtn')!.addEventListener('click', () => {
-                    const opponentId = (document.getElementById('opponentPeerId') as HTMLInputElement).value.trim();
+                document.getElementById('joinGameBtn').addEventListener('click', () => {
+                    const opponentId = document.getElementById('opponentPeerId').value.trim();
                     if (!opponentId) {
                         ChatManager.addMessage('Please enter an opponent Peer ID');
                         return;
@@ -1870,7 +1733,7 @@
                     }, 1000);
                 });
                 
-                document.getElementById('restartBtn')!.addEventListener('click', () => {
+                document.getElementById('restartBtn').addEventListener('click', () => {
                     this.gameSeed = Math.floor(Math.random() * 1000000000);
                     ChatManager.addMessage(`New game seed: ${this.gameSeed}`, 'System');
                     
@@ -1878,8 +1741,8 @@
                     this.restartGame();
                 });
                 
-                document.getElementById('sendChatBtn')!.addEventListener('click', () => {
-                    const input = document.getElementById('chatInput') as HTMLInputElement;
+                document.getElementById('sendChatBtn').addEventListener('click', () => {
+                    const input = document.getElementById('chatInput');
                     const message = input.value.trim();
                     
                     if (message && NetworkManager.getInstance().isConnected()) {
@@ -1889,9 +1752,9 @@
                     }
                 });
                 
-                document.getElementById('chatInput')!.addEventListener('keypress', (e) => {
+                document.getElementById('chatInput').addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') {
-                        (document.getElementById('sendChatBtn') as HTMLButtonElement).click();
+                        document.getElementById('sendChatBtn').click();
                     }
                 });
                 
@@ -1899,14 +1762,10 @@
                 ChatManager.addMessage('Click "Create Game" to host or enter a Peer ID to join.');
             }
             
-            private setupNetworking(): void {
-                // Network manager is initialized on button clicks
-            }
-            
-            private setupInput(): void {
+            setupInput() {
                 InputManager.getInstance().setupKeyBindings();
                 
-                document.addEventListener('keydown', (e: KeyboardEvent) => {
+                document.addEventListener('keydown', (e) => {
                     if (!this.gameRunning || !this.gameState1) return;
                     
                     const input = InputManager.getInstance();
@@ -1917,8 +1776,6 @@
                     if (e.key === bindings.left || e.key === bindings.right) {
                         e.preventDefault();
                         input.updateMovement(e.key, true);
-                        
-                        // Immediate movement on key press
                         const direction = e.key === bindings.left ? -1 : 1;
                         this.gameState1.move(direction);
                     } else if (e.key === bindings.softDrop) {
@@ -1951,7 +1808,7 @@
                     }
                 });
                 
-                document.addEventListener('keyup', (e: KeyboardEvent) => {
+                document.addEventListener('keyup', (e) => {
                     const input = InputManager.getInstance();
                     const bindings = input.getKeyBindings();
                     
@@ -1964,12 +1821,12 @@
                 });
             }
             
-            private handleNetworkMessage(msg: NetworkMessage): void {
+            handleNetworkMessage(msg) {
                 if (msg.type === 'chat') {
-                    ChatManager.addMessage(msg.message!, 'Opponent');
+                    ChatManager.addMessage(msg.message, 'Opponent');
                 } else if (msg.type === 'attack') {
                     if (this.gameState1) {
-                        this.gameState1.receiveAttack(msg.lines!);
+                        this.gameState1.receiveAttack(msg.lines);
                     }
                 } else if (msg.type === 'start') {
                     if (msg.seed) {
@@ -1989,15 +1846,15 @@
                 } else if (msg.type === 'gameOver') {
                     this.gameRunning = false;
                     ChatManager.addMessage('Opponent lost! You win! 🎉', 'System');
-                    document.getElementById('gameStatus')!.textContent = 'You Win! 🏆';
+                    document.getElementById('gameStatus').textContent = 'You Win! 🏆';
                 }
             }
             
-            private startGame(): void {
+            startGame() {
                 this.gameRunning = true;
-                document.getElementById('gameArea')!.classList.remove('hidden');
-                document.getElementById('restartBtn')!.classList.remove('hidden');
-                document.getElementById('gameStatus')!.textContent = 'Game in progress!';
+                document.getElementById('gameArea').classList.remove('hidden');
+                document.getElementById('restartBtn').classList.remove('hidden');
+                document.getElementById('gameStatus').textContent = 'Game in progress!';
                 
                 if (!this.gameSeed) {
                     this.gameSeed = Math.floor(Math.random() * 1000000000);
@@ -2022,7 +1879,7 @@
                 this.gameLoop();
             }
             
-            private restartGame(): void {
+            restartGame() {
                 this.gameRunning = false;
                 
                 if (this.animationFrameId !== null) {
@@ -2035,15 +1892,15 @@
                 }, 500);
             }
             
-            private handleGameOver(): void {
+            handleGameOver() {
                 ChatManager.addMessage('You lost! Click Restart to play again.', 'System');
-                document.getElementById('gameStatus')!.textContent = 'Game Over! You lost.';
+                document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
                 this.gameRunning = false;
                 
                 NetworkManager.getInstance().send({ type: 'gameOver' });
             }
             
-            private gameLoop(timestamp: number = 0): void {
+            gameLoop(timestamp = 0) {
                 if (!this.gameRunning) return;
                 
                 const deltaTime = timestamp - this.lastTime;
@@ -2051,11 +1908,9 @@
                 
                 GameSettings.getInstance().update();
                 
-                // Update player 1
                 if (this.gameState1) {
-                    // Process DAS/ARR movement
                     InputManager.getInstance().processMovement(deltaTime, (dx) => {
-                        this.gameState1!.move(dx);
+                        this.gameState1.move(dx);
                     });
                     
                     const success = this.gameState1.update(deltaTime);
@@ -2066,7 +1921,6 @@
                     
                     this.gameState1.draw();
                     
-                    // Send state to opponent
                     if (NetworkManager.getInstance().isConnected() && 
                         timestamp - this.lastStateSendTime > STATE_SEND_INTERVAL) {
                         NetworkManager.getInstance().send({
@@ -2077,7 +1931,6 @@
                     }
                 }
                 
-                // Draw opponent's board
                 if (this.gameState2) {
                     this.gameState2.draw();
                 }
@@ -2086,11 +1939,10 @@
             }
         }
         
-        // ============================================================================
-        // INITIALIZATION
-        // ============================================================================
+        // ========================================================================
+        // Initialize
+        // ========================================================================
         
-        // Start the game controller when the page loads
         new GameController();
     </script>
 </body>
