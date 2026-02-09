@@ -720,6 +720,7 @@
                 this.softDropActive = false;
                 this.softDropTimer = 0;
                 this.lastActionWasRotation = false;
+                this.rotateBuffer = null;
                 
                 // Garbage queue system
                 this.pendingGarbage = [];
@@ -787,12 +788,36 @@
                 }
             }
             
+            bufferRotation(direction) {
+                this.rotateBuffer = { dir: direction, time: nowMs() };
+            }
+            
+            consumeRotationBuffer() {
+                if (!this.rotateBuffer) return;
+                const age = nowMs() - this.rotateBuffer.time;
+                if (age > ROTATION_BUFFER_MS) {
+                    this.rotateBuffer = null;
+                    return;
+                }
+                
+                if (typeof keysHeld !== 'undefined') {
+                    if (keysHeld[keyBindings.rotateCW] || keysHeld[keyBindings.rotateCCW] || keysHeld[keyBindings.rotate180]) {
+                        this.rotateBuffer = null;
+                        return;
+                    }
+                }
+                
+                this.rotate(this.rotateBuffer.dir);
+                this.rotateBuffer = null;
+            }
+            
             spawnPiece() {
                 const pieceType = this.queue.shift();
                 this.queue.push(this.getNextPiece());
                 this.resetPieceState(pieceType);
                 this.canHold = true;
                 this.applyInitialRotation();
+                this.consumeRotationBuffer();
                 
                 // Allow piece to spawn even if overlapping - player can move/rotate it
                 // Only game over if piece locks while overlapping
@@ -1134,6 +1159,7 @@
                     this.holdPiece = this.currentPiece;
                     this.resetPieceState(temp);
                     this.applyInitialRotation();
+                    this.consumeRotationBuffer();
                 }
                 
                 this.canHold = false;
@@ -1335,6 +1361,11 @@
             rotate180: 'x',
             hold: 'c'
         };
+        
+        const ROTATION_BUFFER_MS = 120;
+        function nowMs() {
+            return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        }
         
         // Setup key binding listeners
         Object.keys(keyBindings).forEach(action => {
@@ -1738,13 +1769,28 @@
                 gameState1.spawnPiece();
             } else if (e.key === keyBindings.rotateCW) {
                 e.preventDefault();
-                gameState1.rotate('cw');
+                const rotated = gameState1.rotate('cw');
+                if (!rotated) {
+                    gameState1.bufferRotation('cw');
+                } else {
+                    gameState1.rotateBuffer = null;
+                }
             } else if (e.key === keyBindings.rotateCCW) {
                 e.preventDefault();
-                gameState1.rotate('ccw');
+                const rotated = gameState1.rotate('ccw');
+                if (!rotated) {
+                    gameState1.bufferRotation('ccw');
+                } else {
+                    gameState1.rotateBuffer = null;
+                }
             } else if (e.key === keyBindings.rotate180) {
                 e.preventDefault();
-                gameState1.rotate('180');
+                const rotated = gameState1.rotate('180');
+                if (!rotated) {
+                    gameState1.bufferRotation('180');
+                } else {
+                    gameState1.rotateBuffer = null;
+                }
             } else if (e.key === keyBindings.hold) {
                 e.preventDefault();
                 gameState1.holdCurrentPiece();
