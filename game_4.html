@@ -831,6 +831,7 @@
                 
                 this.lastActionWasRotation = false;
                 this.rotateBuffer = null;
+                this.activePieceId = 0;
                 this.softDropActive = false;
                 
                 this.pendingGarbage = [];
@@ -872,6 +873,8 @@
                 this.hardDropCooldown = 0;
                 this.lastGravityTime = 0;
                 this.lastActionWasRotation = false;
+                this.activePieceId = (this.activePieceId || 0) + 1;
+                this.rotateBuffer = null;
             }
             
             spawnPiece() {
@@ -904,21 +907,23 @@
             }
             
             bufferRotation(direction) {
-                this.rotateBuffer = { dir: direction, time: performance.now() };
+                this.rotateBuffer = { dir: direction, time: performance.now(), pieceId: this.activePieceId };
             }
             
             consumeRotationBuffer() {
                 if (!this.rotateBuffer) return;
                 
                 const age = performance.now() - this.rotateBuffer.time;
-                if (age > ROTATION_BUFFER_MS) {
+                if (age > ROTATION_BUFFER_MS || this.rotateBuffer.pieceId !== this.activePieceId) {
                     this.rotateBuffer = null;
                     return;
                 }
                 
 
-                this.rotate(this.rotateBuffer.dir);
-                this.rotateBuffer = null;
+                const rotated = this.rotate(this.rotateBuffer.dir);
+                if (rotated) {
+                    this.rotateBuffer = null;
+                }
             }
             
             isValidPosition(x, y, rotation) {
@@ -1241,6 +1246,8 @@
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
+                
+                this.consumeRotationBuffer();
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
