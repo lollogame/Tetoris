@@ -550,33 +550,23 @@
     </div>
     
     <script>
-      // Game Constants
+    // Game Constants
 const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 32;
 const PREVIEW_BLOCK_SIZE = 16;
 
-// Seeded Random Number Generator for synchronized piece generation
+// Seeded Random Number Generator
 class SeededRandom {
-    constructor(seed) {
-        this.seed = seed;
-    }
-    
+    constructor(seed) { this.seed = seed; }
     next() {
-        // Linear Congruential Generator
         this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
         return this.seed / 0x7fffffff;
     }
-    
-    nextInt(max) {
-        return Math.floor(this.next() * max);
-    }
+    nextInt(max) { return Math.floor(this.next() * max); }
 }
 
-// Game seed - will be shared between players
 let gameSeed = null;
-
-// PeerJS connection
 let peer = null;
 let conn = null;
 let isHost = false;
@@ -604,75 +594,21 @@ const KICK_TABLE = {
         'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
         '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
     },
-    'O': {
-        '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]],
-        '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
-    }
+    'O': { '0->R': [[0,0]], 'R->0': [[0,0]], 'R->2': [[0,0]], '2->R': [[0,0]], '2->L': [[0,0]], 'L->2': [[0,0]], 'L->0': [[0,0]], '0->L': [[0,0]] }
 };
 
-// Tetromino shapes and colors
+// Shapes
 const SHAPES = {
-    'I': {
-        shape: [
-            [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
-            [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]],
-            [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]],
-            [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]
-        ],
-        color: '#00f0f0'
-    },
-    'O': {
-        shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]],
-        color: '#f0f000'
-    },
-    'T': {
-        shape: [
-            [[0,1,0], [1,1,1], [0,0,0]],
-            [[0,1,0], [0,1,1], [0,1,0]],
-            [[0,0,0], [1,1,1], [0,1,0]],
-            [[0,1,0], [1,1,0], [0,1,0]]
-        ],
-        color: '#a000f0'
-    },
-    'S': {
-        shape: [
-            [[0,1,1], [1,1,0], [0,0,0]],
-            [[0,1,0], [0,1,1], [0,0,1]],
-            [[0,0,0], [0,1,1], [1,1,0]],
-            [[1,0,0], [1,1,0], [0,1,0]]
-        ],
-        color: '#00f000'
-    },
-    'Z': {
-        shape: [
-            [[1,1,0], [0,1,1], [0,0,0]],
-            [[0,0,1], [0,1,1], [0,1,0]],
-            [[0,0,0], [1,1,0], [0,1,1]],
-            [[0,1,0], [1,1,0], [1,0,0]]
-        ],
-        color: '#f00000'
-    },
-    'J': {
-        shape: [
-            [[1,0,0], [1,1,1], [0,0,0]],
-            [[0,1,1], [0,1,0], [0,1,0]],
-            [[0,0,0], [1,1,1], [0,0,1]],
-            [[0,1,0], [0,1,0], [1,1,0]]
-        ],
-        color: '#0000f0'
-    },
-    'L': {
-        shape: [
-            [[0,0,1], [1,1,1], [0,0,0]],
-            [[0,1,0], [0,1,0], [0,1,1]],
-            [[0,0,0], [1,1,1], [1,0,0]],
-            [[1,1,0], [0,1,0], [0,1,0]]
-        ],
-        color: '#f0a000'
-    }
+    'I': { shape: [[[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]], [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]], [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]], color: '#00f0f0' },
+    'O': { shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]], color: '#f0f000' },
+    'T': { shape: [[[0,1,0], [1,1,1], [0,0,0]], [[0,1,0], [0,1,1], [0,1,0]], [[0,0,0], [1,1,1], [0,1,0]], [[0,1,0], [1,1,0], [0,1,0]]], color: '#a000f0' },
+    'S': { shape: [[[0,1,1], [1,1,0], [0,0,0]], [[0,1,0], [0,1,1], [0,0,1]], [[0,0,0], [0,1,1], [1,1,0]], [[1,0,0], [1,1,0], [0,1,0]]], color: '#00f000' },
+    'Z': { shape: [[[1,1,0], [0,1,1], [0,0,0]], [[0,0,1], [0,1,1], [0,1,0]], [[0,0,0], [1,1,0], [0,1,1]], [[0,1,0], [1,1,0], [1,0,0]]], color: '#f00000' },
+    'J': { shape: [[[1,0,0], [1,1,1], [0,0,0]], [[0,1,1], [0,1,0], [0,1,0]], [[0,0,0], [1,1,1], [0,0,1]], [[0,1,0], [0,1,0], [1,1,0]]], color: '#0000f0' },
+    'L': { shape: [[[0,0,1], [1,1,1], [0,0,0]], [[0,1,0], [0,1,0], [0,1,1]], [[0,0,0], [1,1,1], [1,0,0]], [[1,1,0], [0,1,0], [0,1,0]]], color: '#f0a000' }
 };
 
-// Game State
+// Game State Class
 class GameState {
     constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
         this.canvas = document.getElementById(canvasId);
@@ -712,23 +648,15 @@ class GameState {
         this.dasTimer = 0;
         this.dasDirection = null;
         this.arrTimer = 0;
-        this.dcdTimer = 0;
-
-        this.pendingGarbage = [];
         
-        // INPUT BUFFER
-        this.inputBuffer = {
-            rotate: null,
-            hold: false
-        };
+        this.pendingGarbage = [];
+        this.inputBuffer = { rotate: null, hold: false };
 
         this.initQueue();
     }
     
     initQueue() {
-        for (let i = 0; i < 6; i++) {
-            this.queue.push(this.getNextPiece());
-        }
+        for (let i = 0; i < 6; i++) this.queue.push(this.getNextPiece());
     }
     
     getNextPiece() {
@@ -760,18 +688,16 @@ class GameState {
         this.isTouchingGround = false;
         this.hardDropCooldown = 0;
         
-        // --- PROCESS BUFFERED INPUTS (IRS/IHS) ---
+        // IRS/IHS Check
         if (this.inputBuffer.hold) {
             this.inputBuffer.hold = false;
             this.holdCurrentPiece();
             return true;
         }
-
         if (this.inputBuffer.rotate) {
             this.rotate(this.inputBuffer.rotate);
             this.inputBuffer.rotate = null;
         }
-
         return true;
     }
     
@@ -793,13 +719,11 @@ class GameState {
     rotate(direction) {
         const oldRotation = this.currentRotation;
         let newRotation;
-        
         if (direction === 'cw') newRotation = (oldRotation + 1) % 4;
         else if (direction === 'ccw') newRotation = (oldRotation + 3) % 4;
         else if (direction === '180') newRotation = (oldRotation + 2) % 4;
         
-        const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : 
-                           this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+        const kickTable = ['I'].includes(this.currentPiece) ? KICK_TABLE.I : (this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ);
         const rotations = ['0', 'R', '2', 'L'];
         const kickKey = `${rotations[oldRotation]}->${rotations[newRotation]}`;
         const kicks = kickTable[kickKey] || [[0, 0]];
@@ -834,11 +758,8 @@ class GameState {
     softDrop() {
         const sdf = document.getElementById('sdf').value;
         const multiplier = sdf === 'inf' ? Infinity : parseFloat(sdf);
-
         if (multiplier === Infinity) {
-            while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-                this.currentY++;
-            }
+            while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
             return true;
         } else {
             if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
@@ -852,10 +773,7 @@ class GameState {
     hardDrop() {
         const preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
         if (preventMissdrop && this.hardDropCooldown > 0) return true;
-        
-        while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-            this.currentY++;
-        }
+        while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
         return this.lockPiece();
     }
     
@@ -878,12 +796,11 @@ class GameState {
         }
         
         this.piecesPlaced++;
-        this.dcdTimer = parseInt(document.getElementById('dcd').value);
         this.lockDelayTimer = 0;
         this.lockResetCount = 0;
         this.isTouchingGround = false;
 
-        // CHECK SPIN (Before Clearing Lines)
+        // SPIN CHECK BEFORE CLEAR
         const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
         this.clearLines(pieceType, isSpin); 
         return true; 
@@ -927,7 +844,6 @@ class GameState {
                 else attack += 4;
             }
             
-            // Garbage Canceling
             if (this.pendingGarbage.length > 0) {
                 let totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
                 if (attack >= totalPending) {
@@ -937,14 +853,8 @@ class GameState {
                 } else {
                     let remaining = attack;
                     this.pendingGarbage = this.pendingGarbage.filter(g => {
-                        if (remaining >= g.lines) {
-                            remaining -= g.lines;
-                            return false;
-                        } else if (remaining > 0) {
-                            g.lines -= remaining;
-                            remaining = 0;
-                            return true;
-                        }
+                        if (remaining >= g.lines) { remaining -= g.lines; return false; }
+                        else if (remaining > 0) { g.lines -= remaining; remaining = 0; return true; }
                         return true;
                     });
                     addChatMessage(`Canceled ${attack} garbage!`, 'System');
@@ -1005,7 +915,6 @@ class GameState {
         if (this.pendingGarbage.length === 0) return;
         let totalLines = 0;
         for (const garbage of this.pendingGarbage) totalLines += garbage.lines;
-        
         for (let i = 0; i < totalLines && i < ROWS; i++) this.board.shift();
         
         let linesAdded = 0;
@@ -1170,12 +1079,12 @@ class GameState {
     }
 }
 
-// Game instances
+// Global Variables
 let gameState1 = null;
 let gameState2 = null;
 let gameRunning = false;
 
-// Keys
+// Controls
 const keyBindings = {
     left: 'ArrowLeft',
     right: 'ArrowRight',
@@ -1190,7 +1099,7 @@ const keysHeld = {};
 const DAS_DELAY = 150;
 const ARR_RATE = 20;
 
-// Chat UI logic
+// Chat System
 function addChatMessage(message, sender = 'System') {
     const chatMessages = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
@@ -1204,21 +1113,37 @@ document.getElementById('sendChatBtn').addEventListener('click', () => {
     const input = document.getElementById('chatInput');
     const message = input.value.trim();
     if (!message) return;
-
     if (conn && conn.open) {
         conn.send({ type: 'chat', message: message });
         addChatMessage(message, 'You');
         input.value = '';
     } else {
-        addChatMessage('Not connected to opponent yet.', 'System');
+        addChatMessage('Not connected.', 'System');
     }
 });
+document.getElementById('chatInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') document.getElementById('sendChatBtn').click(); });
 
-document.getElementById('chatInput').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') document.getElementById('sendChatBtn').click();
-});
+// --- ROBUST PEERJS LOBBY LOGIC ---
 
-// PEERJS LOGIC (FIXED)
+// Helper: Ensure the "Force Start" button exists
+let forceStartBtn = document.getElementById('forceStartBtn');
+if (!forceStartBtn) {
+    forceStartBtn = document.createElement('button');
+    forceStartBtn.id = 'forceStartBtn';
+    forceStartBtn.textContent = 'FORCE START GAME';
+    forceStartBtn.style.cssText = "background: red; color: white; padding: 10px; border: none; cursor: pointer; display: none; margin-top: 10px;";
+    document.querySelector('.menu-container').appendChild(forceStartBtn);
+    
+    forceStartBtn.addEventListener('click', () => {
+        if (isHost && conn) {
+            addChatMessage('Forcing game start...', 'System');
+            gameSeed = Math.floor(Math.random() * 1000000000);
+            conn.send({ type: 'start', seed: gameSeed });
+            startGame();
+        }
+    });
+}
+
 function initializePeer() {
     peer = new Peer({ config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
     
@@ -1226,54 +1151,56 @@ function initializePeer() {
         myPeerId = id;
         document.getElementById('peerIdDisplay').textContent = id;
         document.getElementById('myPeerId').classList.remove('hidden');
-        addChatMessage(`Your ID: ${id}`);
+        addChatMessage(`Your Peer ID: ${id}`);
     });
     
     peer.on('connection', (connection) => {
+        // HOST LOGIC
         conn = connection;
-        // Host waits for "ready" signal from client before starting
-        setupConnection();
-        addChatMessage('Opponent connecting...', 'System');
-        document.getElementById('gameStatus').textContent = 'Opponent joined. Waiting for readiness...';
+        setupDataListeners();
+        
+        conn.on('open', () => {
+            addChatMessage('Connection opened!', 'System');
+            conn.send({ type: 'verify_connection' }); // Step 1: Host says "I see you"
+            // Show Force Start just in case
+            if(isHost) forceStartBtn.style.display = 'block';
+        });
     });
     
-    peer.on('error', (err) => addChatMessage(`Error: ${err.type}`));
+    peer.on('error', (err) => addChatMessage(`Peer Error: ${err.type}`));
 }
 
-function setupConnection() {
+function setupDataListeners() {
     conn.on('data', (data) => {
-        if (data.type === 'chat') {
-            addChatMessage(data.message, 'Opponent');
-        } else if (data.type === 'ready') {
-            // HOST LOGIC: Receive Ready -> Send Start
+        // HANDSHAKE LOGIC
+        if (data.type === 'verify_connection') {
+            // Client receives "I see you" -> Sends "Ready"
+            addChatMessage('Verified connection with Host.', 'System');
+            conn.send({ type: 'ready' });
+        }
+        else if (data.type === 'ready') {
+            // Host receives "Ready" -> Starts Game
+            addChatMessage('Opponent is ready!', 'System');
             if (isHost) {
                 gameSeed = Math.floor(Math.random() * 1000000000);
-                addChatMessage('Opponent Ready! Starting...', 'System');
-                // Ensure connection is truly open before sending
-                if (conn.open) {
-                    conn.send({ type: 'start', seed: gameSeed });
-                    startGame();
-                } else {
-                    addChatMessage('Connection not open yet, retrying start...', 'System');
-                    setTimeout(() => {
-                        conn.send({ type: 'start', seed: gameSeed });
-                        startGame();
-                    }, 500);
-                }
+                conn.send({ type: 'start', seed: gameSeed });
+                startGame();
             }
-        } else if (data.type === 'start') {
-            // CLIENT LOGIC: Receive Start -> Run Game
+        }
+        // GAME LOGIC
+        else if (data.type === 'start') {
             if (data.seed) gameSeed = data.seed;
             addChatMessage('Host started the game!', 'System');
             startGame();
-        } else if (data.type === 'attack' && gameState1) {
-            gameState1.receiveAttack(data.lines);
-        } else if (data.type === 'gameState' && gameState2) {
-            gameState2.setState(data.state);
-        } else if (data.type === 'restart') {
+        } 
+        else if (data.type === 'chat') addChatMessage(data.message, 'Opponent');
+        else if (data.type === 'attack' && gameState1) gameState1.receiveAttack(data.lines);
+        else if (data.type === 'gameState' && gameState2) gameState2.setState(data.state);
+        else if (data.type === 'restart') {
             if (data.seed) gameSeed = data.seed;
             restartGame();
-        } else if (data.type === 'gameOver') {
+        }
+        else if (data.type === 'gameOver') {
             gameRunning = false;
             addChatMessage('Opponent lost! You win! 🏆', 'System');
             document.getElementById('gameStatus').textContent = 'You Win! 🏆';
@@ -1283,15 +1210,7 @@ function setupConnection() {
     conn.on('close', () => {
         addChatMessage('Opponent disconnected');
         gameRunning = false;
-    });
-    
-    conn.on('open', () => {
-         // Only Client needs to send 'ready' manually on open
-         // Host does it via the data channel response
-         if (!isHost) {
-             console.log("Connection open, sending ready signal");
-             conn.send({ type: 'ready' });
-         }
+        if(isHost) forceStartBtn.style.display = 'none';
     });
 }
 
@@ -1310,17 +1229,14 @@ document.getElementById('joinGameBtn').addEventListener('click', () => {
     
     if (!peer) initializePeer();
     
-    // Allow peer init time
+    // Give peer a moment to init if not ready
     setTimeout(() => {
         conn = peer.connect(opponentId);
-        // Client Logic: On Open -> Setup -> Send Ready
+        setupDataListeners();
         conn.on('open', () => {
-            setupConnection();
-            addChatMessage('Connected! Sending ready signal...', 'System');
-            document.getElementById('gameStatus').textContent = 'Connected! Waiting for host...';
-            conn.send({ type: 'ready' }); // KEY FIX
+             addChatMessage('Connected to Host. Waiting for verification...', 'System');
         });
-        conn.on('error', (err) => addChatMessage(`Connection Failed: ${err}`));
+        conn.on('error', (err) => addChatMessage(`Conn Error: ${err}`));
     }, 1000);
 });
 
@@ -1342,6 +1258,7 @@ function startGame() {
     gameRunning = true;
     document.getElementById('gameArea').classList.remove('hidden');
     document.getElementById('restartBtn').classList.remove('hidden');
+    if(isHost) forceStartBtn.style.display = 'none'; // Hide force start if game runs
     document.getElementById('gameStatus').textContent = 'Game in progress!';
     
     if (!gameSeed) gameSeed = 12345;
@@ -1358,7 +1275,6 @@ function startGame() {
     gameLoop();
 }
 
-// Game Loop & Input
 let lastTime = 0;
 let lastStateSendTime = 0;
 
@@ -1402,7 +1318,7 @@ function gameLoop(timestamp = 0) {
         if (now - gameState1.lastGravityTime > gameState1.gravity) {
             if (gameState1.currentPiece) {
                 if (!gameState1.move(0)) {
-                    // Lock delay handled below
+                   // Lock delay handled below
                 } else {
                     gameState1.currentY++;
                     if (gameState1.lockResetCount < gameState1.maxLockResets) gameState1.lockDelayTimer = 0;
@@ -1473,10 +1389,9 @@ document.addEventListener('keydown', (e) => {
         else gameState1.inputBuffer.hold = true;
     }
 });
-
 document.addEventListener('keyup', (e) => delete keysHeld[e.key]);
 
-addChatMessage('Welcome! Click Create or Join to start.');
+addChatMessage('Welcome! Create Game (Host) or Join (Client).');
     </script>
 </body>
 </html>
