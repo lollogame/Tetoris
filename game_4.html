@@ -555,6 +555,7 @@
         // Constants
         const COLS = 10;
         const ROWS = 20;
+        const SPAWN_ROW = -2;
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
@@ -805,7 +806,7 @@
                 this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
                 this.currentPiece = null;
                 this.currentX = 0;
-                this.currentY = 0;
+                this.currentY = SPAWN_ROW;
                 this.currentRotation = 0;
                 this.holdPiece = null;
                 this.canHold = true;
@@ -831,7 +832,6 @@
                 
                 this.lastActionWasRotation = false;
                 this.rotateBuffer = null;
-                this.activePieceId = 0;
                 this.softDropActive = false;
                 
                 this.pendingGarbage = [];
@@ -866,14 +866,13 @@
                 this.currentPiece = piece;
                 this.currentRotation = 0;
                 this.currentX = SPAWN_COLUMNS[piece];
-                this.currentY = 0;
+                this.currentY = SPAWN_ROW;
                 this.lockDelayTimer = 0;
                 this.lockResetCount = 0;
                 this.isTouchingGround = false;
                 this.hardDropCooldown = 0;
                 this.lastGravityTime = 0;
                 this.lastActionWasRotation = false;
-                this.activePieceId = (this.activePieceId || 0) + 1;
                 this.rotateBuffer = null;
             }
             
@@ -882,9 +881,6 @@
                 this.queue.push(this.getNextPiece());
                 this.resetPieceState(pieceType);
                 this.canHold = true;
-                this.applyInitialRotation();
-                this.consumeRotationBuffer();
-                this.rotateBuffer = null;
                 this.rotationCooldown = 0;
 
                 return true;
@@ -907,23 +903,21 @@
             }
             
             bufferRotation(direction) {
-                this.rotateBuffer = { dir: direction, time: performance.now(), pieceId: this.activePieceId };
+                this.rotateBuffer = { dir: direction, time: performance.now() };
             }
             
             consumeRotationBuffer() {
                 if (!this.rotateBuffer) return;
                 
                 const age = performance.now() - this.rotateBuffer.time;
-                if (age > ROTATION_BUFFER_MS || this.rotateBuffer.pieceId !== this.activePieceId) {
+                if (age > ROTATION_BUFFER_MS) {
                     this.rotateBuffer = null;
                     return;
                 }
                 
 
-                const rotated = this.rotate(this.rotateBuffer.dir);
-                if (rotated) {
-                    this.rotateBuffer = null;
-                }
+                this.rotate(this.rotateBuffer.dir);
+                this.rotateBuffer = null;
             }
             
             isValidPosition(x, y, rotation) {
@@ -1235,8 +1229,6 @@
                     const temp = this.holdPiece;
                     this.holdPiece = this.currentPiece;
                     this.resetPieceState(temp);
-                    this.applyInitialRotation();
-                    this.consumeRotationBuffer();
                 }
                 
                 InputManager.getInstance().resetOnSpawn();
@@ -1246,8 +1238,6 @@
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
-                
-                this.consumeRotationBuffer();
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
@@ -1812,17 +1802,11 @@
             this.gameState1.spawnPiece();
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
-            const rotated = this.gameState1.rotate('cw');
-            if (!rotated) this.gameState1.bufferRotation('cw');
-            else this.gameState1.rotateBuffer = null;
+            this.gameState1.rotate('cw');
         } else if (e.key === b.rotateCCW) {
-            const rotated = this.gameState1.rotate('ccw');
-            if (!rotated) this.gameState1.bufferRotation('ccw');
-            else this.gameState1.rotateBuffer = null;
+            this.gameState1.rotate('ccw');
         } else if (e.key === b.rotate180) {
-            const rotated = this.gameState1.rotate('180');
-            if (!rotated) this.gameState1.bufferRotation('180');
-            else this.gameState1.rotateBuffer = null;
+            this.gameState1.rotate('180');
         } else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
