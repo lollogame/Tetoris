@@ -875,6 +875,7 @@
                 this.hardDropCooldown = 0;
                 this.lastGravityTime = 0;
                 this.lastActionWasRotation = false;
+                this.consumeRotationBuffer();
             }
             
             spawnPiece() {
@@ -892,6 +893,7 @@
                 this.rotationBuffer = null;
 
                 this.rotateBuffer = null;
+                this.consumeRotationBuffer();
 
                 return true;
             }
@@ -1263,9 +1265,7 @@
 
                     // Reset rotation timing explicitly
                     this.rotationCooldown = 0;
-                    this.rotationBuffer = null;
-
-                    this.rotateBuffer = null;
+                    this.consumeRotationBuffer();
                 }
                 
                 InputManager.getInstance().resetOnSpawn();
@@ -1275,11 +1275,6 @@
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
-                
-                if (this.spawnGrace) {
-                    // Allow exactly one rotation window
-                    this.spawnGraceUsed = false;
-                }
 
                 this.consumeRotationBuffer();
                 
@@ -1458,6 +1453,11 @@
                 this.sdf = sdfValue === 'inf' ? 'inf' : parseFloat(sdfValue);
                 
                 this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+
+                if (this.spawnGrace && this.spawnGraceUsed) {
+                this.spawnGrace = false;
+            }
+
             }
         }
         
