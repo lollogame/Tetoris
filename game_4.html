@@ -753,95 +753,100 @@ class TetrisRenderer {
    Game State
 ========================================================= */
 class GameState {
-  constructor(canvasId,holdCanvasId,queueCanvasId,playerId,seed){
-    this.playerId=playerId;
-    this.rng=new SeededRandom(seed);
-    this.gameStartTime=Date.now();
+  constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
+    this.playerId = playerId;
+    this.rng = new SeededRandom(seed);
+    this.gameStartTime = Date.now();
 
-    this.board=Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));
-    this.currentPiece=null;
-    this.currentX=0; this.currentY=SPAWN_ROW; this.currentRotation=0;
+    this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+    this.currentPiece = null;
+    this.currentX = 0;
+    this.currentY = SPAWN_ROW;
+    this.currentRotation = 0;
 
-    this.holdPiece=null;
-    this.canHold=true;
+    this.holdPiece = null;
+    this.canHold = true;
 
-    this.bag=[];
-    this.queue=[];
+    this.bag = [];
+    this.queue = [];
     this.initQueue();
 
-    this.gravity=1000;
-    this.lastGravityTime=0;
+    this.gravity = 1000;
+    this.lastGravityTime = 0;
 
-    this.lockDelay=500;
-    this.lockDelayTimer=0;
-    this.isTouchingGround=false;
-    this.maxLockResets=15;
-    this.lockResetCount=0;
+    this.lockDelay = 500;
+    this.lockDelayTimer = 0;
+    this.isTouchingGround = false;
+    this.maxLockResets = 15;
+    this.lockResetCount = 0;
 
-    this.hardDropCooldown=0;
-    this.hardDropCooldownFrames=10;
+    this.hardDropCooldown = 0;
+    this.hardDropCooldownFrames = 10;
 
-    this.dcdTimer=0;
+    this.dcdTimer = 0;
 
-    this.piecesPlaced=0;
-    this.attacksSent=0;
-    this.b2bCounter=0;
-    this.comboCounter=-1;
-    this.lastClearWasB2B=false;
+    this.piecesPlaced = 0;
+    this.attacksSent = 0;
+    this.b2bCounter = 0;
+    this.comboCounter = -1;
+    this.lastClearWasB2B = false;
 
-    this.lastActionWasRotation=false;
-    this.rotateBuffer=null;
+    this.lastActionWasRotation = false;
 
-    this.spawnGrace=false;
-    this.spawnGraceUsed=false;
+    this.rotateBuffer = null;
 
-    this.softDropActive=false;
+    this.spawnGrace = false;
+    this.spawnGraceUsed = false;
 
-    this.pendingGarbage=[];
+    this.softDropActive = false;
 
-    const canvas=document.getElementById(canvasId);
-    const holdCanvas=document.getElementById(holdCanvasId);
-    const queueCanvas=document.getElementById(queueCanvasId);
-    this.renderer=new TetrisRenderer(canvas,holdCanvas,queueCanvas);
+    this.pendingGarbage = [];
+
+    const canvas = document.getElementById(canvasId);
+    const holdCanvas = document.getElementById(holdCanvasId);
+    const queueCanvas = document.getElementById(queueCanvasId);
+    this.renderer = new TetrisRenderer(canvas, holdCanvas, queueCanvas);
   }
 
-  initQueue(){ for(let i=0;i<6;i++) this.queue.push(this.getNextPiece()); }
+  initQueue() {
+    for (let i = 0; i < 6; i++) this.queue.push(this.getNextPiece());
+  }
 
-  getNextPiece(){
-    if(this.bag.length===0){
-      this.bag=['I','O','T','S','Z','J','L'];
-      for(let i=this.bag.length-1;i>0;i--){
-        const j=this.rng.nextInt(i+1);
-        [this.bag[i],this.bag[j]]=[this.bag[j],this.bag[i]];
+  getNextPiece() {
+    if (this.bag.length === 0) {
+      this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+      for (let i = this.bag.length - 1; i > 0; i--) {
+        const j = this.rng.nextInt(i + 1);
+        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
       }
     }
     return this.bag.pop();
   }
 
-  resetPieceState(piece){
-    this.currentPiece=piece;
-    this.currentRotation=0;
-    this.currentX=SPAWN_COLUMNS[piece];
-    this.currentY=SPAWN_ROW;
+  resetPieceState(piece) {
+    this.currentPiece = piece;
+    this.currentRotation = 0;
+    this.currentX = SPAWN_COLUMNS[piece];
+    this.currentY = SPAWN_ROW;
 
-    this.lockDelayTimer=0;
-    this.lockResetCount=0;
-    this.isTouchingGround=false;
+    this.lockDelayTimer = 0;
+    this.lockResetCount = 0;
+    this.isTouchingGround = false;
 
-    this.hardDropCooldown=0;
-    this.lastGravityTime=0;
-    this.lastActionWasRotation=false;
+    this.hardDropCooldown = 0;
+    this.lastGravityTime = 0;
+    this.lastActionWasRotation = false;
 
     // spawn grace window for 1 rotation even if touching ground logic would block later
-    this.spawnGrace=true;
-    this.spawnGraceUsed=false;
+    this.spawnGrace = true;
+    this.spawnGraceUsed = false;
   }
 
-  spawnPiece(){
-    const pieceType=this.queue.shift();
+  spawnPiece() {
+    const pieceType = this.queue.shift();
     this.queue.push(this.getNextPiece());
     this.resetPieceState(pieceType);
-    this.canHold=true;
+    this.canHold = true;
 
     // Apply IRS / buffered rotation immediately, and re-arm movement
     this.afterSpawnInput();
@@ -849,85 +854,90 @@ class GameState {
   }
 
   /* ===== Rotation buffer / IRS ===== */
-  bufferRotation(dir){ this.rotateBuffer={dir,time:performance.now()}; }
-  consumeRotationBuffer(){
-    if(!this.rotateBuffer) return false;
-    const age=performance.now()-this.rotateBuffer.time;
-    if(age>ROTATION_BUFFER_MS){ this.rotateBuffer=null; return false; }
-    const ok=this.rotate(this.rotateBuffer.dir);
-    if(ok) this.rotateBuffer=null;
+  bufferRotation(dir) { this.rotateBuffer = { dir, time: performance.now() }; }
+
+  consumeRotationBuffer() {
+    if (!this.rotateBuffer) return false;
+    const age = performance.now() - this.rotateBuffer.time;
+    if (age > ROTATION_BUFFER_MS) { this.rotateBuffer = null; return false; }
+    const ok = this.rotate(this.rotateBuffer.dir);
+    if (ok) this.rotateBuffer = null;
     return ok;
   }
 
-  applyInitialRotation(allowBufferedPress=false){
-    if(!this.currentPiece) return false;
-    const input=InputManager.getInstance();
-    const held=input.getHeldCodes();
-    const b=input.getBindings();
-    const now=performance.now();
-    const wasPressedRecently=(code)=>allowBufferedPress && (now-input.getLastPressedAt(code))<=HOLD_IRS_BUFFER_MS;
+  applyInitialRotation(allowBufferedPress = false) {
+    if (!this.currentPiece) return false;
 
-    if(held[b.rotate180] || wasPressedRecently(b.rotate180)) return this.rotate('180');
-    if(held[b.rotateCW]   || wasPressedRecently(b.rotateCW))   return this.rotate('cw');
-    if(held[b.rotateCCW]  || wasPressedRecently(b.rotateCCW))  return this.rotate('ccw');
+    const input = InputManager.getInstance();
+    const held = input.getHeldCodes();
+    const b = input.getBindings();
+    const now = performance.now();
+    const wasPressedRecently = (code) =>
+      allowBufferedPress && (now - input.getLastPressedAt(code)) <= HOLD_IRS_BUFFER_MS;
+
+    if (held[b.rotate180] || wasPressedRecently(b.rotate180)) return this.rotate('180');
+    if (held[b.rotateCW] || wasPressedRecently(b.rotateCW)) return this.rotate('cw');
+    if (held[b.rotateCCW] || wasPressedRecently(b.rotateCCW)) return this.rotate('ccw');
     return false;
   }
 
-  afterSpawnInput(){
-    if(this.playerId!==1) return;
+  afterSpawnInput() {
+    if (this.playerId !== 1) return;
 
-    const didIRS=this.applyInitialRotation(true);
-    if(!didIRS) this.consumeRotationBuffer();
-    else this.rotateBuffer=null;
+    const didIRS = this.applyInitialRotation(true);
+    if (!didIRS) this.consumeRotationBuffer();
+    else this.rotateBuffer = null;
 
     InputManager.getInstance().resetMovementOnSpawn();
   }
 
   /* ===== Core movement / collision ===== */
-  isValidPosition(x,y,rot){
-    if(!this.currentPiece) return false;
-    const shape=SHAPES[this.currentPiece].shape[rot];
-    for(let r=0;r<shape.length;r++){
-      for(let c=0;c<shape[r].length;c++){
-        if(!shape[r][c]) continue;
-        const nx=x+c, ny=y+r;
-        if(nx<0||nx>=COLS||ny>=ROWS) return false;
-        if(ny>=0 && this.board[ny][nx]) return false;
+  isValidPosition(x, y, rot) {
+    if (!this.currentPiece) return false;
+    const shape = SHAPES[this.currentPiece].shape[rot];
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
+        const nx = x + c, ny = y + r;
+        if (nx < 0 || nx >= COLS || ny >= ROWS) return false;
+        if (ny >= 0 && this.board[ny][nx]) return false;
       }
     }
     return true;
   }
 
-  rotate(direction){
-    if(!this.currentPiece) return false;
+  rotate(direction) {
+    if (!this.currentPiece) return false;
 
     const lockDelayExpired = this.isTouchingGround &&
-      (this.lockDelayTimer>=this.lockDelay || this.lockResetCount>=this.maxLockResets);
+      (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets);
 
     // Allow one rotation via spawnGrace
-    if((!this.spawnGrace || this.spawnGraceUsed) && lockDelayExpired) return false;
+    if ((!this.spawnGrace || this.spawnGraceUsed) && lockDelayExpired) return false;
 
-    const oldR=this.currentRotation;
-    let newR=oldR;
-    if(direction==='cw') newR=(oldR+1)%4;
-    else if(direction==='ccw') newR=(oldR+3)%4;
-    else newR=(oldR+2)%4;
+    const oldR = this.currentRotation;
+    let newR = oldR;
+    if (direction === 'cw') newR = (oldR + 1) % 4;
+    else if (direction === 'ccw') newR = (oldR + 3) % 4;
+    else newR = (oldR + 2) % 4;
 
-    const kickTable = this.currentPiece==='I' ? KICK_TABLE.I :
-                      this.currentPiece==='O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
+    const kickTable = this.currentPiece === 'I' ? KICK_TABLE.I :
+      this.currentPiece === 'O' ? KICK_TABLE.O : KICK_TABLE.JLSTZ;
 
     const kickKey = `${ROTATION_STATES[oldR]}->${ROTATION_STATES[newR]}`;
-    const kicks = kickTable[kickKey] || [[0,0]];
+    const kicks = kickTable[kickKey] || [[0, 0]];
 
-    for(const [dx,dy] of kicks){
-      if(this.isValidPosition(this.currentX+dx,this.currentY-dy,newR)){
-        this.currentX+=dx; this.currentY-=dy; this.currentRotation=newR;
-        this.lastActionWasRotation=true;
+    for (const [dx, dy] of kicks) {
+      if (this.isValidPosition(this.currentX + dx, this.currentY - dy, newR)) {
+        this.currentX += dx;
+        this.currentY -= dy;
+        this.currentRotation = newR;
+        this.lastActionWasRotation = true;
 
-        if(this.spawnGrace) this.spawnGraceUsed=true;
+        if (this.spawnGrace) this.spawnGraceUsed = true;
 
-        if(this.isTouchingGround && this.lockResetCount<this.maxLockResets){
-          this.lockDelayTimer=0;
+        if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+          this.lockDelayTimer = 0;
           this.lockResetCount++;
         }
         return true;
@@ -936,12 +946,13 @@ class GameState {
     return false;
   }
 
-  move(dx){
-    if(this.isValidPosition(this.currentX+dx,this.currentY,this.currentRotation)){
-      this.currentX+=dx;
-      this.lastActionWasRotation=false;
-      if(this.isTouchingGround && this.lockResetCount<this.maxLockResets){
-        this.lockDelayTimer=0;
+  move(dx) {
+    if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
+      this.currentX += dx;
+      this.lastActionWasRotation = false;
+
+      if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+        this.lockDelayTimer = 0;
         this.lockResetCount++;
       }
       return true;
@@ -949,352 +960,343 @@ class GameState {
     return false;
   }
 
-  setSoftDropActive(active){ this.softDropActive=active; }
+  setSoftDropActive(active) { this.softDropActive = active; }
 
-  hardDrop(){
-    const settings=GameSettings.getInstance();
-    if(settings.preventMissdrop && this.hardDropCooldown>0) return true;
+  hardDrop() {
+    const settings = GameSettings.getInstance();
+    if (settings.preventMissdrop && this.hardDropCooldown > 0) return true;
 
-    while(this.isValidPosition(this.currentX,this.currentY+1,this.currentRotation)){
+    while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
       this.currentY++;
     }
-    return this.();
-  }
 
-  lockPiece(){
-  if(!this.currentPiece) return false;
-
-  const pieceType = this.currentPiece;
-  const pieceX = this.currentX;
-  const pieceY = this.currentY;
-  const pieceRotation = this.currentRotation;
-
-  const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
-  const toPlace = [];
-  let lockedAbove = false;
-
-  for(let r=0;r<shape.length;r++){
-    for(let c=0;c<shape[r].length;c++){
-      if(!shape[r][c]) continue;
-      const by = this.currentY + r;
-      const bx = this.currentX + c;
-
-      if(by < 0){ lockedAbove = true; continue; }
-      if(this.board[by][bx]) return false;
-      toPlace.push([bx, by]);
+    const ok = this.lockPiece();
+    if (ok && settings.preventMissdrop) {
+      this.hardDropCooldown = this.hardDropCooldownFrames;
     }
+    return ok;
   }
 
-  if(lockedAbove) return false;
+  lockPiece() {
+    if (!this.currentPiece) return false;
 
-  for(const [bx, by] of toPlace){
-    this.board[by][bx] = this.currentPiece;
-  }
+    const pieceType = this.currentPiece;
+    const pieceX = this.currentX;
+    const pieceY = this.currentY;
+    const pieceRotation = this.currentRotation;
 
-      checkSpin(pieceType, x, y, rotation){
-  if (pieceType === 'T' && this.lastActionWasRotation){
-    return this.checkTSpin(x, y);
-  }
-  return false;
-}
+    const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+    const toPlace = [];
+    let lockedAbove = false;
 
-checkTSpin(x, y){
-  // T piece is 3x3 in our definitions; corners are relative to top-left of its 3x3 box
-  const corners = [[x, y], [x + 2, y], [x, y + 2], [x + 2, y + 2]];
-  let filled = 0;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
 
-  for (const [cx, cy] of corners){
-    if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS || this.board[cy][cx]){
-      filled++;
-    }
-  }
-  return filled >= 3;
-}
+        const by = this.currentY + r;
+        const bx = this.currentX + c;
 
-calculateAttack(lines, isSpin, isAllClear, pieceType){
-  if (isAllClear){
-    return lines === 4 ? 10 : 8;
-  }
+        if (by < 0) { lockedAbove = true; continue; }
+        if (this.board[by][bx]) return false;
 
-  // T-spin table (index = lines cleared)
-  if (pieceType === 'T' && isSpin){
-    const spinAttack = [0, 2, 4, 6];
-    return spinAttack[lines] || 0;
-  }
-
-  // generic spins
-  if (isSpin) return lines;
-
-  // normal clears
-  const attackTable = [0, 0, 1, 2, 4]; // 0,1,2,3,4 lines
-  return attackTable[lines] || 0;
-}
-
-handleGarbageCanceling(attack){
-  if (this.pendingGarbage.length === 0) return attack;
-
-  const totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
-
-  if (attack >= totalPending){
-    attack -= totalPending;
-    this.pendingGarbage = [];
-    ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
-  } else {
-    let remaining = attack;
-
-    this.pendingGarbage = this.pendingGarbage.filter(g => {
-      if (remaining >= g.lines){
-        remaining -= g.lines;
-        return false;
-      } else if (remaining > 0){
-        g.lines -= remaining;
-        remaining = 0;
-        return true;
+        toPlace.push([bx, by]);
       }
-      return true;
-    });
+    }
 
-    ChatManager.addMessage(`Canceled ${attack} garbage lines!`, 'System');
-    attack = 0;
+    if (lockedAbove) return false;
+
+    for (const [bx, by] of toPlace) {
+      this.board[by][bx] = this.currentPiece;
+    }
+
+    this.piecesPlaced++;
+    this.dcdTimer = GameSettings.getInstance().dcd;
+
+    this.lockDelayTimer = 0;
+    this.lockResetCount = 0;
+    this.isTouchingGround = false;
+
+    // IMPORTANT: prevent rotation buffer from leaking into next spawn
+    this.rotateBuffer = null;
+
+    const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
+    this.clearLines(pieceType, isSpin);
+    return true;
   }
 
-  return attack;
-}
-
-
-  this.piecesPlaced++;
-  this.dcdTimer = GameSettings.getInstance().dcd;
-
-  this.lockDelayTimer = 0;
-  this.lockResetCount = 0;
-  this.isTouchingGround = false;
-
-  // ✅ FIX #1: do NOT allow a buffered rotate from the previous piece to affect the next spawn
-  this.rotateBuffer = null;
-
-  const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
-  this.clearLines(pieceType, isSpin);
-
-  return true;
-}
-
-
-  clearLines(lastPiece, isSpin){
-  const clearedRows = [];
-
-  for (let row = 0; row < ROWS; row++){
-    if (this.board[row].every(cell => cell !== 0)){
-      clearedRows.push(row);
+  /* ===== Attack / spin logic ===== */
+  checkSpin(pieceType, x, y, rotation) {
+    if (pieceType === 'T' && this.lastActionWasRotation) {
+      return this.checkTSpin(x, y);
     }
+    return false;
   }
 
-  const linesCleared = clearedRows.length;
-
-  if (linesCleared > 0){
-    for (let i = clearedRows.length - 1; i >= 0; i--){
-      this.board.splice(clearedRows[i], 1);
+  checkTSpin(x, y) {
+    const corners = [[x, y], [x + 2, y], [x, y + 2], [x + 2, y + 2]];
+    let filled = 0;
+    for (const [cx, cy] of corners) {
+      if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS || this.board[cy][cx]) filled++;
     }
-    for (let i = 0; i < linesCleared; i++){
-      this.board.unshift(Array(COLS).fill(0));
+    return filled >= 3;
+  }
+
+  calculateAttack(lines, isSpin, isAllClear, pieceType) {
+    if (isAllClear) return (lines === 4) ? 10 : 8;
+
+    if (pieceType === 'T' && isSpin) {
+      const spinAttack = [0, 2, 4, 6];
+      return spinAttack[lines] || 0;
     }
 
-    const isAllClear = this.board.every(r => r.every(cell => cell === 0));
-    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
+    if (isSpin) return lines;
 
-    const isB2BMove = (linesCleared === 4) || isSpin;
-    if (isB2BMove){
-      if (this.lastClearWasB2B){
-        this.b2bCounter++;
-        attack += 1;
-      } else {
-        this.b2bCounter = 1;
-      }
-      this.lastClearWasB2B = true;
+    const attackTable = [0, 0, 1, 2, 4];
+    return attackTable[lines] || 0;
+  }
+
+  handleGarbageCanceling(attack) {
+    if (this.pendingGarbage.length === 0) return attack;
+
+    const totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
+
+    if (attack >= totalPending) {
+      attack -= totalPending;
+      this.pendingGarbage = [];
+      ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
     } else {
-      this.b2bCounter = 0;
-      this.lastClearWasB2B = false;
+      let remaining = attack;
+      this.pendingGarbage = this.pendingGarbage.filter(g => {
+        if (remaining >= g.lines) {
+          remaining -= g.lines;
+          return false;
+        } else if (remaining > 0) {
+          g.lines -= remaining;
+          remaining = 0;
+          return true;
+        }
+        return true;
+      });
+      ChatManager.addMessage(`Canceled ${attack} garbage lines!`, 'System');
+      attack = 0;
     }
 
-    this.comboCounter++;
-    if (this.comboCounter >= 4) attack += 1;
-
-    // garbage cancel
-    attack = this.handleGarbageCanceling(attack);
-
-    this.attacksSent += attack;
-    if (attack > 0){
-      NetworkManager.getInstance().sendAttack(attack);
-    }
-  } else {
-    this.comboCounter = -1;
-
-    // if no clear, apply pending garbage
-    if (this.pendingGarbage.length > 0){
-      this.applyGarbage();
-    }
+    return attack;
   }
 
-  this.updateStats();
-}
+  clearLines(lastPiece, isSpin) {
+    const clearedRows = [];
+    for (let row = 0; row < ROWS; row++) {
+      if (this.board[row].every(cell => cell !== 0)) clearedRows.push(row);
+    }
 
+    const linesCleared = clearedRows.length;
 
-  receiveAttack(lines){
-    this.pendingGarbage.push({lines, hole:this.rng.nextInt(COLS)});
+    if (linesCleared > 0) {
+      for (let i = clearedRows.length - 1; i >= 0; i--) {
+        this.board.splice(clearedRows[i], 1);
+      }
+      for (let i = 0; i < linesCleared; i++) {
+        this.board.unshift(Array(COLS).fill(0));
+      }
+
+      const isAllClear = this.board.every(r => r.every(cell => cell === 0));
+      let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
+
+      const isB2BMove = (linesCleared === 4) || isSpin;
+      if (isB2BMove) {
+        if (this.lastClearWasB2B) {
+          this.b2bCounter++;
+          attack += 1;
+        } else {
+          this.b2bCounter = 1;
+        }
+        this.lastClearWasB2B = true;
+      } else {
+        this.b2bCounter = 0;
+        this.lastClearWasB2B = false;
+      }
+
+      this.comboCounter++;
+      if (this.comboCounter >= 4) attack += 1;
+
+      attack = this.handleGarbageCanceling(attack);
+
+      this.attacksSent += attack;
+      if (attack > 0) NetworkManager.getInstance().sendAttack(attack);
+    } else {
+      this.comboCounter = -1;
+      if (this.pendingGarbage.length > 0) this.applyGarbage();
+    }
+
+    this.updateStats();
   }
 
-  applyGarbage(){
-    if(this.pendingGarbage.length===0) return;
+  receiveAttack(lines) {
+    this.pendingGarbage.push({ lines, hole: this.rng.nextInt(COLS) });
+  }
 
-    let total=0;
-    for(const g of this.pendingGarbage) total+=g.lines;
+  applyGarbage() {
+    if (this.pendingGarbage.length === 0) return;
 
-    for(let i=0;i<total && i<ROWS;i++) this.board.shift();
+    let total = 0;
+    for (const g of this.pendingGarbage) total += g.lines;
 
-    for(const g of this.pendingGarbage){
-      const hole=g.hole;
-      for(let i=0;i<g.lines;i++){
-        const line=Array(COLS).fill('G');
-        line[hole]=0;
+    for (let i = 0; i < total && i < ROWS; i++) this.board.shift();
+
+    for (const g of this.pendingGarbage) {
+      const hole = g.hole;
+      for (let i = 0; i < g.lines; i++) {
+        const line = Array(COLS).fill('G');
+        line[hole] = 0;
         this.board.push(line);
       }
     }
-    this.pendingGarbage=[];
+
+    this.pendingGarbage = [];
     ChatManager.addMessage(`Received ${total} garbage lines!`, 'System');
   }
 
-  holdCurrentPiece(){
-    if(!this.canHold || !this.currentPiece) return false;
+  holdCurrentPiece() {
+    if (!this.canHold || !this.currentPiece) return false;
 
-    if(this.holdPiece===null){
-      this.holdPiece=this.currentPiece;
-      this.spawnPiece(); // will run afterSpawnInput()
+    if (this.holdPiece === null) {
+      this.holdPiece = this.currentPiece;
+      this.spawnPiece(); // runs afterSpawnInput()
     } else {
-      const temp=this.holdPiece;
-      this.holdPiece=this.currentPiece;
+      const temp = this.holdPiece;
+      this.holdPiece = this.currentPiece;
       this.resetPieceState(temp);
       this.afterSpawnInput();
     }
 
-    this.canHold=false;
+    this.canHold = false;
     return true;
   }
 
-  update(deltaTime){
-    if(!this.currentPiece) return true;
+  update(deltaTime) {
+    if (!this.currentPiece) return true;
 
-    // try buffered rotation once per frame
     this.consumeRotationBuffer();
 
-    if(this.hardDropCooldown>0) this.hardDropCooldown--;
-    if(this.dcdTimer>0) this.dcdTimer-=deltaTime;
+    if (this.hardDropCooldown > 0) this.hardDropCooldown--;
+    if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
 
-    const wasTouching=this.isTouchingGround;
-    this.isTouchingGround = !this.isValidPosition(this.currentX,this.currentY+1,this.currentRotation);
+    const wasTouching = this.isTouchingGround;
+    this.isTouchingGround = !this.isValidPosition(
+      this.currentX,
+      this.currentY + 1,
+      this.currentRotation
+    );
 
-    if(this.isTouchingGround && !wasTouching){
-      this.lockDelayTimer=0;
-      this.lastGravityTime=0;
+    if (this.isTouchingGround && !wasTouching) {
+      this.lockDelayTimer = 0;
+      this.lastGravityTime = 0;
     }
 
     this.lastGravityTime += deltaTime;
 
-    if(this.isTouchingGround){
+    if (this.isTouchingGround) {
       this.lockDelayTimer += deltaTime;
-      if(this.lockDelayTimer>=this.lockDelay || this.lockResetCount>=this.maxLockResets){
-        const ok=this.lockPiece();
-        if(!ok) return false;
 
-        const settings=GameSettings.getInstance();
-        if(settings.preventMissdrop) this.hardDropCooldown=this.hardDropCooldownFrames;
+      if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
+        const ok = this.lockPiece();
+        if (!ok) return false;
+
+        const settings = GameSettings.getInstance();
+        if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
 
         this.spawnPiece();
-        this.lastGravityTime=0;
+        this.lastGravityTime = 0;
       }
     } else {
-      const settings=GameSettings.getInstance();
-      let fallInterval=this.gravity;
+      const settings = GameSettings.getInstance();
+      let fallInterval = this.gravity;
 
-      if(this.softDropActive){
-        if(settings.sdf==='inf'){
-          while(this.isValidPosition(this.currentX,this.currentY+1,this.currentRotation)) this.currentY++;
-          this.lastGravityTime=0;
+      if (this.softDropActive) {
+        if (settings.sdf === 'inf') {
+          while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+            this.currentY++;
+          }
+          this.lastGravityTime = 0;
         } else {
           fallInterval = this.gravity / Math.max(1, settings.sdf);
         }
       }
 
-      if(settings.sdf!=='inf' && this.lastGravityTime>=fallInterval){
-        while(this.lastGravityTime>=fallInterval){
-          if(this.isValidPosition(this.currentX,this.currentY+1,this.currentRotation)) this.currentY++;
+      if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
+        while (this.lastGravityTime >= fallInterval) {
+          if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
           else break;
           this.lastGravityTime -= fallInterval;
         }
       }
     }
 
-    if(this.spawnGrace) this.spawnGrace=false;
+    if (this.spawnGrace) this.spawnGrace = false;
     return true;
   }
 
-  updateStats(){
-    const elapsed=(Date.now()-this.gameStartTime)/1000;
-    const pps=this.piecesPlaced/Math.max(0.001,elapsed);
-    const apm=(this.attacksSent/Math.max(0.001,elapsed))*60;
+  updateStats() {
+    const elapsed = (Date.now() - this.gameStartTime) / 1000;
+    const pps = this.piecesPlaced / Math.max(0.001, elapsed);
+    const apm = (this.attacksSent / Math.max(0.001, elapsed)) * 60;
 
-    document.getElementById(`pps${this.playerId}`).textContent=pps.toFixed(2);
-    document.getElementById(`apm${this.playerId}`).textContent=apm.toFixed(2);
-    document.getElementById(`b2b${this.playerId}`).textContent=this.b2bCounter.toString();
-    document.getElementById(`combo${this.playerId}`).textContent=Math.max(0,this.comboCounter).toString();
+    document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+    document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+    document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
+    document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
   }
 
-  draw(){
+  draw() {
     this.renderer.drawBoard(this.board);
 
-    if(this.currentPiece){
-      let ghostY=this.currentY;
-      while(this.isValidPosition(this.currentX,ghostY+1,this.currentRotation)) ghostY++;
-      this.renderer.drawGhostPiece(this.currentPiece,this.currentX,ghostY,this.currentRotation);
-      this.renderer.drawPiece(this.currentPiece,this.currentX,this.currentY,this.currentRotation,1);
+    if (this.currentPiece) {
+      let ghostY = this.currentY;
+      while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) ghostY++;
+      this.renderer.drawGhostPiece(this.currentPiece, this.currentX, ghostY, this.currentRotation);
+      this.renderer.drawPiece(this.currentPiece, this.currentX, this.currentY, this.currentRotation, 1);
     }
 
     this.renderer.drawHold(this.holdPiece);
     this.renderer.drawQueue(this.queue);
   }
 
-  getState(){
+  getState() {
     return {
-      board: this.board.map(row=>[...row]),
-      currentPiece:this.currentPiece,
-      currentX:this.currentX,
-      currentY:this.currentY,
-      currentRotation:this.currentRotation,
-      holdPiece:this.holdPiece,
-      queue:[...this.queue],
-      piecesPlaced:this.piecesPlaced,
-      attacksSent:this.attacksSent,
-      b2bCounter:this.b2bCounter,
-      comboCounter:this.comboCounter
+      board: this.board.map(row => [...row]),
+      currentPiece: this.currentPiece,
+      currentX: this.currentX,
+      currentY: this.currentY,
+      currentRotation: this.currentRotation,
+      holdPiece: this.holdPiece,
+      queue: [...this.queue],
+      piecesPlaced: this.piecesPlaced,
+      attacksSent: this.attacksSent,
+      b2bCounter: this.b2bCounter,
+      comboCounter: this.comboCounter
     };
   }
 
-  setState(state){
-    this.board = state.board.map(row=>[...row]);
-    this.currentPiece=state.currentPiece;
-    this.currentX=state.currentX;
-    this.currentY=state.currentY;
-    this.currentRotation=state.currentRotation;
-    this.holdPiece=state.holdPiece;
-    this.queue=[...state.queue];
-    this.piecesPlaced=state.piecesPlaced;
-    this.attacksSent=state.attacksSent;
-    this.b2bCounter=state.b2bCounter;
-    this.comboCounter=state.comboCounter;
+  setState(state) {
+    this.board = state.board.map(row => [...row]);
+    this.currentPiece = state.currentPiece;
+    this.currentX = state.currentX;
+    this.currentY = state.currentY;
+    this.currentRotation = state.currentRotation;
+    this.holdPiece = state.holdPiece;
+    this.queue = [...state.queue];
+    this.piecesPlaced = state.piecesPlaced;
+    this.attacksSent = state.attacksSent;
+    this.b2bCounter = state.b2bCounter;
+    this.comboCounter = state.comboCounter;
 
     this.updateStats();
   }
 
-  setGameStartTime(t){ this.gameStartTime=t; }
+  setGameStartTime(t) { this.gameStartTime = t; }
 }
+
 
 /* =========================================================
    Settings / Chat / Network
