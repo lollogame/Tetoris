@@ -561,7 +561,7 @@
         const ROTATION_BUFFER_MS = 120;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
-        const BUILD_TAG = 'holdfix-20260210-3';
+        const BUILD_TAG = 'holdfix-20260210-5';
         console.log('BUILD', BUILD_TAG);
         
         // SRS Kick Tables
@@ -951,7 +951,7 @@
                     const input = InputManager.getInstance();
                     const heldKeys = input.getHeldKeys();
                     const bindings = input.getKeyBindings();
-                    const wasPressedRecently = (key) => (now - input.getLastPressedAt(key)) <= (ROTATION_BUFFER_MS * 2);
+                    const wasPressedRecently = (key) => (now - input.getLastPressedAt(key)) <= (ROTATION_BUFFER_MS * 4);
 
                     if (heldKeys[bindings.rotate180] || wasPressedRecently(bindings.rotate180)) {
                         this.postHoldRotateDir = '180';
@@ -1329,7 +1329,7 @@
                 InputManager.getInstance().resetOnSpawn();
                 const didInitialRotate = this.applyInitialRotation();
                 this.postHoldRotateDir = null;
-                this.postHoldRotateUntil = didInitialRotate ? 0 : (performance.now() + (ROTATION_BUFFER_MS * 2));
+                this.postHoldRotateUntil = didInitialRotate ? 0 : (performance.now() + (ROTATION_BUFFER_MS * 4));
                 this.canHold = false;
                 return true;
             }
@@ -1971,6 +1971,19 @@
 
         if (this.gameState1 && e.key === input.getKeyBindings().softDrop) {
             this.gameState1.setSoftDropActive(false);
+        }
+
+        if (!this.gameRunning || !this.gameState1) return;
+
+        const b = input.getKeyBindings();
+        let dir = null;
+        if (e.key === b.rotateCW) dir = 'cw';
+        else if (e.key === b.rotateCCW) dir = 'ccw';
+        else if (e.key === b.rotate180) dir = '180';
+
+        if (dir && this.gameState1.postHoldRotateUntil) {
+            this.gameState1.registerPostHoldRotate(dir);
+            this.gameState1.tryPostHoldRotation();
         }
     });
 }
