@@ -1811,14 +1811,26 @@
                 });
                 
                 document.getElementById('joinGameBtn').addEventListener('click', () => {
-                    const peerId = document.getElementById('peerIdInput').value.trim();
-                    if (peerId) {
-                        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
-                        NetworkManager.getInstance().connectToPeer(peerId);
-                        document.getElementById('gameStatus').textContent = 'Connecting...';
-                        document.getElementById('joinGameBtn').disabled = true;
-                    }
-                });
+    const opponentIdEl = document.getElementById('opponentPeerId');
+    const opponentId = opponentIdEl ? opponentIdEl.value.trim() : "";
+
+    if (!opponentId) {
+        ChatManager.addMessage('Please enter an opponent Peer ID');
+        return;
+    }
+
+    ChatManager.addMessage(`Connecting to ${opponentId}...`);
+    document.getElementById('gameStatus').textContent = 'Connecting...';
+
+    NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+
+    // Connect once peer is ready; your NetworkManager.connect already delays 1s,
+    // so this is fine to keep simple.
+    setTimeout(() => {
+        NetworkManager.getInstance().connect(opponentId);
+    }, 1000);
+});
+
                 
                 document.getElementById('startGameBtn').addEventListener('click', () => {
                     if (NetworkManager.getInstance().isHost) {
