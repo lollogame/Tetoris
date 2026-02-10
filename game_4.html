@@ -776,19 +776,56 @@
             }
             
             connectToPeer(peerId) {
-                if (!this.peer) {
-                    this.peer = new Peer();
-                    this.peer.on('open', () => {
-                        this.conn = this.peer.connect(peerId);
-                        this.isHost = false;
-                        this.setupConnection();
-                    });
-                } else {
-                    this.conn = this.peer.connect(peerId);
-                    this.isHost = false;
-                    this.setupConnection();
-                }
+    const doConnect = () => {
+        // Prevent duplicate connect attempts
+        if (this.conn) return;
+
+        this.conn = this.peer.connect(peerId);
+        this.isHost = false;
+        this.setupConnection();
+    };
+
+    // If peer doesn't exist yet, create it and wait for open
+    if (!this.peer) {
+        this.peer = new Peer();
+
+        this.peer.on('open', () => {
+            doConnect();
+        });
+
+        this.peer.on('error', (err) => {
+            ChatManager.addMessage(`Network error: ${err.type}`, true);
+        });
+
+        this.peer.on('connection', (conn) => {
+            // Joining side should generally not accept incoming connections,
+            // but if it happens, keep the first and close extras.
+            if (this.conn) {
+                conn.close();
+                return;
             }
+            this.conn = conn;
+            this.isHost = false;
+            this.setupConnection();
+            ChatManager.addMessage('Opponent connected!');
+            document.getElementById('gameStatus').textContent = 'Opponent connected - Ready to play!';
+        });
+
+        return;
+    }
+
+    // If peer exists but isn't open yet, wait for it
+    if (!this.peer.id) {
+        this.peer.once('open', () => {
+            doConnect();
+        });
+        return;
+    }
+
+    // Peer is open, connect immediately
+    doConnect();
+}
+
             
             setupConnection() {
                 this.conn.on('open', () => {
