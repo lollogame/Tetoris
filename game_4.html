@@ -558,7 +558,7 @@
         const SPAWN_ROW = -2;
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
-        const ROTATION_BUFFER_MS = 120;
+        const ROTATION_BUFFER_MS = 180;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
         
@@ -875,7 +875,6 @@
                 this.hardDropCooldown = 0;
                 this.lastGravityTime = 0;
                 this.lastActionWasRotation = false;
-                this.consumeRotationBuffer();
             }
             
             spawnPiece() {
@@ -893,7 +892,7 @@
                 this.rotationBuffer = null;
 
                 this.rotateBuffer = null;
-                this.consumeRotationBuffer();
+                this.applyInitialRotation();
 
                 return true;
             }
@@ -1265,7 +1264,10 @@
 
                     // Reset rotation timing explicitly
                     this.rotationCooldown = 0;
-                    this.consumeRotationBuffer();
+                    this.rotationBuffer = null;
+
+                    this.rotateBuffer = null;
+                    this.applyInitialRotation();
                 }
                 
                 InputManager.getInstance().resetOnSpawn();
@@ -1275,6 +1277,11 @@
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
+                
+                if (this.spawnGrace) {
+                    // Allow exactly one rotation window
+                    this.spawnGraceUsed = false;
+                }
 
                 this.consumeRotationBuffer();
                 
@@ -1453,11 +1460,6 @@
                 this.sdf = sdfValue === 'inf' ? 'inf' : parseFloat(sdfValue);
                 
                 this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
-
-                if (this.spawnGrace && this.spawnGraceUsed) {
-                this.spawnGrace = false;
-            }
-
             }
         }
         
