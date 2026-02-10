@@ -1019,6 +1019,12 @@ class GameState {
       this.board[by][bx] = this.currentPiece;
     }
 
+        // ✅ Prevent "next piece auto-rotates" due to rotate key still being held at lock time
+  if (this.playerId === 1) {
+    InputManager.getInstance().consumeRotationInputs();
+  }
+
+
     this.piecesPlaced++;
     this.dcdTimer = GameSettings.getInstance().dcd;
 
@@ -1437,6 +1443,20 @@ class InputManager {
       rotateCCW: 'KeyZ',
       rotate180: 'KeyX',
       hold:      'ShiftLeft'   // ✅ your preference
+
+          clearCodes(codes){
+    for (const c of codes){
+      if (!c) continue;
+      delete this.heldCodes[c];
+      delete this.lastPressedAt[c];
+    }
+  }
+
+  consumeRotationInputs(){
+    const b = this.bindings;
+    this.clearCodes([b.rotateCW, b.rotateCCW, b.rotate180]);
+  }
+
     };
 
     this.bindingCaptureActive=false;
