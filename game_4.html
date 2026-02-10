@@ -736,6 +736,7 @@
     else this.softDropMultiplier = parseInt(sdfEl.value, 10) || 1;
   }
 }
+        }
 
         
         // Network manager
@@ -1846,12 +1847,17 @@
             }
             
             updateStats(gameState) {
-                if (gameState.isPlayerOne) {
-                    document.getElementById('scoreValue').textContent = gameState.score;
-                    document.getElementById('linesValue').textContent = gameState.lines;
-                    document.getElementById('levelValue').textContent = gameState.level;
-                }
-            }
+  if (!gameState.isPlayerOne) return;
+
+  const scoreEl = document.getElementById("scoreValue");
+  const linesEl = document.getElementById("linesValue");
+  const levelEl = document.getElementById("levelValue");
+
+  if (scoreEl) scoreEl.textContent = gameState.score;
+  if (linesEl) linesEl.textContent = gameState.lines;
+  if (levelEl) levelEl.textContent = gameState.level;
+}
+
             
             getRotatedMatrix(piece, rotation) {
                 let matrix = PIECES[piece];
@@ -1885,16 +1891,17 @@
         // =======================================
         class GameController {
             constructor() {
-                this.gameState1 = null;
-                this.gameState2 = null;
-                this.gameRunning = false;
-                this.lastTime = 0;
-                this.lastStateSendTime = 0;
-                this.animationFrameId = null;
-                
-                this.();
-                this.setupInput();
-            }
+  this.gameState1 = null;
+  this.gameState2 = null;
+  this.gameRunning = false;
+  this.lastTime = 0;
+  this.lastStateSendTime = 0;
+  this.animationFrameId = null;
+
+  this.setupUI();
+  this.setupInput();
+}
+
             
             setupUI() {
   const net = NetworkManager.getInstance();
