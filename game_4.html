@@ -738,10 +738,9 @@
     this.conn = null;
     this.isHost = false;
     this.messageHandler = null;
-    this.roomCode = null;
 
-    // Optional: helps avoid double init
-    this.initialized = false;
+    this.roomCode = null;
+    this._connecting = false;
   }
 
   static getInstance() {
@@ -749,164 +748,176 @@
     return NetworkManager.instance;
   }
 
-  // ---------- Room code helpers ----------
+  // ---- utilities ----
   static makeRoomCode(len = 6) {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I confusion
     let out = "";
-    for (let i = 0; i < len; i++) {
-      out += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
+    for (let i = 0; i < len; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
     return out;
   }
 
-  // PeerJS options (works on PeerJS cloud too)
   static peerOptions() {
     return {
+      debug: 2,
       config: {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-        ],
-      },
-      debug: 2,
+          { urls: "stun:stun1.l.google.com:19302" }
+        ]
+      }
     };
   }
 
-  // ---------- Lifecycle ----------
-  reset() {
-    try {
-      if (this.conn) this.conn.close();
-    } catch {}
-    try {
-      if (this.peer) this.peer.destroy();
-    } catch {}
+  _setStatus(text) {
+    const el = document.getElementById("gameStatus");
+    if (el) el.textContent = text;
+  }
 
+  _showMyCode(code) {
+    const box = document.getElementById("myPeerId");
+    const val = document.getElementById("peerIdDisplay");
+    if (box) box.classList.remove("hidden");
+    if (val) val.textContent = code;
+  }
+
+  _cleanup() {
+    try { if (this.conn) this.conn.close(); } catch {}
+    try { if (this.peer) this.peer.destroy(); } catch {}
     this.peer = null;
     this.conn = null;
     this.isHost = false;
-    this.messageHandler = null;
     this.roomCode = null;
-    this.initialized = false;
+    this._connecting = false;
   }
 
   initialize(messageHandler) {
     this.messageHandler = messageHandler;
-    this.initialized = true;
   }
 
-  // ---------- Host ----------
-  async createRoom(updateUI = () => {}) {
-    if (!this.initialized) throw new Error("NetworkManager not initialized");
+  // ---- host ----
+  async host() {
+    if (this._connecting) return;
+    this._connecting = true;
 
-    this.reset(); // clean slate but keep handler?
-    this.messageHandler = this.messageHandler; // keep
-    this.initialized = true;
-
+    this._cleanup();
     this.isHost = true;
 
-    // Try a few room codes in case one is taken
-    for (let attempt = 0; attempt < 8; attempt++) {
+    // Try multiple codes in case one is taken
+    for (let attempt = 0; attempt < 10; attempt++) {
       const code = NetworkManager.makeRoomCode(6);
-      updateUI({ status: `Creating room ${code}...`, code });
-
-      const ok = await this.#tryCreatePeerWithId(code, updateUI);
+      this._setStatus(`Creating room ${code}...`);
+      const ok = await this._tryCreatePeerWithId(code);
       if (ok) {
         this.roomCode = code;
-        updateUI({ status: `Room created. Waiting for opponent...`, code });
-        return code;
+        this._showMyCode(code);
+        this._setStatus(`Room ${code} created. Waiting for opponent...`);
+        this._connecting = false;
+        return;
       }
     }
 
-    throw new Error("Failed to create a unique room code. Try again.");
+    this._setStatus("Failed to create room (IDs taken). Try again.");
+    this._connecting = false;
   }
 
-  #tryCreatePeerWithId(code, updateUI) {
+  _tryCreatePeerWithId(code) {
     return new Promise((resolve) => {
       const peer = new Peer(code, NetworkManager.peerOptions());
-      let settled = false;
+      let done = false;
 
-      const fail = (why) => {
-        if (settled) return;
-        settled = true;
-        try { peer.destroy(); } catch {}
-        resolve(false);
+      const finish = (result) => {
+        if (done) return;
+        done = true;
+        resolve(result);
       };
 
-      peer.on("open", (id) => {
-        if (settled) return;
-        settled = true;
-
+      peer.on("open", () => {
         this.peer = peer;
 
-        // Host waits for incoming connection
-        this.peer.on("connection", (conn) => {
-          // keep first connection only
+        // wait for opponent
+        peer.on("connection", (conn) => {
+          // accept only first connection
           if (this.conn) {
             try { conn.close(); } catch {}
             return;
           }
-
           this.conn = conn;
-          this.#setupConnection(updateUI);
-          updateUI({ status: "Opponent connected! You can start the game." });
+          this._setupConnectionHandlers();
+          this._setStatus("Opponent connected! Starting game...");
+          // auto-start both sides
+          this.send({ type: "startGame", seed: (Math.random() * 1e9) | 0 });
+          if (this.messageHandler) this.messageHandler({ type: "startGame" });
         });
 
-        resolve(true);
+        finish(true);
       });
 
       peer.on("error", (err) => {
-        // If ID is taken, retry with a new code
-        if (err && (err.type === "unavailable-id" || err.type === "peer-unavailable")) {
-          fail("taken");
+        // ID taken: try another
+        if (err && err.type === "unavailable-id") {
+          try { peer.destroy(); } catch {}
+          finish(false);
           return;
         }
-        // Other errors: fail hard for this attempt
-        fail(err?.type || "error");
+        console.error("Peer error (host):", err);
+        try { peer.destroy(); } catch {}
+        finish(false);
       });
 
-      // Safety timeout so it doesn't hang forever
-      setTimeout(() => fail("timeout"), 3500);
+      // timeout so it doesn't hang forever
+      setTimeout(() => {
+        try { peer.destroy(); } catch {}
+        finish(false);
+      }, 4000);
     });
   }
 
-  // ---------- Join ----------
-  joinRoom(roomCode, updateUI = () => {}) {
-    if (!this.initialized) throw new Error("NetworkManager not initialized");
+  // ---- join ----
+  join(codeRaw) {
+    if (this._connecting) return;
+    this._connecting = true;
 
-    this.reset();
-    this.messageHandler = this.messageHandler; // keep
-    this.initialized = true;
+    const code = (codeRaw || "").trim().toUpperCase();
+    if (!code) {
+      this._setStatus("Enter a room code first.");
+      this._connecting = false;
+      return;
+    }
 
+    this._cleanup();
     this.isHost = false;
-    this.roomCode = roomCode;
+    this.roomCode = code;
 
-    updateUI({ status: `Joining room ${roomCode}...` });
+    this._setStatus(`Joining room ${code}...`);
 
-    // Create a normal peer for the joiner (we DON'T need to display their ID)
     this.peer = new Peer(undefined, NetworkManager.peerOptions());
 
     this.peer.on("open", () => {
-      updateUI({ status: "Connecting to host..." });
+      this._setStatus(`Connecting to host ${code}...`);
 
-      this.conn = this.peer.connect(roomCode, { reliable: true });
+      this.conn = this.peer.connect(code, { reliable: true });
 
       this.conn.on("open", () => {
-        this.#setupConnection(updateUI);
-        updateUI({ status: "Connected! Waiting for host to start..." });
+        this._setupConnectionHandlers();
+        this._setStatus("Connected! Waiting for host to start...");
+        this._connecting = false;
       });
 
       this.conn.on("error", (err) => {
-        updateUI({ status: `Connection error: ${err?.type || err}` });
+        console.error("Conn error (join):", err);
+        this._setStatus(`Connection error: ${err?.type || err}`);
+        this._connecting = false;
       });
     });
 
     this.peer.on("error", (err) => {
-      updateUI({ status: `Peer error: ${err?.type || err}` });
+      console.error("Peer error (join):", err);
+      this._setStatus(`Peer error: ${err?.type || err}`);
+      this._connecting = false;
     });
   }
 
-  // ---------- Connection plumbing ----------
-  #setupConnection(updateUI = () => {}) {
+  _setupConnectionHandlers() {
     if (!this.conn) return;
 
     this.conn.on("data", (data) => {
@@ -914,23 +925,35 @@
     });
 
     this.conn.on("close", () => {
-      updateUI({ status: "Disconnected." });
+      this._setStatus("Disconnected.");
       this.conn = null;
     });
 
     this.conn.on("error", (err) => {
-      updateUI({ status: `Datachannel error: ${err?.type || err}` });
+      console.error("Datachannel error:", err);
+      this._setStatus(`Datachannel error: ${err?.type || err}`);
     });
   }
 
+  // ---- send helpers used by your game loop ----
   send(data) {
     if (this.conn && this.conn.open) this.conn.send(data);
+  }
+
+  sendGameState(state) {
+    this.send({ type: "gameState", state });
+  }
+
+  sendAttack(lines) {
+    const capped = Math.min(lines, 12);
+    this.send({ type: "attack", lines: capped });
   }
 
   isConnected() {
     return !!(this.conn && this.conn.open);
   }
 }
+
 
 
         
@@ -1866,69 +1889,81 @@
             
             setupUI() {
   const net = NetworkManager.getInstance();
+  net.initialize(this.handleNetworkMessage.bind(this));
 
-  const updateUI = ({ status, code }) => {
-    if (typeof status === "string") {
-      const el = document.getElementById("gameStatus");
-      if (el) el.textContent = status;
-    }
-    if (typeof code === "string") {
-      const codeEl = document.getElementById("peerIdDisplay");
-      if (codeEl) codeEl.textContent = code;
-    }
+  // Copy-to-clipboard works with your existing UI
+  window.copyPeerId = () => {
+    const text = (document.getElementById("peerIdDisplay")?.textContent || "").trim();
+    if (!text || text === "Connecting...") return;
+    navigator.clipboard.writeText(text).then(() => {
+      ChatManager.addMessage("Room code copied!");
+    });
   };
 
-  document.getElementById("createGameBtn").addEventListener("click", async () => {
-    net.initialize(this.handleNetworkMessage.bind(this));
+  const createBtn = document.getElementById("createGameBtn");
+  const joinBtn = document.getElementById("joinGameBtn");
+  const restartBtn = document.getElementById("restartBtn");
+  const joinInput = document.getElementById("opponentPeerId");
+  const gameArea = document.getElementById("gameArea");
 
-    document.getElementById("createGameBtn").disabled = true;
-    document.getElementById("joinGameBtn").disabled = true;
+  createBtn.addEventListener("click", async () => {
+    createBtn.disabled = true;
+    joinBtn.disabled = true;
 
-    try {
-      const code = await net.createRoom(updateUI);
+    await net.host();
 
-      // Host created room code successfully
-      updateUI({ status: `Room code: ${code} (share it). Waiting for opponent...`, code });
-
-      // Host can start only after opponent connects
-      const startBtn = document.getElementById("startGameBtn");
-      if (startBtn) startBtn.disabled = true;
-
-    } catch (err) {
-      updateUI({ status: `Failed to create room: ${err?.message || err}` });
-      document.getElementById("createGameBtn").disabled = false;
-      document.getElementById("joinGameBtn").disabled = false;
-    }
+    // allow joining side later; keep create disabled to avoid multiple hosts
+    restartBtn.classList.remove("hidden");
   });
 
-  document.getElementById("joinGameBtn").addEventListener("click", () => {
-    const roomCode = document.getElementById("opponentPeerId").value.trim().toUpperCase();
-    if (!roomCode) {
-      updateUI({ status: "Enter a room code first." });
+  joinBtn.addEventListener("click", () => {
+    const code = joinInput.value.trim().toUpperCase();
+    if (!code) {
+      document.getElementById("gameStatus").textContent = "Enter a room code first.";
       return;
     }
 
-    net.initialize(this.handleNetworkMessage.bind(this));
+    createBtn.disabled = true;
+    joinBtn.disabled = true;
+    restartBtn.classList.remove("hidden");
 
-    document.getElementById("createGameBtn").disabled = true;
-    document.getElementById("joinGameBtn").disabled = true;
+    // show the code you're attempting to join (optional)
+    document.getElementById("myPeerId").classList.remove("hidden");
+    document.getElementById("peerIdDisplay").textContent = code;
 
-    // Show the code you're attempting to join (that's normal)
-    document.getElementById("peerIdDisplay").textContent = roomCode;
-
-    net.joinRoom(roomCode, updateUI);
+    net.join(code);
   });
 
-  const startBtn = document.getElementById("startGameBtn");
-  if (startBtn) {
-    startBtn.addEventListener("click", () => {
-      // Host only
-      if (!net.isConnected() || !net.isHost) return;
+  restartBtn.addEventListener("click", () => {
+    // Simple reload reset (cleanest for PeerJS + game state)
+    location.reload();
+  });
 
-      net.send({ type: "startGame" });
-      this.startGame();
+  // Make game area visible once game starts (host or join)
+  this.onGameStartUI = () => {
+    gameArea.classList.remove("hidden");
+  };
+
+  // Key binding controls (your existing UI uses click-to-change)
+  const keyInputs = {
+    keyLeft: "left",
+    keyRight: "right",
+    keySoftDrop: "softDrop",
+    keyHardDrop: "hardDrop",
+    keyHold: "hold",
+    keyRotateCW: "rotateCW",
+    keyRotateCCW: "rotateCCW",
+    keyRotate180: "rotate180"
+  };
+
+  Object.entries(keyInputs).forEach(([inputId, action]) => {
+    const input = document.getElementById(inputId);
+    input.addEventListener("keydown", (e) => {
+      e.preventDefault();
+      InputManager.getInstance().setKeyBinding(action, e.key);
+      input.value = e.key;
     });
-  }
+  });
 }
 
                 
@@ -2008,34 +2043,42 @@
 }
             
             handleNetworkMessage(data) {
-                if (data.type === 'startGame') {
-                    this.startGame();
-                } else if (data.type === 'gameState') {
-                    if (this.gameState2) {
-                        this.gameState2.setStateFromNetwork(data.state);
-                    }
-                } else if (data.type === 'attack') {
-                    if (this.gameState1) {
-                        this.gameState1.addGarbage(data.lines);
-                    }
-                }
-            }
+  if (!data || !data.type) return;
+
+  if (data.type === "startGame") {
+    // Host sends this, join receives it. Host also self-triggers it in NetworkManager.
+    if (this.onGameStartUI) this.onGameStartUI();
+    this.startGame();
+    return;
+  }
+
+  if (data.type === "gameState") {
+    if (this.gameState2) this.gameState2.setStateFromNetwork(data.state);
+    return;
+  }
+
+  if (data.type === "attack") {
+    if (this.gameState1) this.gameState1.addGarbage(data.lines);
+    return;
+  }
+}
+
             
-            startGame() {
-                if (this.gameRunning) return;
-                
-                this.gameState1 = new TetrisGameState('player1Canvas', 'holdCanvas', 'queueCanvas', true);
-                this.gameState2 = new TetrisGameState('player2Canvas', 'holdCanvas2', 'queueCanvas2', false);
-                
-                this.gameRunning = true;
-                this.lastTime = performance.now();
-                this.lastStateSendTime = 0;
-                
-                document.getElementById('gameStatus').textContent = 'Game in progress';
-                document.getElementById('startGameBtn').disabled = true;
-                
-                this.gameLoop();
-            }
+           startGame() {
+  if (this.gameRunning) return;
+
+  this.gameState1 = new TetrisGameState("gameCanvas1", "holdCanvas1", "queueCanvas1", true);
+  this.gameState2 = new TetrisGameState("gameCanvas2", "holdCanvas2", "queueCanvas2", false);
+
+  this.gameRunning = true;
+  this.lastTime = performance.now();
+  this.lastStateSendTime = 0;
+
+  document.getElementById("gameStatus").textContent = "Game in progress";
+
+  this.gameLoop();
+}
+
             
             gameLoop(currentTime = performance.now()) {
                 if (!this.gameRunning) return;
