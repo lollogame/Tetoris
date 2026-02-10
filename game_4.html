@@ -559,9 +559,10 @@
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
+        const HOLD_IRS_BUFFER_MS = 80;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
-        const BUILD_TAG = 'holdfix-20260210-5';
+        const BUILD_TAG = 'holdfix-20260210-7';
         console.log('BUILD', BUILD_TAG);
         
         // SRS Kick Tables
@@ -837,8 +838,6 @@
                 this.spawnGrace = false;
                 this.spawnGraceUsed = false;
                 this.softDropActive = false;
-                this.postHoldRotateUntil = 0;
-                this.postHoldRotateDir = null;
                 
                 this.pendingGarbage = [];
                 
@@ -895,21 +894,20 @@
                 this.rotationCooldown = 0;
                 this.rotationBuffer = null;
                 this.rotateBuffer = null;
-                this.postHoldRotateUntil = 0;
-                this.postHoldRotateDir = null;
 
                 return true;
             }
             
-            applyInitialRotation() {
+            applyInitialRotation(allowBufferedPress = false) {
                 if (!this.currentPiece) return false;
-                
+
                 const input = InputManager.getInstance();
                 const heldKeys = input.getHeldKeys();
                 const bindings = input.getKeyBindings();
                 const now = performance.now();
-                const wasPressedRecently = (key) => (now - input.getLastPressedAt(key)) <= ROTATION_BUFFER_MS;
-                
+                const wasPressedRecently = (key) =>
+                    allowBufferedPress && (now - input.getLastPressedAt(key)) <= HOLD_IRS_BUFFER_MS;
+
                 if (heldKeys[bindings.rotate180] || wasPressedRecently(bindings.rotate180)) {
                     return this.rotate('180');
                 } else if (heldKeys[bindings.rotateCW] || wasPressedRecently(bindings.rotateCW)) {
@@ -917,59 +915,10 @@
                 } else if (heldKeys[bindings.rotateCCW] || wasPressedRecently(bindings.rotateCCW)) {
                     return this.rotate('ccw');
                 }
-                
+
                 return false;
             }
-            
-            clearPostHoldRotateWindow() {
-                this.postHoldRotateUntil = 0;
-                this.postHoldRotateDir = null;
-            }
-            
-            registerPostHoldRotate(direction) {
-                if (!this.postHoldRotateUntil) return;
-                if (performance.now() > this.postHoldRotateUntil) {
-                    this.clearPostHoldRotateWindow();
-                    return;
-                }
-                if (!this.postHoldRotateDir) {
-                    this.postHoldRotateDir = direction;
-                }
-            }
-            
-            tryPostHoldRotation() {
-                if (!this.currentPiece) return;
-                if (!this.postHoldRotateUntil) return;
 
-                const now = performance.now();
-                if (now > this.postHoldRotateUntil) {
-                    this.clearPostHoldRotateWindow();
-                    return;
-                }
-
-                if (!this.postHoldRotateDir) {
-                    const input = InputManager.getInstance();
-                    const heldKeys = input.getHeldKeys();
-                    const bindings = input.getKeyBindings();
-                    const wasPressedRecently = (key) => (now - input.getLastPressedAt(key)) <= (ROTATION_BUFFER_MS * 4);
-
-                    if (heldKeys[bindings.rotate180] || wasPressedRecently(bindings.rotate180)) {
-                        this.postHoldRotateDir = '180';
-                    } else if (heldKeys[bindings.rotateCW] || wasPressedRecently(bindings.rotateCW)) {
-                        this.postHoldRotateDir = 'cw';
-                    } else if (heldKeys[bindings.rotateCCW] || wasPressedRecently(bindings.rotateCCW)) {
-                        this.postHoldRotateDir = 'ccw';
-                    }
-                }
-
-                if (!this.postHoldRotateDir) return;
-
-                if (this.rotate(this.postHoldRotateDir)) {
-                    this.rotateBuffer = null;
-                    this.clearPostHoldRotateWindow();
-                }
-            }
-            
             bufferRotation(direction) {
                 this.rotateBuffer = { dir: direction, time: performance.now() };
             }
@@ -1327,9 +1276,7 @@
                 }
                 
                 InputManager.getInstance().resetOnSpawn();
-                const didInitialRotate = this.applyInitialRotation();
-                this.postHoldRotateDir = null;
-                this.postHoldRotateUntil = didInitialRotate ? 0 : (performance.now() + (ROTATION_BUFFER_MS * 4));
+                if (this.playerId === 1) this.applyInitialRotation(true);
                 this.canHold = false;
                 return true;
             }
@@ -1342,16 +1289,6 @@
                     this.spawnGraceUsed = false;
                 }
 
-                const now = performance.now();
-                if (this.postHoldRotateUntil && now <= this.postHoldRotateUntil) {
-                    const rotatedAfterHold = this.applyInitialRotation();
-                    if (rotatedAfterHold) {
-                        this.rotateBuffer = null;
-                        this.clearPostHoldRotateWindow();
-                    }
-                }
-
-                this.tryPostHoldRotation();
                 this.consumeRotationBuffer();
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
@@ -1704,6 +1641,7 @@
         return -Infinity;
     }
 
+
     setupKeyBindings() {
         const actions = Object.keys(this.keyBindings);
 
@@ -1925,6 +1863,9 @@
 
         if (Object.values(b).includes(e.key)) e.preventDefault();
 
+        const isDiscreteAction = e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180 || e.key === b.hold || e.key === b.hardDrop;
+        if (e.repeat && isDiscreteAction) return;
+
         if (e.key === b.softDrop) {
             this.gameState1.setSoftDropActive(true);
         } else if (e.key === b.hardDrop) {
@@ -1933,34 +1874,16 @@
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
             const rotated = this.gameState1.rotate('cw');
-            if (!rotated) {
-                this.gameState1.bufferRotation('cw');
-                this.gameState1.registerPostHoldRotate('cw');
-            }
-            else {
-                this.gameState1.rotateBuffer = null;
-                this.gameState1.clearPostHoldRotateWindow();
-            }
+            if (!rotated) this.gameState1.bufferRotation('cw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotateCCW) {
             const rotated = this.gameState1.rotate('ccw');
-            if (!rotated) {
-                this.gameState1.bufferRotation('ccw');
-                this.gameState1.registerPostHoldRotate('ccw');
-            }
-            else {
-                this.gameState1.rotateBuffer = null;
-                this.gameState1.clearPostHoldRotateWindow();
-            }
+            if (!rotated) this.gameState1.bufferRotation('ccw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotate180) {
             const rotated = this.gameState1.rotate('180');
-            if (!rotated) {
-                this.gameState1.bufferRotation('180');
-                this.gameState1.registerPostHoldRotate('180');
-            }
-            else {
-                this.gameState1.rotateBuffer = null;
-                this.gameState1.clearPostHoldRotateWindow();
-            }
+            if (!rotated) this.gameState1.bufferRotation('180');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
@@ -1971,19 +1894,6 @@
 
         if (this.gameState1 && e.key === input.getKeyBindings().softDrop) {
             this.gameState1.setSoftDropActive(false);
-        }
-
-        if (!this.gameRunning || !this.gameState1) return;
-
-        const b = input.getKeyBindings();
-        let dir = null;
-        if (e.key === b.rotateCW) dir = 'cw';
-        else if (e.key === b.rotateCCW) dir = 'ccw';
-        else if (e.key === b.rotate180) dir = '180';
-
-        if (dir && this.gameState1.postHoldRotateUntil) {
-            this.gameState1.registerPostHoldRotate(dir);
-            this.gameState1.tryPostHoldRotation();
         }
     });
 }
@@ -2038,10 +1948,10 @@
                 this.gameState1.setGameStartTime(startTime);
                 this.gameState2.setGameStartTime(startTime);
                 
+                InputManager.getInstance().reset();
+
                 this.gameState1.spawnPiece();
                 this.gameState2.spawnPiece();
-                
-                InputManager.getInstance().reset();
                 ChatManager.addMessage('Game started! Good luck!');
                 
                 this.lastTime = 0;
@@ -2123,3 +2033,4 @@ if (!this.gameState1.softDropActive) {
     </script>
 </body>
 </html>
+
