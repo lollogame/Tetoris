@@ -1254,40 +1254,46 @@
             }
             
             holdCurrentPiece() {
-    if (!this.canHold || !this.currentPiece) return false;
-    
-    if (this.holdPiece === null) {
-        this.holdPiece = this.currentPiece;
-        this.spawnPiece();
-    } else {
-        const temp = this.holdPiece;
-        this.holdPiece = this.currentPiece;
-        this.resetPieceState(temp);
-        this.spawnGrace = true;
-        this.spawnGraceUsed = false;
-        this.rotationCooldown = 0;
-    }
-    
-    InputManager.getInstance().resetOnSpawn();
-    
-    // Apply IRS immediately - check both held keys and recent presses
-    const rotated = this.applyInitialRotation(true);
-    
-    // If IRS didn't work but we have a buffered rotation, try it now
-    if (!rotated && this.rotateBuffer) {
-        this.consumeRotationBuffer();
-    }
-    
-    this.canHold = false;
-    return true;
-}
+                if (!this.canHold || !this.currentPiece) return false;
+                
+                if (this.holdPiece === null) {
+                    this.holdPiece = this.currentPiece;
+                    this.spawnPiece();
+
+                } else {
+                    const temp = this.holdPiece;
+                    this.holdPiece = this.currentPiece;
+                    this.resetPieceState(temp);
+                    this.spawnGrace = true;
+                    this.spawnGraceUsed = false;
+
+                    // Reset spawn flags; preserve rotate buffer so a buffered
+                    // rotation from just-before or during hold still applies.
+                    this.rotationCooldown = 0;
+                }
+                InputManager.getInstance().resetOnSpawn();
+                let rotatedOnHoldSpawn = false;
+                if (this.playerId === 1) {
+                    rotatedOnHoldSpawn = this.applyInitialRotation(true);
+                }
+
+                if (rotatedOnHoldSpawn) {
+                    this.rotateBuffer = null;
+                } else {
+                    // Avoid a one-frame delay after hold by applying buffered rotation immediately.
+                    this.consumeRotationBuffer();
+                }
+                this.canHold = false;
+                return true;
+            }
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
                 
-                            if (this.spawnGrace && (this.currentY > SPAWN_ROW || this.spawnGraceUsed)) {
-                this.spawnGrace = false;
-            }
+                if (this.spawnGrace) {
+                    // Allow exactly one rotation window
+                    this.spawnGraceUsed = false;
+                }
 
                 this.consumeRotationBuffer();
                 
