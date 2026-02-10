@@ -564,602 +564,262 @@
         
         // SRS Kick Tables
         const KICK_TABLE = {
-            JLSTZ: {
-                '0->R': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-                'R->0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-                'R->2': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
-                '2->R': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
-                '2->L': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
-                'L->2': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-                'L->0': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
-                '0->L': [[0,0],[1,0],[1,1],[0,-2],[1,-2]]
+            'JLSTZ': {
+                '0->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                'R->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                'R->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                '2->R': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                '2->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+                'L->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                'L->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                '0->L': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
             },
-            I: {
-                '0->R': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-                'R->0': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-                'R->2': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
-                '2->R': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-                '2->L': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
-                'L->2': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
-                'L->0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
-                '0->L': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]]
+            'I': {
+                '0->R': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                'R->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                'R->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+                '2->R': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                '2->L': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                'L->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                'L->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                '0->L': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
             },
-            O: {
-                '0->R': [[0,0]],
-                'R->2': [[0,0]],
-                '2->L': [[0,0]],
-                'L->0': [[0,0]],
-                'R->0': [[0,0]],
-                '2->R': [[0,0]],
-                'L->2': [[0,0]],
-                '0->L': [[0,0]]
+            'O': {
+                '0->R': [[0, 0]], 'R->0': [[0, 0]], 'R->2': [[0, 0]], '2->R': [[0, 0]],
+                '2->L': [[0, 0]], 'L->2': [[0, 0]], 'L->0': [[0, 0]], '0->L': [[0, 0]]
             }
         };
         
-        // Piece definitions
-        const PIECES = {
-            I: [
-                [0,0,0,0],
-                [1,1,1,1],
-                [0,0,0,0],
-                [0,0,0,0]
-            ],
-            J: [
-                [1,0,0],
-                [1,1,1],
-                [0,0,0]
-            ],
-            L: [
-                [0,0,1],
-                [1,1,1],
-                [0,0,0]
-            ],
-            O: [
-                [1,1],
-                [1,1]
-            ],
-            S: [
-                [0,1,1],
-                [1,1,0],
-                [0,0,0]
-            ],
-            T: [
-                [0,1,0],
-                [1,1,1],
-                [0,0,0]
-            ],
-            Z: [
-                [1,1,0],
-                [0,1,1],
-                [0,0,0]
-            ]
+        // Tetromino Shapes
+        const SHAPES = {
+            'I': {
+                shape: [
+                    [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
+                    [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]],
+                    [[0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0]],
+                    [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]]
+                ],
+                color: '#00f0f0'
+            },
+            'O': {
+                shape: [[[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]], [[1,1], [1,1]]],
+                color: '#f0f000'
+            },
+            'T': {
+                shape: [
+                    [[0,1,0], [1,1,1], [0,0,0]],
+                    [[0,1,0], [0,1,1], [0,1,0]],
+                    [[0,0,0], [1,1,1], [0,1,0]],
+                    [[0,1,0], [1,1,0], [0,1,0]]
+                ],
+                color: '#a000f0'
+            },
+            'S': {
+                shape: [
+                    [[0,1,1], [1,1,0], [0,0,0]],
+                    [[0,1,0], [0,1,1], [0,0,1]],
+                    [[0,0,0], [0,1,1], [1,1,0]],
+                    [[1,0,0], [1,1,0], [0,1,0]]
+                ],
+                color: '#00f000'
+            },
+            'Z': {
+                shape: [
+                    [[1,1,0], [0,1,1], [0,0,0]],
+                    [[0,0,1], [0,1,1], [0,1,0]],
+                    [[0,0,0], [1,1,0], [0,1,1]],
+                    [[0,1,0], [1,1,0], [1,0,0]]
+                ],
+                color: '#f00000'
+            },
+            'J': {
+                shape: [
+                    [[1,0,0], [1,1,1], [0,0,0]],
+                    [[0,1,1], [0,1,0], [0,1,0]],
+                    [[0,0,0], [1,1,1], [0,0,1]],
+                    [[0,1,0], [0,1,0], [1,1,0]]
+                ],
+                color: '#0000f0'
+            },
+            'L': {
+                shape: [
+                    [[0,0,1], [1,1,1], [0,0,0]],
+                    [[0,1,0], [0,1,0], [0,1,1]],
+                    [[0,0,0], [1,1,1], [1,0,0]],
+                    [[1,1,0], [0,1,0], [0,1,0]]
+                ],
+                color: '#f0a000'
+            }
         };
         
-        // Colors
-        const COLORS = {
-            I: '#00f0f0',
-            J: '#0000f0',
-            L: '#f0a000',
-            O: '#f0f000',
-            S: '#00f000',
-            T: '#a000f0',
-            Z: '#f00000',
-            ghost: 'rgba(255,255,255,0.2)',
-            grid: 'rgba(255,255,255,0.05)',
-            background: '#0a0e27'
-        };
-        
-        // Spawn positions for each piece
         const SPAWN_COLUMNS = {
-            I: 3,
-            J: 3,
-            L: 3,
-            O: 4,
-            S: 3,
-            T: 3,
-            Z: 3
+            'O': 4, 'T': 3, 'Z': 3, 'I': 3, 'L': 3, 'J': 3, 'S': 3
         };
         
-        // Scoring constants
-        const SCORE_TABLE = {
-            single: 100,
-            double: 300,
-            triple: 500,
-            tetris: 800,
-            tspin_mini: 100,
-            tspin_single: 800,
-            tspin_double: 1200,
-            tspin_triple: 1600,
-            perfect_clear: 3500
-        };
+        // ========================================================================
+        // Seeded Random Number Generator
+        // ========================================================================
         
-        // Attack table for multiplayer
-        const ATTACK_TABLE = {
-            single: 0,
-            double: 1,
-            triple: 2,
-            tetris: 4,
-            tspin_mini: 0,
-            tspin_single: 2,
-            tspin_double: 4,
-            tspin_triple: 6,
-            perfect_clear: 10
-        };
-        
-        // Chat manager
-        class ChatManager {
-            static addMessage(message, isSystem = true) {
-                const chatMessages = document.getElementById('chatMessages');
-                const messageElement = document.createElement('div');
-                messageElement.className = `chat-message ${isSystem ? 'system' : 'player'}`;
-                messageElement.textContent = message;
-                chatMessages.appendChild(messageElement);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
+                return this.seed / 0x7fffffff;
+            }
+            
+            nextInt(max) {
+                return Math.floor(this.next() * max);
             }
         }
         
-        // Game settings
-        class GameSettings {
-            static instance = null;
-            
-            constructor() {
-                this.das = 100;
-                this.arr = 50;
-                this.dcd = 50;
-                this.lockDelay = 500;
-                this.maxLockResets = 15;
-                this.gravity = 1000;
-                this.softDropMultiplier = 20;
-                this.level = 1;
+        // ========================================================================
+        // Tetris Renderer
+        // ========================================================================
+        
+        class TetrisRenderer {
+            constructor(canvas, holdCanvas, queueCanvas) {
+                this.canvas = canvas;
+                this.holdCanvas = holdCanvas;
+                this.queueCanvas = queueCanvas;
+                this.ctx = canvas.getContext('2d');
+                this.holdCtx = holdCanvas.getContext('2d');
+                this.queueCtx = queueCanvas.getContext('2d');
             }
             
-            static getInstance() {
-                if (!GameSettings.instance) {
-                    GameSettings.instance = new GameSettings();
+            drawBoard(board) {
+                // Clear and draw grid
+                this.ctx.fillStyle = '#0a0e27';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                this.ctx.strokeStyle = 'rgba(139, 157, 195, 0.1)';
+                this.ctx.lineWidth = 1;
+                
+                for (let i = 0; i <= COLS; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(i * BLOCK_SIZE, 0);
+                    this.ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+                    this.ctx.stroke();
                 }
-                return GameSettings.instance;
+                
+                for (let i = 0; i <= ROWS; i++) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, i * BLOCK_SIZE);
+                    this.ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE);
+                    this.ctx.stroke();
+                }
+                
+                // Draw cells
+                for (let row = 0; row < ROWS; row++) {
+                    for (let col = 0; col < COLS; col++) {
+                        if (board[row][col]) {
+                            const color = board[row][col] === 'G' ? '#666666' : SHAPES[board[row][col]].color;
+                            this.drawBlock(col * BLOCK_SIZE, row * BLOCK_SIZE, color);
+                        }
+                    }
+                }
             }
             
-            updateFromUI() {
-  const dasEl = document.getElementById("das");
-  const arrEl = document.getElementById("arr");
-  const dcdEl = document.getElementById("dcd");
-  const sdfEl = document.getElementById("sdf");
-
-  if (dasEl) this.das = parseInt(dasEl.value, 10) || 0;
-  if (arrEl) this.arr = parseInt(arrEl.value, 10) || 0;
-  if (dcdEl) this.dcd = parseInt(dcdEl.value, 10) || 0;
-
-  // SDF is a multiplier; "inf" means basically instant soft drop
-  if (sdfEl) {
-    if (sdfEl.value === "inf") this.softDropMultiplier = 999999;
-    else this.softDropMultiplier = parseInt(sdfEl.value, 10) || 1;
-  }
-}
-        }
-
-        
-        // Network manager
-        class NetworkManager {
-  static instance = null;
-
-  constructor() {
-    this.peer = null;
-    this.conn = null;
-    this.isHost = false;
-    this.messageHandler = null;
-
-    this.roomCode = null;
-    this._connecting = false;
-  }
-
-  static getInstance() {
-    if (!NetworkManager.instance) NetworkManager.instance = new NetworkManager();
-    return NetworkManager.instance;
-  }
-
-  // ---- utilities ----
-  static makeRoomCode(len = 6) {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I confusion
-    let out = "";
-    for (let i = 0; i < len; i++) out += alphabet[(Math.random() * alphabet.length) | 0];
-    return out;
-  }
-
-  static peerOptions() {
-    return {
-      debug: 2,
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" }
-        ]
-      }
-    };
-  }
-
-  _setStatus(text) {
-    const el = document.getElementById("gameStatus");
-    if (el) el.textContent = text;
-  }
-
-  _showMyCode(code) {
-    const box = document.getElementById("myPeerId");
-    const val = document.getElementById("peerIdDisplay");
-    if (box) box.classList.remove("hidden");
-    if (val) val.textContent = code;
-  }
-
-  _cleanup() {
-    try { if (this.conn) this.conn.close(); } catch {}
-    try { if (this.peer) this.peer.destroy(); } catch {}
-    this.peer = null;
-    this.conn = null;
-    this.isHost = false;
-    this.roomCode = null;
-    this._connecting = false;
-  }
-
-  initialize(messageHandler) {
-    this.messageHandler = messageHandler;
-  }
-
-  // ---- host ----
-  async host() {
-    if (this._connecting) return;
-    this._connecting = true;
-
-    this._cleanup();
-    this.isHost = true;
-
-    // Try multiple codes in case one is taken
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const code = NetworkManager.makeRoomCode(6);
-      this._setStatus(`Creating room ${code}...`);
-      const ok = await this._tryCreatePeerWithId(code);
-      if (ok) {
-        this.roomCode = code;
-        this._showMyCode(code);
-        this._setStatus(`Room ${code} created. Waiting for opponent...`);
-        this._connecting = false;
-        return;
-      }
-    }
-
-    this._setStatus("Failed to create room (IDs taken). Try again.");
-    this._connecting = false;
-  }
-
-  _tryCreatePeerWithId(code) {
-    return new Promise((resolve) => {
-      const peer = new Peer(code, NetworkManager.peerOptions());
-      let done = false;
-
-      const finish = (result) => {
-        if (done) return;
-        done = true;
-        resolve(result);
-      };
-
-      peer.on("open", () => {
-        this.peer = peer;
-
-        // wait for opponent
-        peer.on("connection", (conn) => {
-          // accept only first connection
-          if (this.conn) {
-            try { conn.close(); } catch {}
-            return;
-          }
-          this.conn = conn;
-          this._setupConnectionHandlers();
-          this._setStatus("Opponent connected! Starting game...");
-          // auto-start both sides
-          this.send({ type: "startGame", seed: (Math.random() * 1e9) | 0 });
-          if (this.messageHandler) this.messageHandler({ type: "startGame" });
-        });
-
-        finish(true);
-      });
-
-      peer.on("error", (err) => {
-        // ID taken: try another
-        if (err && err.type === "unavailable-id") {
-          try { peer.destroy(); } catch {}
-          finish(false);
-          return;
-        }
-        console.error("Peer error (host):", err);
-        try { peer.destroy(); } catch {}
-        finish(false);
-      });
-
-      // timeout so it doesn't hang forever
-      setTimeout(() => {
-        try { peer.destroy(); } catch {}
-        finish(false);
-      }, 4000);
-    });
-  }
-
-  // ---- join ----
-  join(codeRaw) {
-    if (this._connecting) return;
-    this._connecting = true;
-
-    const code = (codeRaw || "").trim().toUpperCase();
-    if (!code) {
-      this._setStatus("Enter a room code first.");
-      this._connecting = false;
-      return;
-    }
-
-    this._cleanup();
-    this.isHost = false;
-    this.roomCode = code;
-
-    this._setStatus(`Joining room ${code}...`);
-
-    this.peer = new Peer(undefined, NetworkManager.peerOptions());
-
-    this.peer.on("open", () => {
-      this._setStatus(`Connecting to host ${code}...`);
-
-      this.conn = this.peer.connect(code, { reliable: true });
-
-      this.conn.on("open", () => {
-        this._setupConnectionHandlers();
-        this._setStatus("Connected! Waiting for host to start...");
-        this._connecting = false;
-      });
-
-      this.conn.on("error", (err) => {
-        console.error("Conn error (join):", err);
-        this._setStatus(`Connection error: ${err?.type || err}`);
-        this._connecting = false;
-      });
-    });
-
-    this.peer.on("error", (err) => {
-      console.error("Peer error (join):", err);
-      this._setStatus(`Peer error: ${err?.type || err}`);
-      this._connecting = false;
-    });
-  }
-
-  _setupConnectionHandlers() {
-    if (!this.conn) return;
-
-    this.conn.on("data", (data) => {
-      if (this.messageHandler) this.messageHandler(data);
-    });
-
-    this.conn.on("close", () => {
-      this._setStatus("Disconnected.");
-      this.conn = null;
-    });
-
-    this.conn.on("error", (err) => {
-      console.error("Datachannel error:", err);
-      this._setStatus(`Datachannel error: ${err?.type || err}`);
-    });
-  }
-
-  // ---- send helpers used by your game loop ----
-  send(data) {
-    if (this.conn && this.conn.open) this.conn.send(data);
-  }
-
-  sendGameState(state) {
-    this.send({ type: "gameState", state });
-  }
-
-  sendAttack(lines) {
-    const capped = Math.min(lines, 12);
-    this.send({ type: "attack", lines: capped });
-  }
-
-  isConnected() {
-    return !!(this.conn && this.conn.open);
-  }
-}
-
-
-
-        
-        class InputManager {
-    static instance = null;
-
-    constructor() {
-        this.heldKeys = {};
-
-        this.keyBindings = {
-            left: 'ArrowLeft',
-            right: 'ArrowRight',
-            softDrop: 'ArrowDown',
-            hardDrop: 'Space',
-            hold: 'Shift',
-            rotateCW: 'ArrowUp',
-            rotateCCW: 'z',
-            rotate180: 'x'
-        };
-
-        this.move = {
-            left: false,
-            right: false,
-            direction: 0,
-            lastDirection: 0,
-            dasTimer: 0,
-            arrTimer: 0,
-            dcdTimer: 0
-        };
-
-        this.onMoveImmediate = null;
-    }
-
-    static getInstance() {
-        if (!InputManager.instance) {
-            InputManager.instance = new InputManager();
-        }
-        return InputManager.instance;
-    }
-
-    setupKeyBindings() {
-        const customBindings = localStorage.getItem('tetrisKeyBindings');
-        if (customBindings) {
-            this.keyBindings = JSON.parse(customBindings);
-            this.updateKeyBindingUI();
-        }
-    }
-
-    updateKeyBindingUI() {
-        document.getElementById('keyLeft').value = this.keyBindings.left;
-        document.getElementById('keyRight').value = this.keyBindings.right;
-        document.getElementById('keySoftDrop').value = this.keyBindings.softDrop;
-        document.getElementById('keyHardDrop').value = this.keyBindings.hardDrop;
-        document.getElementById('keyHold').value = this.keyBindings.hold;
-        document.getElementById('keyRotateCW').value = this.keyBindings.rotateCW;
-        document.getElementById('keyRotateCCW').value = this.keyBindings.rotateCCW;
-        document.getElementById('keyRotate180').value = this.keyBindings.rotate180;
-    }
-
-    saveKeyBindings() {
-        localStorage.setItem('tetrisKeyBindings', JSON.stringify(this.keyBindings));
-    }
-
-    setKeyBinding(action, key) {
-        this.keyBindings[action] = key;
-        this.saveKeyBindings();
-    }
-
-    getKeyBindings() {
-        return this.keyBindings;
-    }
-
-    getHeldKeys() {
-        return this.heldKeys;
-    }
-
-    handleKeyDown(key) {
-        this.heldKeys[key] = true;
-
-        if (key === this.keyBindings.left) {
-            this.move.left = true;
-            this.move.direction = -1;
-            if (this.move.lastDirection !== -1) {
-                this.move.dcdTimer = GameSettings.getInstance().dcd;
+            drawGhostPiece(piece, x, ghostY, rotation) {
+                this.drawPiece(piece, x, ghostY, rotation, 0.3);
             }
-            this.move.lastDirection = -1;
-        } else if (key === this.keyBindings.right) {
-            this.move.right = true;
-            this.move.direction = 1;
-            if (this.move.lastDirection !== 1) {
-                this.move.dcdTimer = GameSettings.getInstance().dcd;
+            
+            drawPiece(piece, x, y, rotation, alpha = 1.0) {
+                const shape = SHAPES[piece].shape[rotation];
+                const color = SHAPES[piece].color;
+                
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            this.drawBlock((x + col) * BLOCK_SIZE, (y + row) * BLOCK_SIZE, color, alpha);
+                        }
+                    }
+                }
             }
-            this.move.lastDirection = 1;
-        }
-    }
-
-    handleKeyUp(key) {
-        delete this.heldKeys[key];
-
-        if (key === this.keyBindings.left) {
-            this.move.left = false;
-            this.move.direction = this.move.right ? 1 : 0;
-            this.move.lastDirection = this.move.direction;
-            this.move.dcdTimer = GameSettings.getInstance().dcd;
-        } else if (key === this.keyBindings.right) {
-            this.move.right = false;
-            this.move.direction = this.move.left ? -1 : 0;
-            this.move.lastDirection = this.move.direction;
-            this.move.dcdTimer = GameSettings.getInstance().dcd;
-        }
-    }
-
-    update(deltaTime, moveFn) {
-        const settings = GameSettings.getInstance();
-
-        if (this.move.dcdTimer > 0) {
-            this.move.dcdTimer -= deltaTime;
-            return;
-        }
-
-        if (this.move.direction === 0) return;
-
-        this.move.dasTimer += deltaTime;
-
-        if (this.move.dasTimer === deltaTime) {
-            moveFn(this.move.direction);
-        }
-
-        if (this.move.dasTimer >= settings.das) {
-            this.move.arrTimer += deltaTime;
-
-            if (this.move.arrTimer >= settings.arr) {
-                moveFn(this.move.direction);
-                this.move.arrTimer = 0;
+            
+            drawBlock(x, y, color, alpha = 1.0) {
+                this.ctx.fillStyle = color;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillRect(x + 1, y + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                this.ctx.fillRect(x + 2, y + 2, BLOCK_SIZE - 4, 6);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                this.ctx.fillRect(x + 2, y + BLOCK_SIZE - 8, BLOCK_SIZE - 4, 6);
+                this.ctx.globalAlpha = 1.0;
+            }
+            
+            drawHold(piece) {
+                this.holdCtx.fillStyle = '#0a0e27';
+                this.holdCtx.fillRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
+                
+                if (piece) {
+                    this.drawPreviewPiece(this.holdCtx, piece, this.holdCanvas.width, this.holdCanvas.height);
+                }
+            }
+            
+            drawQueue(queue) {
+                this.queueCtx.fillStyle = '#0a0e27';
+                this.queueCtx.fillRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
+                
+                for (let i = 0; i < Math.min(6, queue.length); i++) {
+                    const offsetY = i * 80;
+                    this.drawPreviewPiece(this.queueCtx, queue[i], this.queueCanvas.width, 80, 0, offsetY);
+                }
+            }
+            
+            drawPreviewPiece(ctx, piece, containerWidth, containerHeight, offsetX = 0, offsetY = 0) {
+                const shape = SHAPES[piece].shape[0];
+                const color = SHAPES[piece].color;
+                const pieceWidth = shape[0].length * PREVIEW_BLOCK_SIZE;
+                const pieceHeight = shape.length * PREVIEW_BLOCK_SIZE;
+                const x = offsetX + (containerWidth - pieceWidth) / 2;
+                const y = offsetY + (containerHeight - pieceHeight) / 2;
+                
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            ctx.fillStyle = color;
+                            ctx.fillRect(
+                                x + col * PREVIEW_BLOCK_SIZE,
+                                y + row * PREVIEW_BLOCK_SIZE,
+                                PREVIEW_BLOCK_SIZE - 1,
+                                PREVIEW_BLOCK_SIZE - 1
+                            );
+                        }
+                    }
+                }
             }
         }
-    }
-
-    reset() {
-        this.move = {
-            left: false,
-            right: false,
-            direction: 0,
-            lastDirection: 0,
-            dasTimer: 0,
-            arrTimer: 0,
-            dcdTimer: 0
-        };
-        this.heldKeys = {};
-    }
-            resetOnSpawn() {
-    this.resetMovementOnSpawn();
-}
-            resetMovementOnSpawn() {
-    this.move.dasTimer = 0;
-    this.move.arrTimer = 0;
-    this.move.dcdTimer = GameSettings.getInstance().dcd;
-
-    // Re-trigger immediate movement if a direction is held
-    if (this.move.direction !== 0 && this.onMoveImmediate) {
-        this.onMoveImmediate(this.move.direction);
-    }
-}
-
-}
-
         
-        // =======================================
-        // Tetris game state
-        // =======================================
-        class TetrisGameState {
-            constructor(canvasId, holdCanvasId, queueCanvasId, isPlayerOne = true) {
-                this.isPlayerOne = isPlayerOne;
-                this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(null));
+        // ========================================================================
+        // Game State
+        // ========================================================================
+        
+        class GameState {
+            constructor(canvasId, holdCanvasId, queueCanvasId, playerId, seed) {
+                this.playerId = playerId;
+                this.rng = new SeededRandom(seed);
+                this.gameStartTime = Date.now();
+                
+                this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
                 this.currentPiece = null;
                 this.currentX = 0;
-                this.currentY = 0;
+                this.currentY = SPAWN_ROW;
                 this.currentRotation = 0;
-                this.ghostY = 0;
-                
                 this.holdPiece = null;
                 this.canHold = true;
+                this.bag = [];
                 this.queue = [];
                 
-                this.score = 0;
-                this.lines = 0;
-                this.level = 1;
-                this.gameOver = false;
-                
+                this.gravity = 1000;
+                this.lastGravityTime = 0;
+                this.lockDelay = 500;
                 this.lockDelayTimer = 0;
-                this.lockResetCount = 0;
                 this.isTouchingGround = false;
-                this.lockDelay = GameSettings.getInstance().lockDelay;
-                this.maxLockResets = GameSettings.getInstance().maxLockResets;
-                
-                this.gravityTimer = 0;
+                this.maxLockResets = 15;
+                this.lockResetCount = 0;
                 this.hardDropCooldown = 0;
                 this.hardDropCooldownFrames = 10;
                 this.dcdTimer = 0;
@@ -1185,27 +845,19 @@
                 this.renderer = new TetrisRenderer(canvas, holdCanvas, queueCanvas);
                 
                 this.initQueue();
-                this.spawnPiece();
             }
             
             initQueue() {
-                const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-                let bag = [...pieces];
-                
-                while (this.queue.length < 14) {
-                    if (bag.length === 0) bag = [...pieces];
-                    const idx = Math.floor(Math.random() * bag.length);
-                    this.queue.push(bag.splice(idx, 1)[0]);
+                for (let i = 0; i < 6; i++) {
+                    this.queue.push(this.getNextPiece());
                 }
             }
             
             getNextPiece() {
-                const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
-                if (!this.bag || this.bag.length === 0) {
-                    this.bag = [...pieces];
-                    // Fisher-Yates shuffle
+                if (this.bag.length === 0) {
+                    this.bag = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
                     for (let i = this.bag.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
+                        const j = this.rng.nextInt(i + 1);
                         [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
                     }
                 }
@@ -1235,13 +887,11 @@
                 this.spawnGrace = true;
                 this.spawnGraceUsed = false;
 
-                // Consume buffered rotation immediately on spawn (fixes post-hold rotation delay)
-                const rotatedFromBuffer = this.consumeRotationBuffer();
+                // Reset rotation timing explicitly
+                this.rotationCooldown = 0;
+                this.rotationBuffer = null;
 
-                // Apply IRS only if we didn't just rotate from a buffered tap
-                if (!rotatedFromBuffer) {
-                    this.applyInitialRotation();
-                }
+                this.rotateBuffer = null;
 
                 return true;
             }
@@ -1267,94 +917,35 @@
             }
             
             consumeRotationBuffer() {
-                if (!this.rotateBuffer) return false;
+                if (!this.rotateBuffer) return;
 
                 const age = performance.now() - this.rotateBuffer.time;
                 if (age > ROTATION_BUFFER_MS) {
                     this.rotateBuffer = null;
-                    return false;
+                    return;
                 }
 
                 const rotated = this.rotate(this.rotateBuffer.dir);
                 if (rotated) {
                     this.rotateBuffer = null;
-                    return true;
                 }
-                return false;
             }
             
             isValidPosition(x, y, rotation) {
                 if (!this.currentPiece) return false;
                 
-                const pieceMatrix = this.getRotatedMatrix(this.currentPiece, rotation);
-                
-                for (let row = 0; row < pieceMatrix.length; row++) {
-                    for (let col = 0; col < pieceMatrix[row].length; col++) {
-                        if (pieceMatrix[row][col]) {
-                            const boardX = x + col;
-                            const boardY = y + row;
-                            
-                            if (boardX < 0 || boardX >= COLS || boardY >= ROWS) {
-                                return false;
-                            }
-                            
-                            if (boardY >= 0 && this.grid[boardY][boardX] !== null) {
-                                return false;
-                            }
+                const shape = SHAPES[this.currentPiece].shape[rotation];
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
+                            const newX = x + col;
+                            const newY = y + row;
+                            if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
+                            if (newY >= 0 && this.board[newY][newX]) return false;
                         }
                     }
                 }
-                
                 return true;
-            }
-            
-            getRotatedMatrix(piece, rotation) {
-                let matrix = PIECES[piece];
-                
-                if (rotation === 0) return matrix;
-                
-                let rotated = matrix;
-                for (let i = 0; i < rotation; i++) {
-                    rotated = this.rotateMatrix(rotated);
-                }
-                
-                return rotated;
-            }
-            
-            rotateMatrix(matrix) {
-                const N = matrix.length;
-                const rotated = Array(N).fill().map(() => Array(N).fill(0));
-                
-                for (let i = 0; i < N; i++) {
-                    for (let j = 0; j < N; j++) {
-                        rotated[j][N-1-i] = matrix[i][j];
-                    }
-                }
-                
-                return rotated;
-            }
-            
-            calculateGhostPosition() {
-                let ghostY = this.currentY;
-                while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
-                    ghostY++;
-                }
-                this.ghostY = ghostY;
-                return ghostY;
-            }
-            
-            move(dx) {
-                if (this.gameOver || !this.currentPiece) return false;
-                
-                if (this.dcdTimer > 0) return false;
-                
-                const newX = this.currentX + dx;
-                if (this.isValidPosition(newX, this.currentY, this.currentRotation)) {
-                    this.currentX = newX;
-                    this.dcdTimer = GameSettings.getInstance().dcd;
-                    return true;
-                }
-                return false;
             }
             
             rotate(direction) {
@@ -1403,195 +994,284 @@
                 return false;
             }
             
-            drop() {
-                if (this.gameOver || !this.currentPiece) return false;
+            move(dx) {
+                if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
+                    this.currentX += dx;
+                    this.lastActionWasRotation = false;
+                    
+                    if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
+                        this.lockDelayTimer = 0;
+                        this.lockResetCount++;
+                    }
+                    return true;
+                }
+                return false;
+            }
+            
+            softDrop() {
+                const settings = GameSettings.getInstance();
                 
-                const newY = this.currentY + 1;
-                if (this.isValidPosition(this.currentX, newY, this.currentRotation)) {
-                    this.currentY = newY;
+                if (settings.sdf === 'inf') {
+                    while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                        this.currentY++;
+                    }
                     return true;
                 } else {
-                    this.isTouchingGround = true;
-                    return false;
+                    if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                        this.currentY++;
+                        return true;
+                    }
                 }
+                return false;
             }
             
             hardDrop() {
-                if (this.gameOver || !this.currentPiece || this.hardDropCooldown > 0) return false;
+                const settings = GameSettings.getInstance();
                 
-                let dropDistance = 0;
+                if (settings.preventMissdrop && this.hardDropCooldown > 0) {
+                    return true;
+                }
+                
                 while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
                     this.currentY++;
-                    dropDistance++;
                 }
-                
-                this.score += dropDistance * 2;
-                this.lockPiece();
-                this.hardDropCooldown = this.hardDropCooldownFrames;
-                return true;
-            }
-            
-            setSoftDropActive(active) {
-                this.softDropActive = active;
-            }
-            
-            holdCurrentPiece() {
-                if (!this.canHold || !this.currentPiece) return false;
-
-                if (this.holdPiece === null) {
-                    this.holdPiece = this.currentPiece;
-                    this.spawnPiece();
-                } else {
-                    const temp = this.holdPiece;
-                    this.holdPiece = this.currentPiece;
-                    this.resetPieceState(temp);
-
-                    this.spawnGrace = true;
-                    this.spawnGraceUsed = false;
-
-                    // Consume buffered rotation immediately on hold-swap
-                    const rotatedFromBuffer = this.consumeRotationBuffer();
-
-                    // Apply IRS only if we didn't just rotate from a buffered tap
-                    if (!rotatedFromBuffer) {
-                        this.applyInitialRotation();
-                    }
-                }
-
-                InputManager.getInstance().resetOnSpawn();
-                this.canHold = false;
-                return true;
+                return this.lockPiece();
             }
             
             lockPiece() {
-                const pieceMatrix = this.getRotatedMatrix(this.currentPiece, this.currentRotation);
+                if (!this.currentPiece) return false;
                 
-                for (let row = 0; row < pieceMatrix.length; row++) {
-                    for (let col = 0; col < pieceMatrix[row].length; col++) {
-                        if (pieceMatrix[row][col]) {
-                            const boardX = this.currentX + col;
+                const pieceType = this.currentPiece;
+                const pieceX = this.currentX;
+                const pieceY = this.currentY;
+                const pieceRotation = this.currentRotation;
+                
+                const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+                const toPlace = [];
+                let lockedAbove = false;
+                
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col]) {
                             const boardY = this.currentY + row;
+                            const boardX = this.currentX + col;
                             
                             if (boardY < 0) {
-                                this.gameOver = true;
-                                return;
+                                lockedAbove = true;
+                                continue;
                             }
-                            
-                            this.grid[boardY][boardX] = this.currentPiece;
+                            if (this.board[boardY][boardX]) {
+                                return false;
+                            }
+                            toPlace.push([boardX, boardY]);
                         }
                     }
                 }
                 
+                if (lockedAbove) return false;
+                for (const [bx, by] of toPlace) {
+                    this.board[by][bx] = this.currentPiece;
+                }
+                
                 this.piecesPlaced++;
-                
-                const clearResult = this.clearLines();
-                this.updateScore(clearResult);
-                
+                this.dcdTimer = GameSettings.getInstance().dcd;
                 this.lockDelayTimer = 0;
                 this.lockResetCount = 0;
-                this.spawnGrace = false;
-                this.spawnGraceUsed = false;
+                this.isTouchingGround = false;
                 
-                this.currentPiece = null;
-                
-                return clearResult;
+                const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
+                this.clearLines(pieceType, isSpin);
+                return true;
             }
             
-            clearLines() {
-                let linesCleared = 0;
-                const clearedRows = [];
+            checkSpin(pieceType, x, y, rotation) {
+                if (pieceType === 'T' && this.lastActionWasRotation) {
+                    return this.checkTSpin(x, y);
+                }
+                return false;
+            }
+            
+            checkTSpin(x, y) {
+                const corners = [[x, y], [x + 2, y], [x, y + 2], [x + 2, y + 2]];
+                let filledCorners = 0;
                 
-                for (let row = ROWS - 1; row >= 0; row--) {
-                    if (this.grid[row].every(cell => cell !== null)) {
-                        clearedRows.push(row);
-                        linesCleared++;
+                for (const [cx, cy] of corners) {
+                    if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS || this.board[cy][cx]) {
+                        filledCorners++;
                     }
                 }
                 
-                for (const row of clearedRows) {
-                    this.grid.splice(row, 1);
-                    this.grid.unshift(Array(COLS).fill(null));
+                return filledCorners >= 3;
+            }
+            
+            clearLines(lastPiece, isSpin) {
+                const clearedRows = [];
+                
+                for (let row = 0; row < ROWS; row++) {
+                    if (this.board[row].every(cell => cell !== 0)) {
+                        clearedRows.push(row);
+                    }
                 }
+                
+                const linesCleared = clearedRows.length;
                 
                 if (linesCleared > 0) {
-                    this.lines += linesCleared;
-                    this.level = Math.floor(this.lines / 10) + 1;
-                    GameSettings.getInstance().level = this.level;
-                }
-                
-                const perfectClear = this.grid.every(row => row.every(cell => cell === null));
-                
-                return { linesCleared, perfectClear };
-            }
-            
-            updateScore(clearResult) {
-                const { linesCleared, perfectClear } = clearResult;
-                
-                if (linesCleared === 0) {
+                    for (let i = clearedRows.length - 1; i >= 0; i--) {
+                        this.board.splice(clearedRows[i], 1);
+                    }
+                    
+                    for (let i = 0; i < linesCleared; i++) {
+                        this.board.unshift(Array(COLS).fill(0));
+                    }
+                    
+                    const isAllClear = this.board.every(row => row.every(cell => cell === 0));
+                    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
+                    
+                    const isB2BMove = linesCleared === 4 || isSpin;
+                    if (isB2BMove) {
+                        if (this.lastClearWasB2B) {
+                            this.b2bCounter++;
+                            attack += 1;
+                        } else {
+                            this.b2bCounter = 1;
+                        }
+                        this.lastClearWasB2B = true;
+                    } else {
+                        this.b2bCounter = 0;
+                        this.lastClearWasB2B = false;
+                    }
+                    
+                    this.comboCounter++;
+                    if (this.comboCounter >= 4) attack += 1;
+                    
+                    attack = this.handleGarbageCanceling(attack);
+                    
+                    this.attacksSent += attack;
+                    if (attack > 0) {
+                        NetworkManager.getInstance().sendAttack(attack);
+                    }
+                } else {
                     this.comboCounter = -1;
-                    return;
+                    
+                    if (this.pendingGarbage.length > 0) {
+                        this.applyGarbage();
+                    }
                 }
                 
-                this.comboCounter++;
-                
-                let scoreGain = 0;
-                let attackLines = 0;
-                
-                // Basic line clear scoring
-                if (linesCleared === 1) {
-                    scoreGain = SCORE_TABLE.single;
-                    attackLines = ATTACK_TABLE.single;
-                } else if (linesCleared === 2) {
-                    scoreGain = SCORE_TABLE.double;
-                    attackLines = ATTACK_TABLE.double;
-                } else if (linesCleared === 3) {
-                    scoreGain = SCORE_TABLE.triple;
-                    attackLines = ATTACK_TABLE.triple;
-                } else if (linesCleared === 4) {
-                    scoreGain = SCORE_TABLE.tetris;
-                    attackLines = ATTACK_TABLE.tetris;
-                    this.lastClearWasB2B = true;
-                }
-                
-                // Combo bonus
-                if (this.comboCounter > 0) {
-                    scoreGain += this.comboCounter * 50;
-                    attackLines += Math.floor(this.comboCounter / 2);
-                }
-                
-                // Perfect clear bonus
-                if (perfectClear) {
-                    scoreGain += SCORE_TABLE.perfect_clear;
-                    attackLines += ATTACK_TABLE.perfect_clear;
-                }
-                
-                // Apply level multiplier
-                scoreGain *= this.level;
-                
-                this.score += scoreGain;
-                
-                // Send attack to opponent in multiplayer
-                if (attackLines > 0 && NetworkManager.getInstance().isConnected()) {
-                    NetworkManager.getInstance().sendAttack(attackLines);
-                    this.attacksSent += attackLines;
-                }
+                this.updateStats();
             }
             
-            addGarbage(lines) {
-                this.pendingGarbage.push(lines);
+            handleGarbageCanceling(attack) {
+                if (this.pendingGarbage.length === 0) return attack;
+                
+                const totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
+                
+                if (attack >= totalPending) {
+                    attack -= totalPending;
+                    this.pendingGarbage = [];
+                    ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
+                } else {
+                    let remaining = attack;
+                    this.pendingGarbage = this.pendingGarbage.filter(g => {
+                        if (remaining >= g.lines) {
+                            remaining -= g.lines;
+                            return false;
+                        } else if (remaining > 0) {
+                            g.lines -= remaining;
+                            remaining = 0;
+                            return true;
+                        }
+                        return true;
+                    });
+                    ChatManager.addMessage(`Canceled ${attack} garbage lines!`, 'System');
+                    attack = 0;
+                }
+                
+                return attack;
+            }
+            
+            calculateAttack(lines, isSpin, isAllClear, pieceType) {
+                if (isAllClear) {
+                    return lines === 4 ? 10 : 8;
+                }
+                
+                if (pieceType === 'T' && isSpin) {
+                    const spinAttack = [0, 2, 4, 6];
+                    return spinAttack[lines] || 0;
+                }
+                
+                if (isSpin) return lines;
+                
+                const attackTable = [0, 0, 1, 2, 4];
+                return attackTable[lines] || 0;
+            }
+            
+            receiveAttack(lines) {
+                this.pendingGarbage.push({
+                    lines: lines,
+                    hole: this.rng.nextInt(COLS)
+                });
             }
             
             applyGarbage() {
                 if (this.pendingGarbage.length === 0) return;
                 
-                const lines = this.pendingGarbage.shift();
-                for (let i = 0; i < lines; i++) {
-                    this.grid.shift();
-                    const garbageRow = Array(COLS).fill('garbage');
-                    const hole = Math.floor(Math.random() * COLS);
-                    garbageRow[hole] = null;
-                    this.grid.push(garbageRow);
+                let totalLines = 0;
+                let alignedHole = null;
+                
+                for (const garbage of this.pendingGarbage) {
+                    totalLines += garbage.lines;
+                    if (garbage.lines >= 2) {
+                        alignedHole = garbage.hole;
+                    }
                 }
+                
+                for (let i = 0; i < totalLines && i < ROWS; i++) {
+                    this.board.shift();
+                }
+                
+                let linesAdded = 0;
+                for (const garbage of this.pendingGarbage) {
+                    const useAlignedHole = garbage.lines >= 2;
+                    const hole = useAlignedHole && alignedHole !== null ? alignedHole : this.rng.nextInt(COLS);
+                    
+                    for (let i = 0; i < garbage.lines && linesAdded < totalLines; i++) {
+                        const garbageLine = Array(COLS).fill('G');
+                        garbageLine[hole] = 0;
+                        this.board.push(garbageLine);
+                        linesAdded++;
+                    }
+                }
+                
+                ChatManager.addMessage(`Received ${totalLines} garbage lines!`, 'System');
+                this.pendingGarbage = [];
+            }
+            
+            holdCurrentPiece() {
+                if (!this.canHold || !this.currentPiece) return false;
+                
+                if (this.holdPiece === null) {
+                    this.holdPiece = this.currentPiece;
+                    this.spawnPiece();
+
+                } else {
+                    const temp = this.holdPiece;
+                    this.holdPiece = this.currentPiece;
+                    this.resetPieceState(temp);
+                    this.spawnGrace = true;
+                    this.spawnGraceUsed = false;
+
+                    // Reset rotation timing explicitly
+                    this.rotationCooldown = 0;
+                    this.rotationBuffer = null;
+
+                    this.rotateBuffer = null;
+                }
+                
+                InputManager.getInstance().resetOnSpawn();
+                this.applyInitialRotation();
+                this.canHold = false;
+                return true;
             }
             
             update(deltaTime) {
@@ -1608,389 +1288,550 @@
                 if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
                 
                 const wasTouching = this.isTouchingGround;
-                this.isTouchingGround = !this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation);
+                this.isTouchingGround = !this.isValidPosition(
+                    this.currentX,
+                    this.currentY + 1,
+                    this.currentRotation
+                );
                 
                 if (this.isTouchingGround && !wasTouching) {
                     this.lockDelayTimer = 0;
+                    this.lastGravityTime = 0;
                 }
+                
+                this.lastGravityTime += deltaTime;
                 
                 if (this.isTouchingGround) {
                     this.lockDelayTimer += deltaTime;
                     
-                    const lockDelayExpired = this.lockDelayTimer >= this.lockDelay || 
-                                           this.lockResetCount >= this.maxLockResets;
-                    
-                    if (lockDelayExpired) {
-                        this.lockPiece();
+                    if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
+                        const lockSuccess = this.lockPiece();
+                        if (!lockSuccess) return false;
+                        
+                        const settings = GameSettings.getInstance();
+                        if (settings.preventMissdrop) {
+                            this.hardDropCooldown = this.hardDropCooldownFrames;
+                        }
+                        
                         this.spawnPiece();
-                        InputManager.getInstance().resetOnSpawn();
-                        this.applyGarbage();
-                        return true;
+                        this.lastGravityTime = 0;
                     }
                 } else {
-                    this.lockDelayTimer = 0;
-                    this.lockResetCount = 0;
+                    const settings = GameSettings.getInstance();
+                    let fallInterval = this.gravity;
+                    let useSonicDrop = false;
+                    
+                    if (this.softDropActive) {
+                        if (settings.sdf === 'inf') {
+                            useSonicDrop = true;
+                        } else {
+                            fallInterval = this.gravity / Math.max(1, settings.sdf);
+                        }
+                    }
+                    
+                    if (useSonicDrop) {
+                        while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                            this.currentY++;
+                        }
+                        this.lastGravityTime = 0;
+                    } else if (this.lastGravityTime >= fallInterval) {
+                        while (this.lastGravityTime >= fallInterval) {
+                            if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+                                this.currentY++;
+                            } else {
+                                break;
+                            }
+                            this.lastGravityTime -= fallInterval;
+                        }
+                    }
                 }
                 
-                // Gravity
-                this.gravityTimer += deltaTime;
-                const gravity = GameSettings.getInstance().gravity;
-                const effectiveGravity = this.softDropActive ? gravity / GameSettings.getInstance().softDropMultiplier : gravity;
-                
-                if (this.gravityTimer >= effectiveGravity) {
-                    this.gravityTimer = 0;
-                    this.drop();
+                if (this.spawnGrace) {
+                    this.spawnGrace = false;
                 }
                 
-                this.calculateGhostPosition();
                 return true;
             }
             
-            getStateForNetwork() {
+            setSoftDropActive(active) {
+                this.softDropActive = active;
+            }
+            
+            updateStats() {
+                const elapsed = (Date.now() - this.gameStartTime) / 1000;
+                const pps = this.piecesPlaced / elapsed;
+                const apm = (this.attacksSent / elapsed) * 60;
+                
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
+            }
+            
+            draw() {
+                this.renderer.drawBoard(this.board);
+                
+                if (this.currentPiece) {
+                    let ghostY = this.currentY;
+                    while (this.isValidPosition(this.currentX, ghostY + 1, this.currentRotation)) {
+                        ghostY++;
+                    }
+                    this.renderer.drawGhostPiece(this.currentPiece, this.currentX, ghostY, this.currentRotation);
+                    this.renderer.drawPiece(this.currentPiece, this.currentX, this.currentY, this.currentRotation);
+                }
+                
+                this.renderer.drawHold(this.holdPiece);
+                this.renderer.drawQueue(this.queue);
+            }
+            
+            getState() {
                 return {
-                    grid: this.grid,
+                    board: this.board.map(row => [...row]),
                     currentPiece: this.currentPiece,
                     currentX: this.currentX,
                     currentY: this.currentY,
                     currentRotation: this.currentRotation,
-                    ghostY: this.ghostY,
                     holdPiece: this.holdPiece,
-                    queue: this.queue.slice(0, 5),
-                    score: this.score,
-                    lines: this.lines,
-                    level: this.level,
-                    gameOver: this.gameOver
+                    queue: [...this.queue],
+                    piecesPlaced: this.piecesPlaced,
+                    attacksSent: this.attacksSent,
+                    b2bCounter: this.b2bCounter,
+                    comboCounter: this.comboCounter
                 };
             }
             
-            setStateFromNetwork(state) {
-                this.opponentState = state;
+            setState(state) {
+                this.board = state.board.map(row => [...row]);
+                this.currentPiece = state.currentPiece;
+                this.currentX = state.currentX;
+                this.currentY = state.currentY;
+                this.currentRotation = state.currentRotation;
+                this.holdPiece = state.holdPiece;
+                this.queue = [...state.queue];
+                this.piecesPlaced = state.piecesPlaced;
+                this.attacksSent = state.attacksSent;
+                this.b2bCounter = state.b2bCounter;
+                this.comboCounter = state.comboCounter;
+                
+                const elapsed = (Date.now() - this.gameStartTime) / 1000;
+                const pps = this.piecesPlaced / elapsed;
+                const apm = (this.attacksSent / elapsed) * 60;
+                
+                document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
+                document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
+                document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
+                document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
             }
             
-            render() {
-                this.calculateGhostPosition();
-                this.renderer.render(this);
+            setGameStartTime(time) {
+                this.gameStartTime = time;
             }
         }
         
-        // =======================================
-        // Renderer
-        // =======================================
-        class TetrisRenderer {
-            constructor(canvas, holdCanvas, queueCanvas) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.holdCanvas = holdCanvas;
-                this.holdCtx = holdCanvas.getContext('2d');
-                this.queueCanvas = queueCanvas;
-                this.queueCtx = queueCanvas.getContext('2d');
-                
-                this.canvas.width = COLS * BLOCK_SIZE;
-                this.canvas.height = ROWS * BLOCK_SIZE;
-                
-                this.holdCanvas.width = 4 * PREVIEW_BLOCK_SIZE;
-                this.holdCanvas.height = 4 * PREVIEW_BLOCK_SIZE;
-                
-                this.queueCanvas.width = 4 * PREVIEW_BLOCK_SIZE;
-                this.queueCanvas.height = 20 * PREVIEW_BLOCK_SIZE;
-            }
-            
-            render(gameState) {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                // Draw background grid
-                this.drawGrid();
-                
-                // Draw locked pieces
-                this.drawLockedPieces(gameState.grid);
-                
-                // Draw ghost piece
-                if (gameState.currentPiece) {
-                    this.drawPiece(gameState.currentPiece, gameState.currentX, gameState.ghostY, gameState.currentRotation, true);
-                }
-                
-                // Draw current piece
-                if (gameState.currentPiece) {
-                    this.drawPiece(gameState.currentPiece, gameState.currentX, gameState.currentY, gameState.currentRotation);
-                }
-                
-                // Draw hold piece
-                this.drawHold(gameState.holdPiece);
-                
-                // Draw queue
-                this.drawQueue(gameState.queue);
-                
-                // Update UI stats
-                this.updateStats(gameState);
-            }
-            
-            drawGrid() {
-                this.ctx.strokeStyle = COLORS.grid;
-                this.ctx.lineWidth = 1;
-                
-                for (let x = 0; x <= COLS; x++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(x * BLOCK_SIZE, 0);
-                    this.ctx.lineTo(x * BLOCK_SIZE, this.canvas.height);
-                    this.ctx.stroke();
-                }
-                
-                for (let y = 0; y <= ROWS; y++) {
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, y * BLOCK_SIZE);
-                    this.ctx.lineTo(this.canvas.width, y * BLOCK_SIZE);
-                    this.ctx.stroke();
-                }
-            }
-            
-            drawLockedPieces(grid) {
-                for (let row = 0; row < ROWS; row++) {
-                    for (let col = 0; col < COLS; col++) {
-                        if (grid[row][col]) {
-                            this.drawBlock(col, row, COLORS[grid[row][col]]);
-                        }
-                    }
-                }
-            }
-            
-            drawPiece(piece, x, y, rotation, isGhost = false) {
-                const matrix = this.getRotatedMatrix(piece, rotation);
-                const color = isGhost ? COLORS.ghost : COLORS[piece];
-                
-                for (let row = 0; row < matrix.length; row++) {
-                    for (let col = 0; col < matrix[row].length; col++) {
-                        if (matrix[row][col]) {
-                            const drawX = x + col;
-                            const drawY = y + row;
-                            
-                            if (drawY >= 0) {
-                                this.drawBlock(drawX, drawY, color, isGhost);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            drawBlock(x, y, color, isGhost = false) {
-                this.ctx.fillStyle = color;
-                this.ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-                
-                if (!isGhost) {
-                    // Add 3D effect
-                    this.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                    this.ctx.lineWidth = 2;
-                    this.ctx.strokeRect(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
-                    
-                    this.ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-                    this.ctx.lineWidth = 2;
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(x * BLOCK_SIZE + BLOCK_SIZE - 1, y * BLOCK_SIZE + 1);
-                    this.ctx.lineTo(x * BLOCK_SIZE + BLOCK_SIZE - 1, y * BLOCK_SIZE + BLOCK_SIZE - 1);
-                    this.ctx.lineTo(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + BLOCK_SIZE - 1);
-                    this.ctx.stroke();
-                }
-            }
-            
-            drawHold(holdPiece) {
-                this.holdCtx.clearRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
-                
-                if (!holdPiece) return;
-                
-                const matrix = PIECES[holdPiece];
-                const color = COLORS[holdPiece];
-                
-                const offsetX = (4 - matrix[0].length) / 2;
-                const offsetY = (4 - matrix.length) / 2;
-                
-                for (let row = 0; row < matrix.length; row++) {
-                    for (let col = 0; col < matrix[row].length; col++) {
-                        if (matrix[row][col]) {
-                            this.holdCtx.fillStyle = color;
-                            this.holdCtx.fillRect(
-                                (col + offsetX) * PREVIEW_BLOCK_SIZE,
-                                (row + offsetY) * PREVIEW_BLOCK_SIZE,
-                                PREVIEW_BLOCK_SIZE,
-                                PREVIEW_BLOCK_SIZE
-                            );
-                        }
-                    }
-                }
-            }
-            
-            drawQueue(queue) {
-                this.queueCtx.clearRect(0, 0, this.queueCanvas.width, this.queueCanvas.height);
-                
-                for (let i = 0; i < 5; i++) {
-                    const piece = queue[i];
-                    if (!piece) continue;
-                    
-                    const matrix = PIECES[piece];
-                    const color = COLORS[piece];
-                    
-                    const offsetX = (4 - matrix[0].length) / 2;
-                    const offsetY = i * 4 + (4 - matrix.length) / 2;
-                    
-                    for (let row = 0; row < matrix.length; row++) {
-                        for (let col = 0; col < matrix[row].length; col++) {
-                            if (matrix[row][col]) {
-                                this.queueCtx.fillStyle = color;
-                                this.queueCtx.fillRect(
-                                    (col + offsetX) * PREVIEW_BLOCK_SIZE,
-                                    (row + offsetY) * PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE,
-                                    PREVIEW_BLOCK_SIZE
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            
-            updateStats(gameState) {
-  if (!gameState.isPlayerOne) return;
-
-  const scoreEl = document.getElementById("scoreValue");
-  const linesEl = document.getElementById("linesValue");
-  const levelEl = document.getElementById("levelValue");
-
-  if (scoreEl) scoreEl.textContent = gameState.score;
-  if (linesEl) linesEl.textContent = gameState.lines;
-  if (levelEl) levelEl.textContent = gameState.level;
-}
-
-            
-            getRotatedMatrix(piece, rotation) {
-                let matrix = PIECES[piece];
-                
-                if (rotation === 0) return matrix;
-                
-                let rotated = matrix;
-                for (let i = 0; i < rotation; i++) {
-                    rotated = this.rotateMatrix(rotated);
-                }
-                
-                return rotated;
-            }
-            
-            rotateMatrix(matrix) {
-                const N = matrix.length;
-                const rotated = Array(N).fill().map(() => Array(N).fill(0));
-                
-                for (let i = 0; i < N; i++) {
-                    for (let j = 0; j < N; j++) {
-                        rotated[j][N-1-i] = matrix[i][j];
-                    }
-                }
-                
-                return rotated;
-            }
-        }
+        // ========================================================================
+        // Singleton Managers
+        // ========================================================================
         
-        // =======================================
-        // Main game controller
-        // =======================================
-        class GameController {
+        class GameSettings {
+            static instance = null;
+            
             constructor() {
-  this.gameState1 = null;
-  this.gameState2 = null;
-  this.gameRunning = false;
-  this.lastTime = 0;
-  this.lastStateSendTime = 0;
-  this.animationFrameId = null;
-
-  this.setupUI();
-  this.setupInput();
-}
-
+                this.arr = 0;
+                this.das = 167;
+                this.dcd = 0;
+                this.sdf = 6;
+                this.preventMissdrop = true;
+            }
             
-            setupUI() {
-  const net = NetworkManager.getInstance();
-  net.initialize(this.handleNetworkMessage.bind(this));
+            static getInstance() {
+                if (!GameSettings.instance) {
+                    GameSettings.instance = new GameSettings();
+                }
+                return GameSettings.instance;
+            }
+            
+            update() {
+                this.arr = parseInt(document.getElementById('arr').value);
+                this.das = parseInt(document.getElementById('das').value);
+                this.dcd = parseInt(document.getElementById('dcd').value);
+                
+                const sdfValue = document.getElementById('sdf').value;
+                this.sdf = sdfValue === 'inf' ? 'inf' : parseFloat(sdfValue);
+                
+                this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+            }
+        }
+        
+        class ChatManager {
+            static addMessage(message, sender = 'System') {
+                const chatMessages = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'chat-message';
+                messageDiv.textContent = `${sender}: ${message}`;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+        
+        class NetworkManager {
+            static instance = null;
+            
+            constructor() {
+                this.peer = null;
+                this.conn = null;
+                this.isHost = false;
+                this.myPeerId = null;
+                this.onMessageCallback = null;
+            }
+            
+            static getInstance() {
+                if (!NetworkManager.instance) {
+                    NetworkManager.instance = new NetworkManager();
+                }
+                return NetworkManager.instance;
+            }
+            
+            initialize(onMessage) {
+                this.onMessageCallback = onMessage;
+                
+                this.peer = new Peer({
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' }
+                        ]
+                    }
+                });
+                
+                this.peer.on('open', (id) => {
+                    this.myPeerId = id;
+                    document.getElementById('peerIdDisplay').textContent = id;
+                    document.getElementById('myPeerId').classList.remove('hidden');
+                    ChatManager.addMessage(`Your Peer ID: ${id}`);
+                    ChatManager.addMessage('Share this ID with your opponent to let them join!');
+                });
+                
+                this.peer.on('connection', (connection) => {
+                    this.conn = connection;
+                    this.setupConnection();
+                    ChatManager.addMessage('Opponent connected!');
+                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                    
+                    const seed = Math.floor(Math.random() * 1000000000);
+                    ChatManager.addMessage(`Generated game seed: ${seed}`, 'System');
+                    
+                    setTimeout(() => {
+                        this.send({ type: 'start', seed });
+                        if (this.onMessageCallback) {
+                            this.onMessageCallback({ type: 'start', seed });
+                        }
+                    }, 1000);
+                });
+                
+                this.peer.on('error', (err) => {
+                    console.error('PeerJS error:', err);
+                    ChatManager.addMessage(`Connection error: ${err.type}`);
+                });
+            }
+            
+            connect(peerId) {
+                setTimeout(() => {
+                    this.conn = this.peer.connect(peerId);
+                    
+                    this.conn.on('open', () => {
+                        this.setupConnection();
+                        ChatManager.addMessage('Connected to opponent!');
+                        document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
+                        document.getElementById('joinGameBtn').disabled = true;
+                    });
+                    
+                    this.conn.on('error', (err) => {
+                        ChatManager.addMessage(`Failed to connect: ${err}`);
+                    });
+                }, 1000);
+            }
+            
+            setupConnection() {
+                this.conn.on('data', (data) => {
+                    if (this.onMessageCallback) {
+                        this.onMessageCallback(data);
+                    }
+                });
+                
+                this.conn.on('close', () => {
+                    ChatManager.addMessage('Opponent disconnected');
+                    document.getElementById('gameStatus').textContent = 'Opponent disconnected';
+                });
+            }
+            
+            send(message) {
+                if (this.conn && this.conn.open) {
+                    this.conn.send(message);
+                }
+            }
+            
+            sendAttack(lines) {
+                const cappedLines = Math.min(lines, 10);
+                this.send({ type: 'attack', lines: cappedLines });
+            }
+            
+            isConnected() {
+                return this.conn && this.conn.open;
+            }
+        }
+        
+        class InputManager {
+    static instance = null;
 
-  // Copy room code
-  window.copyPeerId = () => {
-    const text = (document.getElementById("peerIdDisplay")?.textContent || "").trim();
-    if (!text || text === "Connecting...") return;
-    navigator.clipboard.writeText(text).then(() => ChatManager.addMessage("Room code copied!"));
-  };
+    constructor() {
+        this.heldKeys = {};
 
-  const createBtn = document.getElementById("createGameBtn");
-  const joinBtn = document.getElementById("joinGameBtn");
-  const restartBtn = document.getElementById("restartBtn");
-  const joinInput = document.getElementById("opponentPeerId");
-  const gameArea = document.getElementById("gameArea");
+        this.keyBindings = {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+            softDrop: 'ArrowDown',
+            hardDrop: ' ',
+            rotateCW: 'ArrowUp',
+            rotateCCW: 'z',
+            rotate180: 'x',
+            hold: 'c'
+        };
 
-  // ---- settings hookup (YOUR real IDs) ----
-  const applySettings = () => GameSettings.getInstance().updateFromUI();
-  ["das", "arr", "dcd", "sdf", "preventMissdrop"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("change", applySettings);
-  });
-  applySettings(); // initial sync from UI
+        this.move = {
+            left: false,
+            right: false,
+            direction: 0,
+            lastDirection: 0,
+            dasTimer: 0,
+            arrTimer: 0,
+            dcdTimer: 0
+        };
 
-  // ---- create / join ----
-  createBtn.addEventListener("click", async () => {
-    createBtn.disabled = true;
-    joinBtn.disabled = true;
+        this.onMoveImmediate = null;
 
-    await net.host(); // sets status + shows code
-
-    restartBtn.classList.remove("hidden");
-  });
-
-  joinBtn.addEventListener("click", () => {
-    const code = joinInput.value.trim().toUpperCase();
-    if (!code) {
-      document.getElementById("gameStatus").textContent = "Enter a room code first.";
-      return;
     }
 
-    createBtn.disabled = true;
-    joinBtn.disabled = true;
-    restartBtn.classList.remove("hidden");
+    static getInstance() {
+        if (!InputManager.instance) {
+            InputManager.instance = new InputManager();
+        }
+        return InputManager.instance;
+    }
 
-    document.getElementById("myPeerId").classList.remove("hidden");
-    document.getElementById("peerIdDisplay").textContent = code;
+    getHeldKeys() {
+        return this.heldKeys;
+    }
 
-    net.join(code);
-  });
+    getKeyBindings() {
+        return this.keyBindings;
+    }
 
-  restartBtn.addEventListener("click", () => location.reload());
 
-  // Show game UI once game starts
-  this.onGameStartUI = () => {
-    if (gameArea) gameArea.classList.remove("hidden");
-  };
 
-  // ---- key rebinding (focus input then press key) ----
-  const keyInputs = {
-    keyLeft: "left",
-    keyRight: "right",
-    keySoftDrop: "softDrop",
-    keyHardDrop: "hardDrop",
-    keyHold: "hold",
-    keyRotateCW: "rotateCW",
-    keyRotateCCW: "rotateCCW",
-    keyRotate180: "rotate180"
-  };
+    setupKeyBindings() {
+        const actions = Object.keys(this.keyBindings);
 
-  Object.entries(keyInputs).forEach(([inputId, action]) => {
-    const input = document.getElementById(inputId);
-    if (!input) return;
+        actions.forEach(action => {
+            const inputId = `key${action.charAt(0).toUpperCase()}${action.slice(1)}`;
+            const input = document.getElementById(inputId);
+            if (!input) return;
 
-    // Make sure readonly inputs can still receive keydown
-    input.addEventListener("click", () => input.focus());
+            input.addEventListener('click', () => {
+                input.value = 'Press a key...';
+                const listener = (e) => {
+                    e.preventDefault();
+                    this.keyBindings[action] = e.key;
+                    input.value = e.key;
+                    document.removeEventListener('keydown', listener);
+                };
+                document.addEventListener('keydown', listener);
+            });
+        });
+    }
 
-    input.addEventListener("keydown", (e) => {
-      e.preventDefault();
-      InputManager.getInstance().setKeyBinding(action, e.key);
-      input.value = e.key;
-    });
-  });
+    handleKeyDown(key) {
+        if (this.heldKeys[key]) return;
+        this.heldKeys[key] = true;
+
+        const b = this.keyBindings;
+
+        if (key === b.left) this.setDirection(-1);
+        if (key === b.right) this.setDirection(1);
+    }
+
+    handleKeyUp(key) {
+        delete this.heldKeys[key];
+
+        const b = this.keyBindings;
+
+        if (key === b.left) this.move.left = false;
+        if (key === b.right) this.move.right = false;
+
+        this.recomputeDirection();
+    }
+
+    setDirection(dir) {
+        if (dir === -1) this.move.left = true;
+        if (dir === 1) this.move.right = true;
+
+        this.move.lastDirection = dir;
+        this.recomputeDirection(true);
+    }
+
+    recomputeDirection(immediate = false) {
+        let newDir = 0;
+
+        if (this.move.left && this.move.right) {
+            newDir = this.move.lastDirection;
+        } else if (this.move.left) {
+            newDir = -1;
+        } else if (this.move.right) {
+            newDir = 1;
+        }
+
+        if (newDir !== this.move.direction) {
+            this.move.direction = newDir;
+            this.move.dasTimer = 0;
+            this.move.arrTimer = 0;
+            this.move.dcdTimer = GameSettings.getInstance().dcd;
+
+            if (newDir !== 0 && immediate && this.onMoveImmediate) {
+                this.onMoveImmediate(newDir); // ✅ FIRST TAP
+            }
+        }
+    }
+
+    processMovement(deltaTime, moveFn) {
+        if (this.move.direction === 0) return;
+
+        const settings = GameSettings.getInstance();
+
+        if (this.move.dcdTimer > 0) {
+            this.move.dcdTimer -= deltaTime;
+            return;
+        }
+
+        this.move.dasTimer += deltaTime;
+
+        if (this.move.dasTimer < settings.das) return;
+
+        // ✅ ARR = 0 → instant slide (TETR.IO)
+        if (settings.arr === 0) {
+            while (moveFn(this.move.direction)) {}
+            return;
+        }
+
+        this.move.arrTimer += deltaTime;
+        if (this.move.arrTimer >= settings.arr) {
+            moveFn(this.move.direction);
+            this.move.arrTimer = 0;
+        }
+    }
+
+    reset() {
+        this.move = {
+            left: false,
+            right: false,
+            direction: 0,
+            lastDirection: 0,
+            dasTimer: 0,
+            arrTimer: 0,
+            dcdTimer: 0
+        };
+        this.heldKeys = {};
+    }
+            resetOnSpawn() {
+    this.resetMovementOnSpawn();
+}
+            resetMovementOnSpawn() {
+    this.move.dasTimer = 0;
+    this.move.arrTimer = 0;
+    this.move.dcdTimer = GameSettings.getInstance().dcd;
+
+    // Re-trigger immediate movement if a direction is held
+    if (this.move.direction !== 0 && this.onMoveImmediate) {
+        this.onMoveImmediate(this.move.direction);
+    }
 }
 
+}
+
+        
+        // ========================================================================
+        // Game Controller
+        // ========================================================================
+        
+        class GameController {
+            constructor() {
+                this.gameState1 = null;
+                this.gameState2 = null;
+                this.gameRunning = false;
+                this.gameSeed = null;
+                this.lastTime = 0;
+                this.lastStateSendTime = 0;
+                this.animationFrameId = null;
+                
+                this.setupUI();
+                this.setupInput();
+            }
             
-            setupInput() {
+            setupUI() {
+                window.copyPeerId = () => {
+                    const peerId = document.getElementById('peerIdDisplay').textContent;
+                    navigator.clipboard.writeText(peerId).then(() => {
+                        ChatManager.addMessage('Peer ID copied to clipboard!');
+                    });
+                };
+                
+                document.getElementById('createGameBtn').addEventListener('click', () => {
+                    NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+                    document.getElementById('gameStatus').textContent = 'Waiting for opponent to join...';
+                    document.getElementById('createGameBtn').disabled = true;
+                });
+                
+                document.getElementById('joinGameBtn').addEventListener('click', () => {
+                    const opponentId = document.getElementById('opponentPeerId').value.trim();
+                    if (!opponentId) {
+                        ChatManager.addMessage('Please enter an opponent Peer ID');
+                        return;
+                    }
+                    
+                    NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+                    setTimeout(() => {
+                        NetworkManager.getInstance().connect(opponentId);
+                    }, 1000);
+                });
+                
+                document.getElementById('restartBtn').addEventListener('click', () => {
+                    this.gameSeed = Math.floor(Math.random() * 1000000000);
+                    ChatManager.addMessage(`New game seed: ${this.gameSeed}`, 'System');
+                    
+                    NetworkManager.getInstance().send({ type: 'restart', seed: this.gameSeed });
+                    this.restartGame();
+                });
+                
+                document.getElementById('sendChatBtn').addEventListener('click', () => {
+                    const input = document.getElementById('chatInput');
+                    const message = input.value.trim();
+                    
+                    if (message && NetworkManager.getInstance().isConnected()) {
+                        NetworkManager.getInstance().send({ type: 'chat', message });
+                        ChatManager.addMessage(message, 'You');
+                        input.value = '';
+                    }
+                });
+                
+                document.getElementById('chatInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        document.getElementById('sendChatBtn').click();
+                    }
+                });
+                
+                ChatManager.addMessage('Welcome to Tetris Online Battle!');
+                ChatManager.addMessage('Click "Create Game" to host or enter a Peer ID to join.');
+            }
+            
+           setupInput() {
     const input = InputManager.getInstance();
     input.setupKeyBindings();
 
@@ -2013,14 +1854,17 @@
             this.gameState1.spawnPiece();
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
-            this.gameState1.bufferRotation('cw');
-            this.gameState1.consumeRotationBuffer();
+            const rotated = this.gameState1.rotate('cw');
+            if (!rotated) this.gameState1.bufferRotation('cw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotateCCW) {
-            this.gameState1.bufferRotation('ccw');
-            this.gameState1.consumeRotationBuffer();
+            const rotated = this.gameState1.rotate('ccw');
+            if (!rotated) this.gameState1.bufferRotation('ccw');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.rotate180) {
-            this.gameState1.bufferRotation('180');
-            this.gameState1.consumeRotationBuffer();
+            const rotated = this.gameState1.rotate('180');
+            if (!rotated) this.gameState1.bufferRotation('180');
+            else this.gameState1.rotateBuffer = null;
         } else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
@@ -2034,81 +1878,128 @@
         }
     });
 }
-            
-            handleNetworkMessage(data) {
-  if (!data || !data.type) return;
-
-  if (data.type === "startGame") {
-    // Host sends this, join receives it. Host also self-triggers it in NetworkManager.
-    if (this.onGameStartUI) this.onGameStartUI();
-    this.startGame();
-    return;
-  }
-
-  if (data.type === "gameState") {
-    if (this.gameState2) this.gameState2.setStateFromNetwork(data.state);
-    return;
-  }
-
-  if (data.type === "attack") {
-    if (this.gameState1) this.gameState1.addGarbage(data.lines);
-    return;
-  }
-}
 
             
-           startGame() {
-  if (this.gameRunning) return;
-
-  this.gameState1 = new TetrisGameState("gameCanvas1", "holdCanvas1", "queueCanvas1", true);
-  this.gameState2 = new TetrisGameState("gameCanvas2", "holdCanvas2", "queueCanvas2", false);
-
-  this.gameRunning = true;
-  this.lastTime = performance.now();
-  this.lastStateSendTime = 0;
-
-  document.getElementById("gameStatus").textContent = "Game in progress";
-
-  this.gameLoop();
-}
-
+            handleNetworkMessage(msg) {
+                if (msg.type === 'chat') {
+                    ChatManager.addMessage(msg.message, 'Opponent');
+                } else if (msg.type === 'attack') {
+                    if (this.gameState1) {
+                        this.gameState1.receiveAttack(msg.lines);
+                    }
+                } else if (msg.type === 'start') {
+                    if (msg.seed) {
+                        this.gameSeed = msg.seed;
+                        ChatManager.addMessage(`Received game seed: ${this.gameSeed}`, 'System');
+                    }
+                    this.startGame();
+                } else if (msg.type === 'gameState') {
+                    if (this.gameState2 && msg.state) {
+                        this.gameState2.setState(msg.state);
+                    }
+                } else if (msg.type === 'restart') {
+                    if (msg.seed) {
+                        this.gameSeed = msg.seed;
+                    }
+                    this.restartGame();
+                } else if (msg.type === 'gameOver') {
+                    this.gameRunning = false;
+                    ChatManager.addMessage('Opponent lost! You win! 🎉', 'System');
+                    document.getElementById('gameStatus').textContent = 'You Win! 🏆';
+                }
+            }
             
-            gameLoop(currentTime = performance.now()) {
+            startGame() {
+                this.gameRunning = true;
+                document.getElementById('gameArea').classList.remove('hidden');
+                document.getElementById('restartBtn').classList.remove('hidden');
+                document.getElementById('gameStatus').textContent = 'Game in progress!';
+                
+                if (!this.gameSeed) {
+                    this.gameSeed = Math.floor(Math.random() * 1000000000);
+                    ChatManager.addMessage(`Generated game seed: ${this.gameSeed}`, 'System');
+                }
+                
+                GameSettings.getInstance().update();
+                
+                this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, this.gameSeed);
+                this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, this.gameSeed);
+                
+                const startTime = Date.now();
+                this.gameState1.setGameStartTime(startTime);
+                this.gameState2.setGameStartTime(startTime);
+                
+                this.gameState1.spawnPiece();
+                this.gameState2.spawnPiece();
+                
+                InputManager.getInstance().reset();
+                ChatManager.addMessage('Game started! Good luck!');
+                
+                this.lastTime = 0;
+                this.lastStateSendTime = 0;
+                this.gameLoop();
+            }
+            
+            restartGame() {
+                this.gameRunning = false;
+                
+                if (this.animationFrameId !== null) {
+                    cancelAnimationFrame(this.animationFrameId);
+                }
+                
+                setTimeout(() => {
+                    this.startGame();
+                    ChatManager.addMessage('Game restarted!', 'System');
+                }, 500);
+            }
+            
+            handleGameOver() {
+                ChatManager.addMessage('You lost! Click Restart to play again.', 'System');
+                document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
+                this.gameRunning = false;
+                
+                NetworkManager.getInstance().send({ type: 'gameOver' });
+            }
+            
+            gameLoop(timestamp = 0) {
                 if (!this.gameRunning) return;
                 
-                const deltaTime = currentTime - this.lastTime;
-                this.lastTime = currentTime;
+                const deltaTime = this.lastTime === 0 ? 0 : (timestamp - this.lastTime);
+                this.lastTime = timestamp;
                 
-                // Update input
-                InputManager.getInstance().update(deltaTime, (dx) => {
-                    if (this.gameState1) this.gameState1.move(dx);
-                });
+                GameSettings.getInstance().update();
                 
-                // Update game state
-                this.gameState1.update(deltaTime);
-                this.gameState1.render();
-                
-                // Send state to opponent
-                this.lastStateSendTime += deltaTime;
-                if (NetworkManager.getInstance().isConnected() && this.lastStateSendTime >= STATE_SEND_INTERVAL) {
-                    NetworkManager.getInstance().sendGameState(this.gameState1.getStateForNetwork());
-                    this.lastStateSendTime = 0;
-                }
-                
-                // Render opponent state if available
-                if (this.gameState2 && this.gameState2.opponentState) {
-                    this.gameState2.renderer.render(this.gameState2.opponentState);
-                }
-                
-                // Check game over
-                if (this.gameState1.gameOver) {
-                    this.gameRunning = false;
-                    document.getElementById('gameStatus').textContent = 'Game Over';
+                if (this.gameState1) {
+                    const input = InputManager.getInstance();
+
+// Soft drop has priority
+if (!this.gameState1.softDropActive) {
+    input.processMovement(deltaTime, (dx) => {
+        return this.gameState1.move(dx);
+    });
+}
+
                     
-                    if (NetworkManager.getInstance().isConnected()) {
-                        NetworkManager.getInstance().send({ type: 'gameOver' });
+                    const success = this.gameState1.update(deltaTime);
+                    if (!success) {
+                        this.handleGameOver();
+                        return;
                     }
-                    return;
+                    
+                    this.gameState1.draw();
+                    
+                    if (NetworkManager.getInstance().isConnected() && 
+                        timestamp - this.lastStateSendTime > STATE_SEND_INTERVAL) {
+                        NetworkManager.getInstance().send({
+                            type: 'gameState',
+                            state: this.gameState1.getState()
+                        });
+                        this.lastStateSendTime = timestamp;
+                    }
+                }
+                
+                if (this.gameState2) {
+                    this.gameState2.draw();
                 }
                 
                 this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
@@ -2120,7 +2011,6 @@
         // ========================================================================
         
         new GameController();
-</script>
-
+    </script>
 </body>
 </html>
