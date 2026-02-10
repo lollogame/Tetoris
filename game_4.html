@@ -1254,39 +1254,40 @@
             }
             
             holdCurrentPiece() {
-                if (!this.canHold || !this.currentPiece) return false;
-                
-                if (this.holdPiece === null) {
-                    this.holdPiece = this.currentPiece;
-                    this.spawnPiece();
-
-                } else {
-                    const temp = this.holdPiece;
-                    this.holdPiece = this.currentPiece;
-                    this.resetPieceState(temp);
-                    this.spawnGrace = true;
-                    this.spawnGraceUsed = false;
-
-                    // Reset rotation timing explicitly
-                    this.rotationCooldown = 0;
-                    this.rotationBuffer = null;
-
-                    this.rotateBuffer = null;
-                }
-                
-                InputManager.getInstance().resetOnSpawn();
-                if (this.playerId === 1) this.applyInitialRotation(true);
-                this.canHold = false;
-                return true;
-            }
+    if (!this.canHold || !this.currentPiece) return false;
+    
+    if (this.holdPiece === null) {
+        this.holdPiece = this.currentPiece;
+        this.spawnPiece();
+    } else {
+        const temp = this.holdPiece;
+        this.holdPiece = this.currentPiece;
+        this.resetPieceState(temp);
+        this.spawnGrace = true;
+        this.spawnGraceUsed = false;
+        this.rotationCooldown = 0;
+    }
+    
+    InputManager.getInstance().resetOnSpawn();
+    
+    // Apply IRS immediately - check both held keys and recent presses
+    const rotated = this.applyInitialRotation(true);
+    
+    // If IRS didn't work but we have a buffered rotation, try it now
+    if (!rotated && this.rotateBuffer) {
+        this.consumeRotationBuffer();
+    }
+    
+    this.canHold = false;
+    return true;
+}
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
                 
-                if (this.spawnGrace) {
-                    // Allow exactly one rotation window
-                    this.spawnGraceUsed = false;
-                }
+                            if (this.spawnGrace && (this.currentY > SPAWN_ROW || this.spawnGraceUsed)) {
+                this.spawnGrace = false;
+            }
 
                 this.consumeRotationBuffer();
                 
