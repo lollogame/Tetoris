@@ -721,13 +721,22 @@
             }
             
             updateFromUI() {
-                this.das = parseInt(document.getElementById('dasValue').value);
-                this.arr = parseInt(document.getElementById('arrValue').value);
-                this.dcd = parseInt(document.getElementById('dcdValue').value);
-                this.lockDelay = parseInt(document.getElementById('lockDelayValue').value);
-                this.gravity = parseInt(document.getElementById('gravityValue').value);
-            }
-        }
+  const dasEl = document.getElementById("das");
+  const arrEl = document.getElementById("arr");
+  const dcdEl = document.getElementById("dcd");
+  const sdfEl = document.getElementById("sdf");
+
+  if (dasEl) this.das = parseInt(dasEl.value, 10) || 0;
+  if (arrEl) this.arr = parseInt(arrEl.value, 10) || 0;
+  if (dcdEl) this.dcd = parseInt(dcdEl.value, 10) || 0;
+
+  // SDF is a multiplier; "inf" means basically instant soft drop
+  if (sdfEl) {
+    if (sdfEl.value === "inf") this.softDropMultiplier = 999999;
+    else this.softDropMultiplier = parseInt(sdfEl.value, 10) || 1;
+  }
+}
+
         
         // Network manager
         class NetworkManager {
@@ -1883,7 +1892,7 @@
                 this.lastStateSendTime = 0;
                 this.animationFrameId = null;
                 
-                this.setupUI();
+                this.();
                 this.setupInput();
             }
             
@@ -1891,13 +1900,11 @@
   const net = NetworkManager.getInstance();
   net.initialize(this.handleNetworkMessage.bind(this));
 
-  // Copy-to-clipboard works with your existing UI
+  // Copy room code
   window.copyPeerId = () => {
     const text = (document.getElementById("peerIdDisplay")?.textContent || "").trim();
     if (!text || text === "Connecting...") return;
-    navigator.clipboard.writeText(text).then(() => {
-      ChatManager.addMessage("Room code copied!");
-    });
+    navigator.clipboard.writeText(text).then(() => ChatManager.addMessage("Room code copied!"));
   };
 
   const createBtn = document.getElementById("createGameBtn");
@@ -1906,13 +1913,21 @@
   const joinInput = document.getElementById("opponentPeerId");
   const gameArea = document.getElementById("gameArea");
 
+  // ---- settings hookup (YOUR real IDs) ----
+  const applySettings = () => GameSettings.getInstance().updateFromUI();
+  ["das", "arr", "dcd", "sdf", "preventMissdrop"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", applySettings);
+  });
+  applySettings(); // initial sync from UI
+
+  // ---- create / join ----
   createBtn.addEventListener("click", async () => {
     createBtn.disabled = true;
     joinBtn.disabled = true;
 
-    await net.host();
+    await net.host(); // sets status + shows code
 
-    // allow joining side later; keep create disabled to avoid multiple hosts
     restartBtn.classList.remove("hidden");
   });
 
@@ -1927,24 +1942,20 @@
     joinBtn.disabled = true;
     restartBtn.classList.remove("hidden");
 
-    // show the code you're attempting to join (optional)
     document.getElementById("myPeerId").classList.remove("hidden");
     document.getElementById("peerIdDisplay").textContent = code;
 
     net.join(code);
   });
 
-  restartBtn.addEventListener("click", () => {
-    // Simple reload reset (cleanest for PeerJS + game state)
-    location.reload();
-  });
+  restartBtn.addEventListener("click", () => location.reload());
 
-  // Make game area visible once game starts (host or join)
+  // Show game UI once game starts
   this.onGameStartUI = () => {
-    gameArea.classList.remove("hidden");
+    if (gameArea) gameArea.classList.remove("hidden");
   };
 
-  // Key binding controls (your existing UI uses click-to-change)
+  // ---- key rebinding (focus input then press key) ----
   const keyInputs = {
     keyLeft: "left",
     keyRight: "right",
@@ -1958,6 +1969,11 @@
 
   Object.entries(keyInputs).forEach(([inputId, action]) => {
     const input = document.getElementById(inputId);
+    if (!input) return;
+
+    // Make sure readonly inputs can still receive keydown
+    input.addEventListener("click", () => input.focus());
+
     input.addEventListener("keydown", (e) => {
       e.preventDefault();
       InputManager.getInstance().setKeyBinding(action, e.key);
@@ -1966,36 +1982,6 @@
   });
 }
 
-                
-                // Settings controls
-                const settingsInputs = ['dasValue', 'arrValue', 'dcdValue', 'lockDelayValue', 'gravityValue'];
-                settingsInputs.forEach(id => {
-                    document.getElementById(id).addEventListener('change', () => {
-                        GameSettings.getInstance().updateFromUI();
-                    });
-                });
-                
-                // Key binding controls
-                const keyInputs = {
-                    keyLeft: 'left',
-                    keyRight: 'right',
-                    keySoftDrop: 'softDrop',
-                    keyHardDrop: 'hardDrop',
-                    keyHold: 'hold',
-                    keyRotateCW: 'rotateCW',
-                    keyRotateCCW: 'rotateCCW',
-                    keyRotate180: 'rotate180'
-                };
-                
-                Object.entries(keyInputs).forEach(([inputId, action]) => {
-                    const input = document.getElementById(inputId);
-                    input.addEventListener('keydown', (e) => {
-                        e.preventDefault();
-                        InputManager.getInstance().setKeyBinding(action, e.key);
-                        input.value = e.key;
-                    });
-                });
-            }
             
             setupInput() {
     const input = InputManager.getInstance();
