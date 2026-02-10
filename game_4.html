@@ -559,10 +559,11 @@
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
-        const HOLD_IRS_BUFFER_MS = 80;
+        const HOLD_IRS_BUFFER_MS = 120;
+        const POST_HOLD_ROTATE_GRACE_MS = 160;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
-        const BUILD_TAG = 'holdfix-20260210-7';
+        const BUILD_TAG = 'holdfix-20260210-8';
         console.log('BUILD', BUILD_TAG);
         
         // SRS Kick Tables
@@ -837,7 +838,8 @@
                 this.rotateBuffer = null;
                 this.spawnGrace = false;
                 this.spawnGraceUsed = false;
-                this.softDropActive = false;
+                this.postHoldRotateUntil = 0;
+                this.postHoldRotateDir = null;
                 
                 this.pendingGarbage = [];
                 
@@ -889,10 +891,7 @@
 
                 this.spawnGrace = true;
                 this.spawnGraceUsed = false;
-
-                // Reset spawn-related flags but preserve any existing rotate buffer
-                // so a player who pressed rotate during a hold doesn't lose that input.
-                this.rotationCooldown = 0;
+                this.clearPostHoldRotateWindow();
 
                 return true;
             }
@@ -915,6 +914,64 @@
                     return this.rotate('ccw');
                 }
 
+
+                return false;
+            }
+
+            clearPostHoldRotateWindow() {
+                this.postHoldRotateUntil = 0;
+                this.postHoldRotateDir = null;
+            }
+
+            openPostHoldRotateWindow() {
+                this.postHoldRotateUntil = performance.now() + POST_HOLD_ROTATE_GRACE_MS;
+                this.postHoldRotateDir = null;
+            }
+
+            registerPostHoldRotate(direction) {
+                if (!this.postHoldRotateUntil) return;
+                if (performance.now() > this.postHoldRotateUntil) {
+                    this.clearPostHoldRotateWindow();
+                    return;
+                }
+                this.postHoldRotateDir = direction;
+            }
+
+            tryPostHoldRotation() {
+                if (!this.currentPiece || !this.postHoldRotateUntil) return false;
+
+                const now = performance.now();
+                if (now > this.postHoldRotateUntil) {
+                    this.clearPostHoldRotateWindow();
+                    return false;
+                }
+
+                let direction = this.postHoldRotateDir;
+                if (!direction) {
+                    const input = InputManager.getInstance();
+                    const heldKeys = input.getHeldKeys();
+                    const bindings = input.getKeyBindings();
+                    const wasPressedRecently = (key) =>
+                        (now - input.getLastPressedAt(key)) <= POST_HOLD_ROTATE_GRACE_MS;
+
+                    if (heldKeys[bindings.rotate180] || wasPressedRecently(bindings.rotate180)) {
+                        direction = '180';
+                    } else if (heldKeys[bindings.rotateCW] || wasPressedRecently(bindings.rotateCW)) {
+                        direction = 'cw';
+                    } else if (heldKeys[bindings.rotateCCW] || wasPressedRecently(bindings.rotateCCW)) {
+                        direction = 'ccw';
+                    }
+                }
+
+                if (!direction) return false;
+
+                if (this.rotate(direction)) {
+                    this.rotateBuffer = null;
+                    this.clearPostHoldRotateWindow();
+                    return true;
+                }
+
+                this.postHoldRotateDir = direction;
                 return false;
             }
 
@@ -923,18 +980,21 @@
             }
             
             consumeRotationBuffer() {
-                if (!this.rotateBuffer) return;
+                if (!this.rotateBuffer) return false;
 
                 const age = performance.now() - this.rotateBuffer.time;
                 if (age > ROTATION_BUFFER_MS) {
                     this.rotateBuffer = null;
-                    return;
+                    return false;
                 }
 
                 const rotated = this.rotate(this.rotateBuffer.dir);
                 if (rotated) {
                     this.rotateBuffer = null;
+                    return true;
                 }
+
+                return false;
             }
             
             isValidPosition(x, y, rotation) {
@@ -1271,7 +1331,7 @@
                     // rotation from just-before or during hold still applies.
                     this.rotationCooldown = 0;
                 }
-                InputManager.getInstance().resetOnSpawn();
+
                 let rotatedOnHoldSpawn = false;
                 if (this.playerId === 1) {
                     rotatedOnHoldSpawn = this.applyInitialRotation(true);
@@ -1279,10 +1339,16 @@
 
                 if (rotatedOnHoldSpawn) {
                     this.rotateBuffer = null;
+                    this.clearPostHoldRotateWindow();
                 } else {
-                    // Avoid a one-frame delay after hold by applying buffered rotation immediately.
-                    this.consumeRotationBuffer();
+                    const consumedBufferedRotate = this.consumeRotationBuffer();
+                    if (!consumedBufferedRotate) {
+                        this.openPostHoldRotateWindow();
+                        this.tryPostHoldRotation();
+                    }
                 }
+
+                InputManager.getInstance().resetOnSpawn();
                 this.canHold = false;
                 return true;
             }
@@ -1295,6 +1361,7 @@
                     this.spawnGraceUsed = false;
                 }
 
+                this.tryPostHoldRotation();
                 this.consumeRotationBuffer();
                 
                 if (this.hardDropCooldown > 0) this.hardDropCooldown--;
@@ -1869,8 +1936,10 @@
 
         if (Object.values(b).includes(e.key)) e.preventDefault();
 
-        const isDiscreteAction = e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180 || e.key === b.hold || e.key === b.hardDrop;
-        if (e.repeat && isDiscreteAction) return;
+        const isRepeatBlockedAction = e.key === b.hold || e.key === b.hardDrop;
+        const isRotateAction = e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180;
+        if (e.repeat && isRepeatBlockedAction) return;
+        if (e.repeat && isRotateAction && !this.gameState1.postHoldRotateUntil) return;
 
         if (e.key === b.softDrop) {
             this.gameState1.setSoftDropActive(true);
@@ -1880,16 +1949,31 @@
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
             const rotated = this.gameState1.rotate('cw');
-            if (!rotated) this.gameState1.bufferRotation('cw');
-            else this.gameState1.rotateBuffer = null;
+            if (!rotated) {
+                this.gameState1.bufferRotation('cw');
+                this.gameState1.registerPostHoldRotate('cw');
+            } else {
+                this.gameState1.rotateBuffer = null;
+                this.gameState1.clearPostHoldRotateWindow();
+            }
         } else if (e.key === b.rotateCCW) {
             const rotated = this.gameState1.rotate('ccw');
-            if (!rotated) this.gameState1.bufferRotation('ccw');
-            else this.gameState1.rotateBuffer = null;
+            if (!rotated) {
+                this.gameState1.bufferRotation('ccw');
+                this.gameState1.registerPostHoldRotate('ccw');
+            } else {
+                this.gameState1.rotateBuffer = null;
+                this.gameState1.clearPostHoldRotateWindow();
+            }
         } else if (e.key === b.rotate180) {
             const rotated = this.gameState1.rotate('180');
-            if (!rotated) this.gameState1.bufferRotation('180');
-            else this.gameState1.rotateBuffer = null;
+            if (!rotated) {
+                this.gameState1.bufferRotation('180');
+                this.gameState1.registerPostHoldRotate('180');
+            } else {
+                this.gameState1.rotateBuffer = null;
+                this.gameState1.clearPostHoldRotateWindow();
+            }
         } else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
@@ -1901,10 +1985,22 @@
         if (this.gameState1 && e.key === input.getKeyBindings().softDrop) {
             this.gameState1.setSoftDropActive(false);
         }
+
+        if (!this.gameRunning || !this.gameState1) return;
+
+        const b = input.getKeyBindings();
+        let dir = null;
+        if (e.key === b.rotateCW) dir = 'cw';
+        else if (e.key === b.rotateCCW) dir = 'ccw';
+        else if (e.key === b.rotate180) dir = '180';
+
+        if (dir && this.gameState1.postHoldRotateUntil) {
+            this.gameState1.registerPostHoldRotate(dir);
+            this.gameState1.tryPostHoldRotation();
+        }
     });
 }
 
-            
             handleNetworkMessage(msg) {
                 if (msg.type === 'chat') {
                     ChatManager.addMessage(msg.message, 'Opponent');
