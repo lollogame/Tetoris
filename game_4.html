@@ -1871,7 +1871,7 @@
                 this.animationFrameId = null;
                 
                 this.setupUI();
-                this.setupInput();
+                this.();
             }
             
             setupUI() {
@@ -1942,118 +1942,104 @@
         if (!this.gameRunning || !this.gameState1) return;
 
         const b = input.getKeyBindings();
+
+        // Detect repeats using OUR held map (stable), not e.repeat (unstable)
+        const alreadyHeld = !!input.getHeldKeys()[e.key];
+
+        // Update held state + movement direction (left/right) once per physical press
         input.handleKeyDown(e.key);
 
+        // Prevent default only for bound keys
         if (Object.values(b).includes(e.key)) e.preventDefault();
 
-        const isRepeatBlockedAction = e.key === b.hold || e.key === b.hardDrop;
-        if (e.repeat && isRepeatBlockedAction) return;
+        const isRepeatBlockedAction =
+            (e.key === b.hold || e.key === b.hardDrop ||
+             e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180);
+
+        // Block repeats for these actions
+        if (alreadyHeld && isRepeatBlockedAction) return;
 
         if (e.key === b.softDrop) {
             this.gameState1.setSoftDropActive(true);
-        } else if (e.key === b.hardDrop) {
-            this.gameState1.tryPostHoldRotation();
-            this.gameState1.consumeRotationBuffer();
+            return;
+        }
+
+        if (e.key === b.hardDrop) {
             this.gameState1.hardDrop();
             this.gameState1.spawnPiece();
-            InputManager.getInstance().resetMovementOnSpawn();
-        } else if (e.key === b.rotateCW) {
+            input.resetMovementOnSpawn(); // re-arm DAS/ARR if direction held
+            return;
+        }
+
+        if (e.key === b.rotateCW) {
             const rotated = this.gameState1.rotate('cw');
             if (!rotated) {
                 this.gameState1.bufferRotation('cw');
                 this.gameState1.registerPostHoldRotate('cw');
-                this.gameState1.tryPostHoldRotation();
-                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
             }
-        } else if (e.key === b.rotateCCW) {
+            return;
+        }
+
+        if (e.key === b.rotateCCW) {
             const rotated = this.gameState1.rotate('ccw');
             if (!rotated) {
                 this.gameState1.bufferRotation('ccw');
                 this.gameState1.registerPostHoldRotate('ccw');
-                this.gameState1.tryPostHoldRotation();
-                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
             }
-        } else if (e.key === b.rotate180) {
+            return;
+        }
+
+        if (e.key === b.rotate180) {
             const rotated = this.gameState1.rotate('180');
             if (!rotated) {
                 this.gameState1.bufferRotation('180');
                 this.gameState1.registerPostHoldRotate('180');
-                this.gameState1.tryPostHoldRotation();
-                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
             }
-        } else if (e.key === b.hold) {
+            return;
+        }
+
+        if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
+            return;
         }
     });
 
-    document.addEventListener('keydown', (e) => {
-    if (!this.gameRunning || !this.gameState1) return;
-
-    const input = InputManager.getInstance();
-    const b = input.getKeyBindings();
-
-    const isRepeatBlockedAction = (e.key === b.hold || e.key === b.hardDrop);
-    const isRotateAction = (e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180);
-
-    // ✅ Use YOUR held-keys to detect repeat, not e.repeat (browser repeat is unreliable here)
-    const alreadyHeld = !!input.getHeldKeys()[e.key];
-
-    input.handleKeyDown(e.key);
-
-    if (Object.values(b).includes(e.key)) e.preventDefault();
-
-    // Block repeats based on held-state (stable), not browser repeat flag (unstable)
-    if (alreadyHeld && (isRepeatBlockedAction || isRotateAction)) return;
-
-    if (e.key === b.softDrop) {
-        this.gameState1.setSoftDropActive(true);
-    } else if (e.key === b.hardDrop) {
-        this.gameState1.hardDrop();
-        this.gameState1.spawnPiece();
-        // ✅ keep movement re-armed, but don't clear heldKeys
-        input.resetMovementOnSpawn();
-    } else if (e.key === b.rotateCW) {
-        const rotated = this.gameState1.rotate('cw');
-        if (!rotated) {
-            this.gameState1.bufferRotation('cw');
-            this.gameState1.registerPostHoldRotate('cw');
-        } else {
-            this.gameState1.rotateBuffer = null;
-            this.gameState1.clearPostHoldRotateWindow();
+    document.addEventListener('keyup', (e) => {
+        if (!this.gameRunning || !this.gameState1) {
+            // still clear held state even if game paused/stopped
+            input.handleKeyUp(e.key);
+            return;
         }
-    } else if (e.key === b.rotateCCW) {
-        const rotated = this.gameState1.rotate('ccw');
-        if (!rotated) {
-            this.gameState1.bufferRotation('ccw');
-            this.gameState1.registerPostHoldRotate('ccw');
-        } else {
-            this.gameState1.rotateBuffer = null;
-            this.gameState1.clearPostHoldRotateWindow();
-        }
-    } else if (e.key === b.rotate180) {
-        const rotated = this.gameState1.rotate('180');
-        if (!rotated) {
-            this.gameState1.bufferRotation('180');
-            this.gameState1.registerPostHoldRotate('180');
-        } else {
-            this.gameState1.rotateBuffer = null;
-            this.gameState1.clearPostHoldRotateWindow();
-        }
-    } else if (e.key === b.hold) {
-        this.gameState1.holdCurrentPiece();
-    }
-});
 
+        const b = input.getKeyBindings();
+        input.handleKeyUp(e.key);
+
+        if (e.key === b.softDrop) {
+            this.gameState1.setSoftDropActive(false);
+        }
+
+        // Optional: keep your "post-hold rotate on release" behavior
+        let dir = null;
+        if (e.key === b.rotateCW) dir = 'cw';
+        else if (e.key === b.rotateCCW) dir = 'ccw';
+        else if (e.key === b.rotate180) dir = '180';
+
+        if (dir && this.gameState1.postHoldRotateUntil) {
+            this.gameState1.registerPostHoldRotate(dir);
+            this.gameState1.tryPostHoldRotation();
+        }
+    });
 }
+
 
             handleNetworkMessage(msg) {
                 if (msg.type === 'chat') {
@@ -2104,7 +2090,7 @@
                 this.gameState1.setGameStartTime(startTime);
                 this.gameState2.setGameStartTime(startTime);
                 
-                InputManager.getInstance().resetMovementOnSpawn();
+                InputManager.getInstance().reset();
 
                 this.gameState1.spawnPiece();
                 this.gameState2.spawnPiece();
