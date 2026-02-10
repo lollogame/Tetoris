@@ -923,22 +923,17 @@
             }
 
             afterSpawnInput() {
-    // Only the local player should apply local input
     if (this.playerId !== 1) return;
 
-    // IRS: rotate immediately if rotate is held / was just pressed
     const didIRS = this.applyInitialRotation(true);
 
-    // If IRS didn't happen, try buffered rotation (ROTATION_BUFFER_MS window)
-    if (!didIRS) {
-        this.consumeRotationBuffer();
-    } else {
-        this.rotateBuffer = null;
-    }
+    if (!didIRS) this.consumeRotationBuffer();
+    else this.rotateBuffer = null;
 
-    // Re-arm DAS/ARR for held left/right WITHOUT clearing heldKeys
+    // Re-arm DAS/ARR without clearing held keys
     InputManager.getInstance().resetMovementOnSpawn();
 }
+
 
 
             clearPostHoldRotateWindow() {
