@@ -883,18 +883,22 @@
             }
             
             spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(this.getNextPiece());
-                this.resetPieceState(pieceType);
-                this.canHold = true;
-                this.rotationCooldown = 0;
+    const pieceType = this.queue.shift();
+    this.queue.push(this.getNextPiece());
+    this.resetPieceState(pieceType);
+    this.canHold = true;
+    this.rotationCooldown = 0;
 
-                this.spawnGrace = true;
-                this.spawnGraceUsed = false;
-                this.clearPostHoldRotateWindow();
+    this.spawnGrace = true;
+    this.spawnGraceUsed = false;
+    this.clearPostHoldRotateWindow();
 
-                return true;
-            }
+    // ✅ KEY: apply IRS/buffer immediately on spawn
+    this.afterSpawnInput();
+
+    return true;
+}
+
             
             applyInitialRotation(allowBufferedPress = false) {
                 if (!this.currentPiece) return false;
@@ -917,6 +921,25 @@
 
                 return false;
             }
+
+            afterSpawnInput() {
+    // Only the local player should apply local input
+    if (this.playerId !== 1) return;
+
+    // IRS: rotate immediately if rotate is held / was just pressed
+    const didIRS = this.applyInitialRotation(true);
+
+    // If IRS didn't happen, try buffered rotation (ROTATION_BUFFER_MS window)
+    if (!didIRS) {
+        this.consumeRotationBuffer();
+    } else {
+        this.rotateBuffer = null;
+    }
+
+    // Re-arm DAS/ARR for held left/right WITHOUT clearing heldKeys
+    InputManager.getInstance().resetMovementOnSpawn();
+}
+
 
             clearPostHoldRotateWindow() {
                 this.postHoldRotateUntil = 0;
@@ -1314,44 +1337,31 @@
             }
             
             holdCurrentPiece() {
-                if (!this.canHold || !this.currentPiece) return false;
-                
-                if (this.holdPiece === null) {
-                    this.holdPiece = this.currentPiece;
-                    this.spawnPiece();
+    if (!this.canHold || !this.currentPiece) return false;
 
-                } else {
-                    const temp = this.holdPiece;
-                    this.holdPiece = this.currentPiece;
-                    this.resetPieceState(temp);
-                    this.spawnGrace = true;
-                    this.spawnGraceUsed = false;
+    if (this.holdPiece === null) {
+        this.holdPiece = this.currentPiece;
 
-                    // Reset spawn flags; preserve rotate buffer so a buffered
-                    // rotation from just-before or during hold still applies.
-                    this.rotationCooldown = 0;
-                }
+        // Spawn next piece (spawnPiece() will run afterSpawnInput())
+        this.spawnPiece();
+    } else {
+        const temp = this.holdPiece;
+        this.holdPiece = this.currentPiece;
 
-                let rotatedOnHoldSpawn = false;
-                if (this.playerId === 1) {
-                    rotatedOnHoldSpawn = this.applyInitialRotation(true);
-                }
+        // Bring held piece out directly
+        this.resetPieceState(temp);
+        this.spawnGrace = true;
+        this.spawnGraceUsed = false;
+        this.rotationCooldown = 0;
 
-                if (rotatedOnHoldSpawn) {
-                    this.rotateBuffer = null;
-                    this.clearPostHoldRotateWindow();
-                } else {
-                    const consumedBufferedRotate = this.consumeRotationBuffer();
-                    if (!consumedBufferedRotate) {
-                        this.openPostHoldRotateWindow();
-                        this.tryPostHoldRotation();
-                    }
-                }
+        // ✅ Apply IRS/buffer immediately here too (since we didn't call spawnPiece)
+        this.afterSpawnInput();
+    }
 
-                InputManager.getInstance().resetOnSpawn();
-                this.canHold = false;
-                return true;
-            }
+    this.canHold = false;
+    return true;
+}
+
             
             update(deltaTime) {
                 if (!this.currentPiece) return true;
@@ -1946,7 +1956,7 @@
             this.gameState1.consumeRotationBuffer();
             this.gameState1.hardDrop();
             this.gameState1.spawnPiece();
-            InputManager.getInstance().resetOnSpawn();
+            InputManager.getInstance().resetMovementOnSpawn();
         } else if (e.key === b.rotateCW) {
             const rotated = this.gameState1.rotate('cw');
             if (!rotated) {
@@ -1985,26 +1995,64 @@
         }
     });
 
-    document.addEventListener('keyup', (e) => {
-        input.handleKeyUp(e.key);
+    document.addEventListener('keydown', (e) => {
+    if (!this.gameRunning || !this.gameState1) return;
 
-        if (this.gameState1 && e.key === input.getKeyBindings().softDrop) {
-            this.gameState1.setSoftDropActive(false);
+    const input = InputManager.getInstance();
+    const b = input.getKeyBindings();
+
+    const isRepeatBlockedAction = (e.key === b.hold || e.key === b.hardDrop);
+    const isRotateAction = (e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180);
+
+    // ✅ Use YOUR held-keys to detect repeat, not e.repeat (browser repeat is unreliable here)
+    const alreadyHeld = !!input.getHeldKeys()[e.key];
+
+    input.handleKeyDown(e.key);
+
+    if (Object.values(b).includes(e.key)) e.preventDefault();
+
+    // Block repeats based on held-state (stable), not browser repeat flag (unstable)
+    if (alreadyHeld && (isRepeatBlockedAction || isRotateAction)) return;
+
+    if (e.key === b.softDrop) {
+        this.gameState1.setSoftDropActive(true);
+    } else if (e.key === b.hardDrop) {
+        this.gameState1.hardDrop();
+        this.gameState1.spawnPiece();
+        // ✅ keep movement re-armed, but don't clear heldKeys
+        input.resetMovementOnSpawn();
+    } else if (e.key === b.rotateCW) {
+        const rotated = this.gameState1.rotate('cw');
+        if (!rotated) {
+            this.gameState1.bufferRotation('cw');
+            this.gameState1.registerPostHoldRotate('cw');
+        } else {
+            this.gameState1.rotateBuffer = null;
+            this.gameState1.clearPostHoldRotateWindow();
         }
-
-        if (!this.gameRunning || !this.gameState1) return;
-
-        const b = input.getKeyBindings();
-        let dir = null;
-        if (e.key === b.rotateCW) dir = 'cw';
-        else if (e.key === b.rotateCCW) dir = 'ccw';
-        else if (e.key === b.rotate180) dir = '180';
-
-        if (dir && this.gameState1.postHoldRotateUntil) {
-            this.gameState1.registerPostHoldRotate(dir);
-            this.gameState1.tryPostHoldRotation();
+    } else if (e.key === b.rotateCCW) {
+        const rotated = this.gameState1.rotate('ccw');
+        if (!rotated) {
+            this.gameState1.bufferRotation('ccw');
+            this.gameState1.registerPostHoldRotate('ccw');
+        } else {
+            this.gameState1.rotateBuffer = null;
+            this.gameState1.clearPostHoldRotateWindow();
         }
-    });
+    } else if (e.key === b.rotate180) {
+        const rotated = this.gameState1.rotate('180');
+        if (!rotated) {
+            this.gameState1.bufferRotation('180');
+            this.gameState1.registerPostHoldRotate('180');
+        } else {
+            this.gameState1.rotateBuffer = null;
+            this.gameState1.clearPostHoldRotateWindow();
+        }
+    } else if (e.key === b.hold) {
+        this.gameState1.holdCurrentPiece();
+    }
+});
+
 }
 
             handleNetworkMessage(msg) {
@@ -2056,7 +2104,7 @@
                 this.gameState1.setGameStartTime(startTime);
                 this.gameState2.setGameStartTime(startTime);
                 
-                InputManager.getInstance().reset();
+                InputManager.getInstance().resetMovementOnSpawn();
 
                 this.gameState1.spawnPiece();
                 this.gameState2.spawnPiece();
