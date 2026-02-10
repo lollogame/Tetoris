@@ -878,24 +878,22 @@
             }
             
             spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(this.getNextPiece());
-                this.resetPieceState(pieceType);
-                this.canHold = true;
-                this.rotationCooldown = 0;
+    const pieceType = this.queue.shift();
+    this.queue.push(this.getNextPiece());
+    this.resetPieceState(pieceType);
+    this.canHold = true;
 
-                this.spawnGrace = true;
-                this.spawnGraceUsed = false;
+    this.spawnGrace = true;
+    this.spawnGraceUsed = false;
 
-                // Reset rotation timing explicitly
-                this.rotationCooldown = 0;
-                this.rotationBuffer = null;
+    this.rotateBuffer = null;
 
-                this.rotateBuffer = null;
-                this.applyInitialRotation();
+    // ✅ IRS: rotate immediately if rotate key is being held
+    this.applyInitialRotation();
 
-                return true;
-            }
+    return true;
+}
+
             
             applyInitialRotation() {
                 if (!this.currentPiece) return;
@@ -1256,19 +1254,19 @@
                     this.spawnPiece();
 
                 } else {
-                    const temp = this.holdPiece;
-                    this.holdPiece = this.currentPiece;
-                    this.resetPieceState(temp);
-                    this.spawnGrace = true;
-                    this.spawnGraceUsed = false;
+    const temp = this.holdPiece;
+    this.holdPiece = this.currentPiece;
+    this.resetPieceState(temp);
 
-                    // Reset rotation timing explicitly
-                    this.rotationCooldown = 0;
-                    this.rotationBuffer = null;
+    this.spawnGrace = true;
+    this.spawnGraceUsed = false;
 
-                    this.rotateBuffer = null;
-                    this.applyInitialRotation();
-                }
+    this.rotateBuffer = null;
+
+    // ✅ IRS after hold swap
+    this.applyInitialRotation();
+}
+
                 
                 InputManager.getInstance().resetOnSpawn();
                 this.canHold = false;
