@@ -958,56 +958,185 @@ class GameState {
     while(this.isValidPosition(this.currentX,this.currentY+1,this.currentRotation)){
       this.currentY++;
     }
-    return this.lockPiece();
+    return this.();
   }
 
   lockPiece(){
-    if(!this.currentPiece) return false;
+  if(!this.currentPiece) return false;
 
-    const shape=SHAPES[this.currentPiece].shape[this.currentRotation];
-    const toPlace=[];
-    let lockedAbove=false;
+  const pieceType = this.currentPiece;
+  const pieceX = this.currentX;
+  const pieceY = this.currentY;
+  const pieceRotation = this.currentRotation;
 
-    for(let r=0;r<shape.length;r++){
-      for(let c=0;c<shape[r].length;c++){
-        if(!shape[r][c]) continue;
-        const by=this.currentY+r;
-        const bx=this.currentX+c;
-        if(by<0){ lockedAbove=true; continue; }
-        if(this.board[by][bx]) return false;
-        toPlace.push([bx,by]);
+  const shape = SHAPES[this.currentPiece].shape[this.currentRotation];
+  const toPlace = [];
+  let lockedAbove = false;
+
+  for(let r=0;r<shape.length;r++){
+    for(let c=0;c<shape[r].length;c++){
+      if(!shape[r][c]) continue;
+      const by = this.currentY + r;
+      const bx = this.currentX + c;
+
+      if(by < 0){ lockedAbove = true; continue; }
+      if(this.board[by][bx]) return false;
+      toPlace.push([bx, by]);
+    }
+  }
+
+  if(lockedAbove) return false;
+
+  for(const [bx, by] of toPlace){
+    this.board[by][bx] = this.currentPiece;
+  }
+
+      checkSpin(pieceType, x, y, rotation){
+  if (pieceType === 'T' && this.lastActionWasRotation){
+    return this.checkTSpin(x, y);
+  }
+  return false;
+}
+
+checkTSpin(x, y){
+  // T piece is 3x3 in our definitions; corners are relative to top-left of its 3x3 box
+  const corners = [[x, y], [x + 2, y], [x, y + 2], [x + 2, y + 2]];
+  let filled = 0;
+
+  for (const [cx, cy] of corners){
+    if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS || this.board[cy][cx]){
+      filled++;
+    }
+  }
+  return filled >= 3;
+}
+
+calculateAttack(lines, isSpin, isAllClear, pieceType){
+  if (isAllClear){
+    return lines === 4 ? 10 : 8;
+  }
+
+  // T-spin table (index = lines cleared)
+  if (pieceType === 'T' && isSpin){
+    const spinAttack = [0, 2, 4, 6];
+    return spinAttack[lines] || 0;
+  }
+
+  // generic spins
+  if (isSpin) return lines;
+
+  // normal clears
+  const attackTable = [0, 0, 1, 2, 4]; // 0,1,2,3,4 lines
+  return attackTable[lines] || 0;
+}
+
+handleGarbageCanceling(attack){
+  if (this.pendingGarbage.length === 0) return attack;
+
+  const totalPending = this.pendingGarbage.reduce((sum, g) => sum + g.lines, 0);
+
+  if (attack >= totalPending){
+    attack -= totalPending;
+    this.pendingGarbage = [];
+    ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
+  } else {
+    let remaining = attack;
+
+    this.pendingGarbage = this.pendingGarbage.filter(g => {
+      if (remaining >= g.lines){
+        remaining -= g.lines;
+        return false;
+      } else if (remaining > 0){
+        g.lines -= remaining;
+        remaining = 0;
+        return true;
       }
-    }
-    if(lockedAbove) return false;
+      return true;
+    });
 
-    for(const [bx,by] of toPlace) this.board[by][bx]=this.currentPiece;
-
-    this.piecesPlaced++;
-    this.dcdTimer=GameSettings.getInstance().dcd;
-
-    this.lockDelayTimer=0;
-    this.lockResetCount=0;
-    this.isTouchingGround=false;
-
-    this.clearLines();
-    return true;
+    ChatManager.addMessage(`Canceled ${attack} garbage lines!`, 'System');
+    attack = 0;
   }
 
-  clearLines(){
-    const cleared=[];
-    for(let r=0;r<ROWS;r++){
-      if(this.board[r].every(cell=>cell!==0)) cleared.push(r);
-    }
-    const lines=cleared.length;
+  return attack;
+}
 
-    if(lines>0){
-      for(let i=cleared.length-1;i>=0;i--) this.board.splice(cleared[i],1);
-      for(let i=0;i<lines;i++) this.board.unshift(Array(COLS).fill(0));
+
+  this.piecesPlaced++;
+  this.dcdTimer = GameSettings.getInstance().dcd;
+
+  this.lockDelayTimer = 0;
+  this.lockResetCount = 0;
+  this.isTouchingGround = false;
+
+  // ✅ FIX #1: do NOT allow a buffered rotate from the previous piece to affect the next spawn
+  this.rotateBuffer = null;
+
+  const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
+  this.clearLines(pieceType, isSpin);
+
+  return true;
+}
+
+
+  clearLines(lastPiece, isSpin){
+  const clearedRows = [];
+
+  for (let row = 0; row < ROWS; row++){
+    if (this.board[row].every(cell => cell !== 0)){
+      clearedRows.push(row);
+    }
+  }
+
+  const linesCleared = clearedRows.length;
+
+  if (linesCleared > 0){
+    for (let i = clearedRows.length - 1; i >= 0; i--){
+      this.board.splice(clearedRows[i], 1);
+    }
+    for (let i = 0; i < linesCleared; i++){
+      this.board.unshift(Array(COLS).fill(0));
+    }
+
+    const isAllClear = this.board.every(r => r.every(cell => cell === 0));
+    let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
+
+    const isB2BMove = (linesCleared === 4) || isSpin;
+    if (isB2BMove){
+      if (this.lastClearWasB2B){
+        this.b2bCounter++;
+        attack += 1;
+      } else {
+        this.b2bCounter = 1;
+      }
+      this.lastClearWasB2B = true;
     } else {
-      if(this.pendingGarbage.length>0) this.applyGarbage();
+      this.b2bCounter = 0;
+      this.lastClearWasB2B = false;
     }
-    this.updateStats();
+
+    this.comboCounter++;
+    if (this.comboCounter >= 4) attack += 1;
+
+    // garbage cancel
+    attack = this.handleGarbageCanceling(attack);
+
+    this.attacksSent += attack;
+    if (attack > 0){
+      NetworkManager.getInstance().sendAttack(attack);
+    }
+  } else {
+    this.comboCounter = -1;
+
+    // if no clear, apply pending garbage
+    if (this.pendingGarbage.length > 0){
+      this.applyGarbage();
+    }
   }
+
+  this.updateStats();
+}
+
 
   receiveAttack(lines){
     this.pendingGarbage.push({lines, hole:this.rng.nextInt(COLS)});
