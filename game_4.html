@@ -886,9 +886,8 @@
     this.spawnGrace = true;
     this.spawnGraceUsed = false;
 
-    this.rotateBuffer = null;
-
     // ✅ IRS: rotate immediately if rotate key is being held
+    this.consumeRotationBuffer();
     this.applyInitialRotation();
 
     return true;
@@ -1254,18 +1253,21 @@
                     this.spawnPiece();
 
                 } else {
-    const temp = this.holdPiece;
-    this.holdPiece = this.currentPiece;
-    this.resetPieceState(temp);
+  const temp = this.holdPiece;
+  this.holdPiece = this.currentPiece;
+  this.resetPieceState(temp);
 
-    this.spawnGrace = true;
-    this.spawnGraceUsed = false;
+  this.spawnGrace = true;
+  this.spawnGraceUsed = false;
 
-    this.rotateBuffer = null;
+  // ❌ do NOT clear rotateBuffer here
 
-    // ✅ IRS after hold swap
-    this.applyInitialRotation();
+  // ✅ Apply buffered rotation instantly to the swapped-in piece
+  this.consumeRotationBuffer();
+  this.applyInitialRotation();
 }
+
+
 
                 
                 InputManager.getInstance().resetOnSpawn();
@@ -1771,7 +1773,7 @@
                 this.animationFrameId = null;
                 
                 this.setupUI();
-                this.setupInput();
+                this.);
             }
             
             setupUI() {
@@ -1853,18 +1855,16 @@
             this.gameState1.spawnPiece();
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
-            const rotated = this.gameState1.rotate('cw');
-            if (!rotated) this.gameState1.bufferRotation('cw');
-            else this.gameState1.rotateBuffer = null;
-        } else if (e.key === b.rotateCCW) {
-            const rotated = this.gameState1.rotate('ccw');
-            if (!rotated) this.gameState1.bufferRotation('ccw');
-            else this.gameState1.rotateBuffer = null;
-        } else if (e.key === b.rotate180) {
-            const rotated = this.gameState1.rotate('180');
-            if (!rotated) this.gameState1.bufferRotation('180');
-            else this.gameState1.rotateBuffer = null;
-        } else if (e.key === b.hold) {
+  this.gameState1.bufferRotation('cw');         // always buffer
+  this.gameState1.consumeRotationBuffer();      // try immediately
+} else if (e.key === b.rotateCCW) {
+  this.gameState1.bufferRotation('ccw');
+  this.gameState1.consumeRotationBuffer();
+} else if (e.key === b.rotate180) {
+  this.gameState1.bufferRotation('180');
+  this.gameState1.consumeRotationBuffer();
+}
+ else if (e.key === b.hold) {
             this.gameState1.holdCurrentPiece();
         }
     });
