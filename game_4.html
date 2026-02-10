@@ -840,6 +840,9 @@ class GameState {
     // spawn grace window for 1 rotation even if touching ground logic would block later
     this.spawnGrace = true;
     this.spawnGraceUsed = false;
+
+      this.pieceSpawnTime = performance.now();
+
   }
 
   spawnPiece() {
@@ -865,21 +868,28 @@ class GameState {
     return ok;
   }
 
-  applyInitialRotation(allowBufferedPress = false) {
+    applyInitialRotation(allowBufferedPress = false) {
     if (!this.currentPiece) return false;
 
     const input = InputManager.getInstance();
     const held = input.getHeldCodes();
     const b = input.getBindings();
     const now = performance.now();
-    const wasPressedRecently = (code) =>
-      allowBufferedPress && (now - input.getLastPressedAt(code)) <= HOLD_IRS_BUFFER_MS;
 
+    // ✅ only allow "recent press" IRS if the press happened AFTER this piece spawned
+    const wasPressedRecently = (code) => {
+      if (!allowBufferedPress) return false;
+      const t = input.getLastPressedAt(code);
+      return (t >= (this.pieceSpawnTime ?? 0)) && ((now - t) <= HOLD_IRS_BUFFER_MS);
+    };
+
+    // Held IRS still allowed (true IRS behavior)
     if (held[b.rotate180] || wasPressedRecently(b.rotate180)) return this.rotate('180');
-    if (held[b.rotateCW] || wasPressedRecently(b.rotateCW)) return this.rotate('cw');
+    if (held[b.rotateCW]  || wasPressedRecently(b.rotateCW))  return this.rotate('cw');
     if (held[b.rotateCCW] || wasPressedRecently(b.rotateCCW)) return this.rotate('ccw');
     return false;
   }
+
 
   afterSpawnInput() {
     if (this.playerId !== 1) return;
