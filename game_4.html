@@ -559,7 +559,7 @@
         const BLOCK_SIZE = 32;
         const PREVIEW_BLOCK_SIZE = 16;
         const ROTATION_BUFFER_MS = 120;
-        const HOLD_IRS_BUFFER_MS = 80;
+        const HOLD_IRS_BUFFER_MS = 150;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
         const BUILD_TAG = 'holdfix-20260210-7';
@@ -881,22 +881,22 @@
             }
             
             spawnPiece() {
-                const pieceType = this.queue.shift();
-                this.queue.push(this.getNextPiece());
-                this.resetPieceState(pieceType);
-                this.canHold = true;
-                this.rotationCooldown = 0;
+    const pieceType = this.queue.shift();
+    this.queue.push(this.getNextPiece());
+    this.resetPieceState(pieceType);
+    this.canHold = true;
 
-                this.spawnGrace = true;
-                this.spawnGraceUsed = false;
+    this.spawnGrace = true;
+    this.spawnGraceUsed = false;
 
-                // Reset rotation timing explicitly
-                this.rotationCooldown = 0;
-                this.rotationBuffer = null;
-                this.rotateBuffer = null;
+    this.rotateBuffer = null;
 
-                return true;
-            }
+    // ✅ IRS: apply held / recently pressed rotation immediately on spawn
+    if (this.playerId === 1) this.applyInitialRotation(true);
+
+    return true;
+}
+
             
             applyInitialRotation(allowBufferedPress = false) {
                 if (!this.currentPiece) return false;
@@ -1664,15 +1664,18 @@
     }
 
     handleKeyDown(key) {
-        if (this.heldKeys[key]) return;
-        this.heldKeys[key] = true;
-        this.lastPressedAt[key] = performance.now();
+    // Always refresh "last pressed" timestamp (important for IRS / buffering)
+    this.lastPressedAt[key] = performance.now();
 
-        const b = this.keyBindings;
+    // Only do "first-press" logic once
+    if (this.heldKeys[key]) return;
+    this.heldKeys[key] = true;
 
-        if (key === b.left) this.setDirection(-1);
-        if (key === b.right) this.setDirection(1);
-    }
+    const b = this.keyBindings;
+    if (key === b.left) this.setDirection(-1);
+    if (key === b.right) this.setDirection(1);
+}
+
 
     handleKeyUp(key) {
         delete this.heldKeys[key];
