@@ -561,6 +561,8 @@
         const ROTATION_BUFFER_MS = 120;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
+        const BUILD_TAG = 'holdfix-20260210-3';
+        console.log('BUILD', BUILD_TAG);
         
         // SRS Kick Tables
         const KICK_TABLE = {
@@ -937,13 +939,31 @@
             
             tryPostHoldRotation() {
                 if (!this.currentPiece) return;
-                if (!this.postHoldRotateUntil || !this.postHoldRotateDir) return;
-                
-                if (performance.now() > this.postHoldRotateUntil) {
+                if (!this.postHoldRotateUntil) return;
+
+                const now = performance.now();
+                if (now > this.postHoldRotateUntil) {
                     this.clearPostHoldRotateWindow();
                     return;
                 }
-                
+
+                if (!this.postHoldRotateDir) {
+                    const input = InputManager.getInstance();
+                    const heldKeys = input.getHeldKeys();
+                    const bindings = input.getKeyBindings();
+                    const wasPressedRecently = (key) => (now - input.getLastPressedAt(key)) <= (ROTATION_BUFFER_MS * 2);
+
+                    if (heldKeys[bindings.rotate180] || wasPressedRecently(bindings.rotate180)) {
+                        this.postHoldRotateDir = '180';
+                    } else if (heldKeys[bindings.rotateCW] || wasPressedRecently(bindings.rotateCW)) {
+                        this.postHoldRotateDir = 'cw';
+                    } else if (heldKeys[bindings.rotateCCW] || wasPressedRecently(bindings.rotateCCW)) {
+                        this.postHoldRotateDir = 'ccw';
+                    }
+                }
+
+                if (!this.postHoldRotateDir) return;
+
                 if (this.rotate(this.postHoldRotateDir)) {
                     this.rotateBuffer = null;
                     this.clearPostHoldRotateWindow();
@@ -1320,6 +1340,15 @@
                 if (this.spawnGrace) {
                     // Allow exactly one rotation window
                     this.spawnGraceUsed = false;
+                }
+
+                const now = performance.now();
+                if (this.postHoldRotateUntil && now <= this.postHoldRotateUntil) {
+                    const rotatedAfterHold = this.applyInitialRotation();
+                    if (rotatedAfterHold) {
+                        this.rotateBuffer = null;
+                        this.clearPostHoldRotateWindow();
+                    }
                 }
 
                 this.tryPostHoldRotation();
