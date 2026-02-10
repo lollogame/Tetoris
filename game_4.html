@@ -737,7 +737,8 @@
                 this.peer = null;
                 this.conn = null;
                 this.isHost = false;
-                this.messageHandler = null;
+                this.myPeerId = null;
+                this.onMessageCallback = null;
             }
             
             static getInstance() {
@@ -747,117 +748,87 @@
                 return NetworkManager.instance;
             }
             
-            initialize(messageHandler) {
-                this.messageHandler = messageHandler;
-                this.peer = new Peer();
+            initialize(onMessage) {
+                this.onMessageCallback = onMessage;
                 
-                this.peer.on('open', (id) => {
-                    document.getElementById('peerIdDisplay').textContent = id;
-                    ChatManager.addMessage(`Your Peer ID: ${id}`);
+                this.peer = new Peer({
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' }
+                        ]
+                    }
                 });
                 
-                this.peer.on('connection', (conn) => {
-                    if (this.conn) {
-                        conn.close();
-                        return;
-                    }
-                    
-                    this.conn = conn;
-                    this.isHost = true;
+                this.peer.on('open', (id) => {
+                    this.myPeerId = id;
+                    document.getElementById('peerIdDisplay').textContent = id;
+                    document.getElementById('myPeerId').classList.remove('hidden');
+                    ChatManager.addMessage(`Your Peer ID: ${id}`);
+                    ChatManager.addMessage('Share this ID with your opponent to let them join!');
+                });
+                
+                this.peer.on('connection', (connection) => {
+                    this.conn = connection;
                     this.setupConnection();
                     ChatManager.addMessage('Opponent connected!');
-                    document.getElementById('gameStatus').textContent = 'Opponent connected - Ready to play!';
-                    document.getElementById('startGameBtn').disabled = false;
+                    document.getElementById('gameStatus').textContent = 'Connected! Starting game...';
+                    
+                    const seed = Math.floor(Math.random() * 1000000000);
+                    ChatManager.addMessage(`Generated game seed: ${seed}`, 'System');
+                    
+                    setTimeout(() => {
+                        this.send({ type: 'start', seed });
+                        if (this.onMessageCallback) {
+                            this.onMessageCallback({ type: 'start', seed });
+                        }
+                    }, 1000);
                 });
                 
                 this.peer.on('error', (err) => {
-                    ChatManager.addMessage(`Network error: ${err.type}`, true);
+                    console.error('PeerJS error:', err);
+                    ChatManager.addMessage(`Connection error: ${err.type}`);
                 });
             }
             
-            connectToPeer(peerId) {
-    const doConnect = () => {
-        // Prevent duplicate connect attempts
-        if (this.conn) return;
-
-        this.conn = this.peer.connect(peerId);
-        this.isHost = false;
-        this.setupConnection();
-    };
-
-    // If peer doesn't exist yet, create it and wait for open
-    if (!this.peer) {
-        this.peer = new Peer();
-
-        this.peer.on('open', () => {
-            doConnect();
-        });
-
-        this.peer.on('error', (err) => {
-            ChatManager.addMessage(`Network error: ${err.type}`, true);
-        });
-
-        this.peer.on('connection', (conn) => {
-            // Joining side should generally not accept incoming connections,
-            // but if it happens, keep the first and close extras.
-            if (this.conn) {
-                conn.close();
-                return;
+            connect(peerId) {
+                setTimeout(() => {
+                    this.conn = this.peer.connect(peerId);
+                    
+                    this.conn.on('open', () => {
+                        this.setupConnection();
+                        ChatManager.addMessage('Connected to opponent!');
+                        document.getElementById('gameStatus').textContent = 'Connected! Waiting for host to start...';
+                        document.getElementById('joinGameBtn').disabled = true;
+                    });
+                    
+                    this.conn.on('error', (err) => {
+                        ChatManager.addMessage(`Failed to connect: ${err}`);
+                    });
+                }, 1000);
             }
-            this.conn = conn;
-            this.isHost = false;
-            this.setupConnection();
-            ChatManager.addMessage('Opponent connected!');
-            document.getElementById('gameStatus').textContent = 'Opponent connected - Ready to play!';
-        });
-
-        return;
-    }
-
-    // If peer exists but isn't open yet, wait for it
-    if (!this.peer.id) {
-        this.peer.once('open', () => {
-            doConnect();
-        });
-        return;
-    }
-
-    // Peer is open, connect immediately
-    doConnect();
-}
-
             
             setupConnection() {
-                this.conn.on('open', () => {
-                    ChatManager.addMessage('Connected to opponent!');
-                    document.getElementById('gameStatus').textContent = 'Connected - Waiting for game start...';
-                });
-                
                 this.conn.on('data', (data) => {
-                    if (this.messageHandler) {
-                        this.messageHandler(data);
+                    if (this.onMessageCallback) {
+                        this.onMessageCallback(data);
                     }
                 });
                 
                 this.conn.on('close', () => {
                     ChatManager.addMessage('Opponent disconnected');
-                    document.getElementById('gameStatus').textContent = 'Connection lost';
-                    this.conn = null;
+                    document.getElementById('gameStatus').textContent = 'Opponent disconnected';
                 });
             }
             
-            send(data) {
+            send(message) {
                 if (this.conn && this.conn.open) {
-                    this.conn.send(data);
+                    this.conn.send(message);
                 }
             }
             
-            sendGameState(gameState) {
-                this.send({ type: 'gameState', state: gameState });
-            }
-            
             sendAttack(lines) {
-                const cappedLines = Math.min(lines, 12);
+                const cappedLines = Math.min(lines, 10);
                 this.send({ type: 'attack', lines: cappedLines });
             }
             
@@ -865,6 +836,7 @@
                 return this.conn && this.conn.open;
             }
         }
+
         
         class InputManager {
     static instance = null;
@@ -1811,13 +1783,18 @@
                 });
                 
                 document.getElementById('joinGameBtn').addEventListener('click', () => {
-    const opponentIdEl = document.getElementById('opponentPeerId');
-    const opponentId = opponentIdEl ? opponentIdEl.value.trim() : "";
-
+    const opponentId = document.getElementById('opponentPeerId').value.trim();
     if (!opponentId) {
         ChatManager.addMessage('Please enter an opponent Peer ID');
         return;
     }
+    
+    NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+    setTimeout(() => {
+        NetworkManager.getInstance().connect(opponentId);
+    }, 1000);
+});
+
 
     ChatManager.addMessage(`Connecting to ${opponentId}...`);
     document.getElementById('gameStatus').textContent = 'Connecting...';
