@@ -836,6 +836,7 @@
                 this.spawnGraceUsed = false;
                 this.softDropActive = false;
                 this.postHoldRotateUntil = 0;
+                this.postHoldRotateDir = null;
                 
                 this.pendingGarbage = [];
                 
@@ -891,8 +892,9 @@
                 // Reset rotation timing explicitly
                 this.rotationCooldown = 0;
                 this.rotationBuffer = null;
-
                 this.rotateBuffer = null;
+                this.postHoldRotateUntil = 0;
+                this.postHoldRotateDir = null;
 
                 return true;
             }
@@ -919,35 +921,32 @@
             
             clearPostHoldRotateWindow() {
                 this.postHoldRotateUntil = 0;
+                this.postHoldRotateDir = null;
+            }
+            
+            registerPostHoldRotate(direction) {
+                if (!this.postHoldRotateUntil) return;
+                if (performance.now() > this.postHoldRotateUntil) {
+                    this.clearPostHoldRotateWindow();
+                    return;
+                }
+                if (!this.postHoldRotateDir) {
+                    this.postHoldRotateDir = direction;
+                }
             }
             
             tryPostHoldRotation() {
                 if (!this.currentPiece) return;
-                if (!this.postHoldRotateUntil) return;
+                if (!this.postHoldRotateUntil || !this.postHoldRotateDir) return;
                 
                 if (performance.now() > this.postHoldRotateUntil) {
-                    this.postHoldRotateUntil = 0;
+                    this.clearPostHoldRotateWindow();
                     return;
                 }
                 
-                const input = InputManager.getInstance();
-                const heldKeys = input.getHeldKeys();
-                const bindings = input.getKeyBindings();
-                let direction = null;
-                
-                if (heldKeys[bindings.rotate180]) {
-                    direction = '180';
-                } else if (heldKeys[bindings.rotateCW]) {
-                    direction = 'cw';
-                } else if (heldKeys[bindings.rotateCCW]) {
-                    direction = 'ccw';
-                }
-                
-                if (!direction) return;
-                
-                if (this.rotate(direction)) {
+                if (this.rotate(this.postHoldRotateDir)) {
                     this.rotateBuffer = null;
-                    this.postHoldRotateUntil = 0;
+                    this.clearPostHoldRotateWindow();
                 }
             }
             
@@ -1309,7 +1308,8 @@
                 
                 InputManager.getInstance().resetOnSpawn();
                 const didInitialRotate = this.applyInitialRotation();
-                this.postHoldRotateUntil = didInitialRotate ? 0 : (performance.now() + ROTATION_BUFFER_MS);
+                this.postHoldRotateDir = null;
+                this.postHoldRotateUntil = didInitialRotate ? 0 : (performance.now() + (ROTATION_BUFFER_MS * 2));
                 this.canHold = false;
                 return true;
             }
@@ -1904,21 +1904,30 @@
             InputManager.getInstance().resetOnSpawn();
         } else if (e.key === b.rotateCW) {
             const rotated = this.gameState1.rotate('cw');
-            if (!rotated) this.gameState1.bufferRotation('cw');
+            if (!rotated) {
+                this.gameState1.bufferRotation('cw');
+                this.gameState1.registerPostHoldRotate('cw');
+            }
             else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
             }
         } else if (e.key === b.rotateCCW) {
             const rotated = this.gameState1.rotate('ccw');
-            if (!rotated) this.gameState1.bufferRotation('ccw');
+            if (!rotated) {
+                this.gameState1.bufferRotation('ccw');
+                this.gameState1.registerPostHoldRotate('ccw');
+            }
             else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
             }
         } else if (e.key === b.rotate180) {
             const rotated = this.gameState1.rotate('180');
-            if (!rotated) this.gameState1.bufferRotation('180');
+            if (!rotated) {
+                this.gameState1.bufferRotation('180');
+                this.gameState1.registerPostHoldRotate('180');
+            }
             else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
