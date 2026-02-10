@@ -563,7 +563,7 @@
         const POST_HOLD_ROTATE_GRACE_MS = 160;
         const STATE_SEND_INTERVAL = 50;
         const ROTATION_STATES = ['0', 'R', '2', 'L'];
-        const BUILD_TAG = 'holdfix-20260210-8';
+        const BUILD_TAG = 'holdfix-20260210-9';
         console.log('BUILD', BUILD_TAG);
         
         // SRS Kick Tables
@@ -1937,13 +1937,13 @@
         if (Object.values(b).includes(e.key)) e.preventDefault();
 
         const isRepeatBlockedAction = e.key === b.hold || e.key === b.hardDrop;
-        const isRotateAction = e.key === b.rotateCW || e.key === b.rotateCCW || e.key === b.rotate180;
         if (e.repeat && isRepeatBlockedAction) return;
-        if (e.repeat && isRotateAction && !this.gameState1.postHoldRotateUntil) return;
 
         if (e.key === b.softDrop) {
             this.gameState1.setSoftDropActive(true);
         } else if (e.key === b.hardDrop) {
+            this.gameState1.tryPostHoldRotation();
+            this.gameState1.consumeRotationBuffer();
             this.gameState1.hardDrop();
             this.gameState1.spawnPiece();
             InputManager.getInstance().resetOnSpawn();
@@ -1952,6 +1952,8 @@
             if (!rotated) {
                 this.gameState1.bufferRotation('cw');
                 this.gameState1.registerPostHoldRotate('cw');
+                this.gameState1.tryPostHoldRotation();
+                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
@@ -1961,6 +1963,8 @@
             if (!rotated) {
                 this.gameState1.bufferRotation('ccw');
                 this.gameState1.registerPostHoldRotate('ccw');
+                this.gameState1.tryPostHoldRotation();
+                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
@@ -1970,6 +1974,8 @@
             if (!rotated) {
                 this.gameState1.bufferRotation('180');
                 this.gameState1.registerPostHoldRotate('180');
+                this.gameState1.tryPostHoldRotation();
+                this.gameState1.consumeRotationBuffer();
             } else {
                 this.gameState1.rotateBuffer = null;
                 this.gameState1.clearPostHoldRotateWindow();
