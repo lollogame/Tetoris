@@ -1434,7 +1434,7 @@ class InputManager {
 
     // Store bindings as KeyboardEvent.code values
     // (ShiftLeft, ArrowLeft, Space, KeyZ, etc.)
-    this.bindings = {
+        this.bindings = {
       left:      'ArrowLeft',
       right:     'ArrowRight',
       softDrop:  'ArrowDown',
@@ -1442,9 +1442,11 @@ class InputManager {
       rotateCW:  'ArrowUp',
       rotateCCW: 'KeyZ',
       rotate180: 'KeyX',
-      hold:      'ShiftLeft'   // ✅ your preference
+      hold:      'ShiftLeft'
+    };
+ };
 
-          clearCodes(codes){
+      clearCodes(codes){
     for (const c of codes){
       if (!c) continue;
       delete this.heldCodes[c];
@@ -1457,7 +1459,6 @@ class InputManager {
     this.clearCodes([b.rotateCW, b.rotateCCW, b.rotate180]);
   }
 
-    };
 
     this.bindingCaptureActive=false;
 
