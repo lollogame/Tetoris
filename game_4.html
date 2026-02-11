@@ -1634,6 +1634,10 @@ class GameController {
     this.lastTime=0;
     this.lastStateSendTime=0;
     this.animationFrameId=null;
+    this.simLast = performance.now();
+    this.simAcc = 0;
+    this.FIXED_DT = 1000 / 60;   // 60Hz simulation
+    this.MAX_FRAME = 250;
 
     this.setupUI();
     this.setupInput(); // ✅ was broken by "this.();"
@@ -1817,9 +1821,11 @@ class GameController {
 
     ChatManager.addMessage('Game started! Good luck!');
 
-    this.lastTime=0;
-    this.lastStateSendTime=0;
-    this.gameLoop();
+    this.simLast = performance.now();
+    this.simAcc = 0;
+    this.lastStateSendTime = 0;
+    this.gameLoop(); // start
+
   }
 
   restartGame(){
@@ -1839,36 +1845,57 @@ class GameController {
     NetworkManager.getInstance().send({type:'gameOver'});
   }
 
-  gameLoop(timestamp=0){
-    if(!this.gameRunning) return;
+  gameLoop() {
+  if (!this.gameRunning) return;
 
-    const deltaTime = (this.lastTime===0) ? 0 : (timestamp-this.lastTime);
-    this.lastTime=timestamp;
+  const now = performance.now();
+  let frameDt = now - this.simLast;
+  this.simLast = now;
 
-    GameSettings.getInstance().update();
+  // Clamp big jumps (tab stall, hitch, etc.)
+  if (frameDt > this.MAX_FRAME) frameDt = this.MAX_FRAME;
+  if (frameDt < 0) frameDt = 0;
 
-    if(this.gameState1){
-      const input=InputManager.getInstance();
+  this.simAcc += frameDt;
 
-      // If softdrop is held, don't auto-DAS (matches your earlier choice)
-      if(!this.gameState1.softDropActive){
-        input.processMovement(deltaTime,(dx)=>this.gameState1.move(dx));
-      }
+  // Always read settings once per frame (fine)
+  GameSettings.getInstance().update();
 
-      const ok=this.gameState1.update(deltaTime);
-      if(!ok){ this.handleGameOver(); return; }
+  // Run simulation in fixed steps
+  while (this.simAcc >= this.FIXED_DT) {
+    this.stepSimulation(this.FIXED_DT);
+    this.simAcc -= this.FIXED_DT;
+  }
 
-      this.gameState1.draw();
+  // Render once per frame
+  if (this.gameState1) this.gameState1.draw();
+  if (this.gameState2) this.gameState2.draw();
 
-      if(NetworkManager.getInstance().isConnected() && (timestamp-this.lastStateSendTime)>STATE_SEND_INTERVAL){
-        NetworkManager.getInstance().send({type:'gameState', state:this.gameState1.getState()});
-        this.lastStateSendTime=timestamp;
-      }
-    }
+  this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+}
 
-    if(this.gameState2) this.gameState2.draw();
+// Add this helper method:
+stepSimulation(dt) {
+  if (!this.gameState1) return;
 
-    this.animationFrameId=requestAnimationFrame(this.gameLoop.bind(this));
+  const input = InputManager.getInstance();
+
+  // Movement repeat logic in fixed dt
+  if (!this.gameState1.softDropActive) {
+    input.processMovement(dt, (dx) => this.gameState1.move(dx));
+  }
+
+  const ok = this.gameState1.update(dt);
+  if (!ok) {
+    this.handleGameOver();
+    return;
+  }
+
+  // Network send rate based on real time, not dt steps
+  const t = performance.now();
+  if (NetworkManager.getInstance().isConnected() && (t - this.lastStateSendTime) > STATE_SEND_INTERVAL) {
+    NetworkManager.getInstance().send({ type: 'gameState', state: this.gameState1.getState() });
+    this.lastStateSendTime = t;
   }
 }
 
