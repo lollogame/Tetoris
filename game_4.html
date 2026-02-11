@@ -764,6 +764,8 @@ class GameState {
     this.currentX = 0;
     this.currentY = SPAWN_ROW;
     this.currentRotation = 0;
+    this.gravityAcc = 0;
+
 
     this.holdPiece = null;
     this.canHold = true;
@@ -825,26 +827,27 @@ class GameState {
   }
 
   resetPieceState(piece) {
-    this.currentPiece = piece;
-    this.currentRotation = 0;
-    this.currentX = SPAWN_COLUMNS[piece];
-    this.currentY = SPAWN_ROW;
+  this.currentPiece = piece;
+  this.currentRotation = 0;
+  this.currentX = SPAWN_COLUMNS[piece];
+  this.currentY = SPAWN_ROW;
 
-    this.lockDelayTimer = 0;
-    this.lockResetCount = 0;
-    this.isTouchingGround = false;
+  this.lockDelayTimer = 0;
+  this.lockResetCount = 0;
+  this.isTouchingGround = false;
 
-    this.hardDropCooldown = 0;
-    this.lastGravityTime = 0;
-    this.lastActionWasRotation = false;
+  this.hardDropCooldown = 0;
+  this.lastActionWasRotation = false;
 
-    // spawn grace window for 1 rotation even if touching ground logic would block later
-    this.spawnGrace = true;
-    this.spawnGraceUsed = false;
+  this.spawnGrace = true;
+  this.spawnGraceUsed = false;
 
-      this.pieceSpawnTime = performance.now();
+  this.pieceSpawnTime = performance.now();
 
-  }
+  // ✅ reset gravity accumulator every spawn
+  this.gravityAcc = 0;
+}
+
 
   spawnPiece() {
     const pieceType = this.queue.shift();
@@ -1230,61 +1233,64 @@ class GameState {
 
   if (this.isTouchingGround && !wasTouching) {
     this.lockDelayTimer = 0;
-    this.lastGravityTime = 0;
   }
 
-  // Gravity accumulator
-  this.lastGravityTime += dt;
+      if (!Number.isFinite(this.gravityAcc)) this.gravityAcc = 0;
+// Gravity accumulator
+this.gravityAcc += dt;
 
-  if (this.isTouchingGround) {
-    // Lock delay
-    this.lockDelayTimer += dt;
+if (this.isTouchingGround) {
+  this.lockDelayTimer += dt;
 
-    if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
-      const ok = this.lockPiece();
-      if (!ok) return false;
+  if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
+    const ok = this.lockPiece();
+    if (!ok) return false;
 
-      const settings = GameSettings.getInstance();
-      if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
-
-      this.spawnPiece();
-      this.lastGravityTime = 0;
-    }
-  } else {
     const settings = GameSettings.getInstance();
-    let fallInterval = this.gravity; // ms per cell
+    if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
 
-    // Soft drop handling
-    if (this.softDropActive) {
-      if (settings.sdf === 'inf') {
-        while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-          this.currentY++;
-        }
-        this.lastGravityTime = 0;
-      } else {
-        const sdf = Number(settings.sdf);
-        fallInterval = this.gravity / Math.max(1, Number.isFinite(sdf) ? sdf : 1);
-      }
-    }
+    this.spawnPiece();
+  }
+} else {
+  const settings = GameSettings.getInstance();
+  let fallInterval = this.gravity;
 
-    // Apply gravity steps
-    if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
-      while (this.lastGravityTime >= fallInterval) {
-        if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-          this.currentY++;
-        } else {
-          break;
-        }
-        this.lastGravityTime -= fallInterval;
+  if (this.softDropActive) {
+    if (settings.sdf === 'inf') {
+      while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+        this.currentY++;
       }
+      this.gravityAcc = 0;
+    } else {
+      const sdf = Number(settings.sdf);
+      fallInterval = this.gravity / Math.max(1, Number.isFinite(sdf) ? sdf : 1);
     }
   }
 
-  // End spawn grace after one update tick
-  if (this.spawnGrace) this.spawnGrace = false;
-
-  return true;
+  if (settings.sdf !== 'inf' && this.gravityAcc >= fallInterval) {
+    while (this.gravityAcc >= fallInterval) {
+      if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+        this.currentY++;
+      } else {
+        break;
+      }
+      this.gravityAcc -= fallInterval;
+    }
+  }
 }
+
+// end grace
+if (this.spawnGrace) this.spawnGrace = false;
+
+// HUD (don’t overwrite elsewhere)
+if (this.playerId === 1) {
+  const canFall = this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation);
+  document.getElementById('gameStatus').textContent =
+    `Y=${this.currentY} touch=${this.isTouchingGround} canFall=${canFall} gAcc=${this.gravityAcc.toFixed(1)} dt=${dt.toFixed(1)}`;
+}
+
+return true;
+
 
 
   updateStats() {
