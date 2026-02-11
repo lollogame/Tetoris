@@ -296,7 +296,7 @@
     .copy-btn { margin-top: 10px; font-size: 0.6rem; padding: 8px 16px; }
 
     /* =========================
-       Topbar
+       Topbar + Settings Modal
     ========================= */
     .topbar {
       display: flex;
@@ -304,10 +304,17 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
+
+      /* keep topbar clickable above canvas/overlays */
       position: relative;
-      z-index: 30001; /* above everything */
+      z-index: 30001;
     }
-    #openMenuBtn, #openSettingsBtn { position: relative; z-index: 30002; }
+
+    #openMenuBtn, #openSettingsBtn {
+      position: relative;
+      z-index: 30002;
+      pointer-events: auto;
+    }
 
     .topbar .topbar-left, .topbar .topbar-right {
       display: flex;
@@ -315,24 +322,20 @@
       align-items: center;
     }
 
-    /* =========================
-       Modals
-    ========================= */
     .modal {
       position: fixed;
       inset: 0;
       background: rgba(5, 8, 24, 0.78);
       backdrop-filter: blur(5px);
-      z-index: 25000;
+      z-index: 10000;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }
-    .modal.hidden { display: none !important; pointer-events: none !important; }
 
     .modal-content {
-      width: min(900px, 96vw);
+      width: min(1100px, 96vw);
       max-height: 90vh;
       overflow: auto;
       background: rgba(21, 27, 61, 0.95);
@@ -358,43 +361,98 @@
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
-    /* =========================
-       Menu modal layout
-    ========================= */
-    .mode-grid{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-      margin-top: 12px;
-    }
-    .mode-card{
-      background: rgba(10, 14, 39, 0.85);
-      border: 1px solid rgba(0,255,255,0.45);
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: inset 0 0 18px rgba(0,255,255,0.06);
-    }
-    .mode-title{
-      font-family: 'Press Start 2P', cursive;
-      font-size: 0.72rem;
-      color: var(--accent-cyan);
-      margin-bottom: 10px;
-      line-height: 1.25;
-    }
-    .mode-desc{
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-      margin-bottom: 12px;
-      line-height: 1.35;
-    }
-    .mode-card button{
-      width: 100%;
-      font-size: 0.65rem;
-      padding: 12px 10px;
+    /* If hidden, MUST NOT intercept clicks */
+    #settingsModal.hidden,
+    #countdownOverlay.hidden,
+    #mainMenu.hidden {
+      pointer-events: none !important;
     }
 
     /* =========================
-       Scoreboard
+       Main Menu (Mode Select)
+    ========================= */
+    .menu-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 25000;
+      background: rgba(5, 8, 24, 0.78);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .menu-card {
+      width: min(920px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: rgba(21, 27, 61, 0.95);
+      border: 2px solid var(--border-glow);
+      border-radius: 12px;
+      box-shadow: var(--shadow-glow);
+      padding: 16px;
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .menu-header h2 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.85rem;
+      color: var(--accent-yellow);
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .mode-card {
+      border: 2px solid rgba(0, 255, 255, 0.45);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(10, 14, 39, 0.7);
+      box-shadow: 0 0 18px rgba(0, 255, 255, 0.18);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      user-select: none;
+    }
+
+    .mode-card:hover { transform: translateY(-2px); box-shadow: 0 0 22px rgba(255, 0, 255, 0.25); }
+    .mode-card.selected { border-color: var(--accent-pink); box-shadow: 0 0 26px rgba(255, 0, 255, 0.35); }
+    .mode-card.disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .mode-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      margin-bottom: 8px;
+    }
+
+    .mode-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    .menu-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 6px;
+    }
+
+    /* =========================
+       NEW: Match Scoreboard
     ========================= */
     .scoreboard {
       display: flex;
@@ -429,7 +487,7 @@
     }
 
     /* =========================
-       Countdown Overlay
+       NEW: Countdown Overlay
     ========================= */
     .countdown-overlay {
       position: fixed;
@@ -440,7 +498,7 @@
       align-items: center;
       background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
       backdrop-filter: blur(3px);
-      pointer-events: none; /* overlay never blocks clicks */
+      pointer-events: none;
     }
 
     .countdown-card {
@@ -466,6 +524,7 @@
       font-size: 0.9rem;
       color: var(--text-secondary);
     }
+
   </style>
 </head>
 
@@ -482,41 +541,39 @@
       </div>
     </div>
 
-    <!-- ✅ MENU MODAL (Mode select like before) -->
-    <div id="menuModal" class="modal hidden" aria-hidden="true">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Game Mode</h2>
-          <button class="modal-close" id="closeMenuBtn">Close</button>
-        </div>
-
-        <div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;margin-bottom:8px;">
-          Choose a mode. Zen is single-player; 1v1 uses PeerJS; Battle Royale is placeholder for now.
+    <!-- Main Menu (Mode Select) -->
+    <div id="mainMenu" class="menu-overlay hidden">
+      <div class="menu-card">
+        <div class="menu-header">
+          <h2>Main Menu</h2>
+          <button id="menuCloseBtn" class="modal-close">Close</button>
         </div>
 
         <div class="mode-grid">
-          <div class="mode-card">
-            <div class="mode-title">🧘 ZEN MODE</div>
-            <div class="mode-desc">Single-player practice. No garbage. No network required.</div>
-            <button id="modeZenBtn">Play Zen</button>
+          <div class="mode-card selected" data-mode="zen">
+            <div class="mode-title">🧘 Zen</div>
+            <div class="mode-desc">Single player practice</div>
           </div>
 
-          <div class="mode-card">
-            <div class="mode-title">⚔️ 1v1</div>
-            <div class="mode-desc">Classic versus. Create/Join a room to battle.</div>
-            <button id="mode1v1Btn">Play 1v1</button>
+          <div class="mode-card" data-mode="pvp_1v1">
+            <div class="mode-title">⚔ 1v1</div>
+            <div class="mode-desc">Online versus (PeerJS)</div>
           </div>
 
-          <div class="mode-card">
-            <div class="mode-title">👑 BATTLE ROYALE</div>
-            <div class="mode-desc">Coming soon. Button stays here so you remember to implement it 😄</div>
-            <button id="modeBRBtn">Battle Royale</button>
+          <div class="mode-card disabled" data-mode="battle_royale" aria-disabled="true" title="Coming soon">
+            <div class="mode-title">👑 Battle Royale</div>
+            <div class="mode-desc">Coming soon</div>
           </div>
+        </div>
+
+        <div class="menu-actions">
+          <button id="menuPlayBtn">▶ Play</button>
+          <button id="menuSettingsBtn">⚙ Settings</button>
         </div>
       </div>
     </div>
 
-    <!-- Match scoreboard -->
+    <!-- NEW: Match scoreboard -->
     <div id="scoreboard" class="scoreboard hidden">
       <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
       <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
@@ -531,15 +588,15 @@
       </div>
     </div>
 
-    <!-- ✅ SETTINGS MODAL (unchanged) -->
-    <div id="settingsModal" class="modal hidden" aria-hidden="true">
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Game Settings</h2>
           <button class="modal-close" id="closeSettingsBtn">Close</button>
         </div>
 
-        <!-- Match format selector -->
+        <!-- NEW: Match format selector -->
         <div class="controls-panel">
           <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Match</h2>
           <div class="controls-grid">
@@ -567,7 +624,7 @@
           </div>
         </div>
 
-        <!-- Controls -->
+        <!-- Your existing controls -->
         <div class="controls-panel">
           <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Controls</h2>
           <div class="controls-grid">
@@ -700,81 +757,5 @@
   <script src="js/controller.js"></script>
   <script src="js/debugHeartbeat.js"></script>
   <script src="js/main.js"></script>
-
-  <!-- ✅ FIX: Menu + Settings wiring (separate, and overrides old listeners) -->
-  <script>
-    (function () {
-      const menuBtn = document.getElementById('openMenuBtn');
-      const settingsBtn = document.getElementById('openSettingsBtn');
-
-      const menuModal = document.getElementById('menuModal');
-      const settingsModal = document.getElementById('settingsModal');
-
-      const closeMenuBtn = document.getElementById('closeMenuBtn');
-      const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-
-      const zenBtn = document.getElementById('modeZenBtn');
-      const v1Btn  = document.getElementById('mode1v1Btn');
-      const brBtn  = document.getElementById('modeBRBtn');
-
-      function open(modal) { if (modal) modal.classList.remove('hidden'); }
-      function close(modal) { if (modal) modal.classList.add('hidden'); }
-
-      // Close when clicking outside modal-content
-      function outsideClose(modal) {
-        if (!modal) return;
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) close(modal);
-        });
-      }
-      outsideClose(menuModal);
-      outsideClose(settingsModal);
-
-      // 🔥 Use CAPTURE and stopImmediatePropagation to override any old wiring in controller.js
-      if (menuBtn) {
-        menuBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          close(settingsModal);
-          open(menuModal);
-        }, true);
-      }
-
-      if (settingsBtn) {
-        settingsBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          close(menuModal);
-          open(settingsModal);
-        }, true);
-      }
-
-      if (closeMenuBtn) closeMenuBtn.addEventListener('click', () => close(menuModal));
-      if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => close(settingsModal));
-
-      // Mode buttons — call your existing hook if you have it, else just message
-      function chooseMode(mode) {
-        close(menuModal);
-
-        if (typeof window.setMode === 'function') {
-          window.setMode(mode);
-          return;
-        }
-
-        // fallback: don't break anything if your mode hook name differs
-        if (window.ChatManager && typeof window.ChatManager.addMessage === 'function') {
-          window.ChatManager.addMessage(`Selected mode: ${mode} (hook not found: window.setMode)`, 'System');
-        } else {
-          console.log('Selected mode:', mode, '(hook not found: window.setMode)');
-        }
-      }
-
-      if (zenBtn) zenBtn.addEventListener('click', () => chooseMode('zen'));
-      if (v1Btn)  v1Btn.addEventListener('click', () => chooseMode('1v1'));
-      if (brBtn)  brBtn.addEventListener('click', () => chooseMode('br'));
-    })();
-  </script>
 </body>
 </html>
