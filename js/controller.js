@@ -19,6 +19,10 @@ class GameController {
     // NEW: unique token for the currently active round
     this.roundId = null;
 
+    // NEW: buffer opponent snapshots that arrive before we created gameState2
+    this.pendingOppState = null;
+    this.pendingOppRoundId = null;
+
     // Loop timing
     this.gameRunning = false; // "loop active"
     this.lastTime = 0;
@@ -356,8 +360,12 @@ class GameController {
      Round start
   ========================= */
   async startRound(seed, roundNumber, roundId) {
-    // NEW: set the active round token before anything else
+    // set the active round token before anything else
     this.roundId = roundId || this.roundId || `${Date.now()}-local`;
+
+    // clear any stale buffered opponent snapshot (keep only matching roundId later)
+    // (we'll apply if it matches the new roundId)
+    // do NOT null here if you want to allow very-early packets for this same round
 
     this.phase = 'countdown';
     this.acceptInput = false;
@@ -383,6 +391,13 @@ class GameController {
     this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
 
+    // If opponent snapshot arrived before we created gameState2, apply it now (correct reset)
+    if (this.pendingOppState && this.pendingOppRoundId === this.roundId) {
+      this.gameState2.setState(this.pendingOppState);
+      this.pendingOppState = null;
+      this.pendingOppRoundId = null;
+    }
+
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
@@ -393,6 +408,7 @@ class GameController {
       this.gameLoop();
     }
 
+    // IMPORTANT: showCountdown sets phase='countdown' internally
     await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
 
     this.phase = 'playing';
@@ -410,7 +426,7 @@ class GameController {
     const seed = Math.floor(Math.random() * 1000000000);
     const nextRound = (this.match.round || 0) + 1;
 
-    // NEW: unique round token
+    // unique round token
     const roundId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     this.roundId = roundId;
 
@@ -418,7 +434,7 @@ class GameController {
       type: 'startRound',
       seed,
       round: nextRound,
-      roundId, // NEW
+      roundId,
     });
 
     this.startRound(seed, nextRound, roundId);
@@ -503,7 +519,6 @@ class GameController {
         const seed = Number(msg.seed) || Math.floor(Math.random() * 1000000000);
         const round = Number(msg.round) || ((this.match.round || 0) + 1);
 
-        // NEW: store active round token
         const roundId = msg.roundId || `${Date.now()}-recv`;
         this.roundId = roundId;
 
@@ -553,11 +568,20 @@ class GameController {
       }
 
       case 'gameState': {
-        if (!this.gameState2 || !msg.state) break;
+        if (!msg || !msg.state) break;
 
-        // NEW: ignore stale packets from older rounds
+        // Ignore stale packets from older rounds
         if (!msg.roundId || msg.roundId !== this.roundId) break;
 
+        // If opponent state arrives before we created gameState2 (or outside in-round),
+        // buffer it so the opponent board can reset correctly.
+        if (!this.gameState2 || !(this.phase === 'playing' || this.phase === 'countdown')) {
+          this.pendingOppState = msg.state;
+          this.pendingOppRoundId = msg.roundId;
+          break;
+        }
+
+        // Apply while in-round
         if (this.phase === 'playing' || this.phase === 'countdown') {
           this.gameState2.setState(msg.state);
         }
@@ -612,23 +636,27 @@ class GameController {
     if (this.gameState1) {
       const input = InputManager.getInstance();
 
-      if (this.phase === 'playing' && this.acceptInput) {
+      const shouldSimulate = (this.phase === 'playing' && this.acceptInput);
+      const shouldBroadcast = (this.phase === 'playing' || this.phase === 'countdown');
+
+      if (shouldSimulate) {
         if (!this.gameState1.softDropActive) {
           input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
         }
 
         const ok = this.gameState1.update(deltaTime);
         if (!ok) { this.handleGameOver(); return; }
+      }
 
-        if (NetworkManager.getInstance().isConnected() && (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL) {
-          NetworkManager.getInstance().send({
-            type: 'gameState',
-            roundId: this.roundId, // NEW
-            state: this.gameState1.getState()
-          });
-
-          this.lastStateSendTime = timestamp;
-        }
+      // Broadcast during countdown too, so opponent sees reset immediately
+      if (shouldBroadcast && NetworkManager.getInstance().isConnected() &&
+          (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL) {
+        NetworkManager.getInstance().send({
+          type: 'gameState',
+          roundId: this.roundId,
+          state: this.gameState1.getState()
+        });
+        this.lastStateSendTime = timestamp;
       }
 
       this.gameState1.draw();
