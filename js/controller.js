@@ -441,6 +441,17 @@ async runCountdown(seconds = 3) {
     this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
 
+    // After spawnPiece() calls, before countdown:
+if (NetworkManager.getInstance().isConnected()) {
+  NetworkManager.getInstance().send({
+    type: 'gameState',
+    round: this.match.round,
+    state: this.gameState1.getState(),
+    init: true
+  });
+}
+
+
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
@@ -687,7 +698,12 @@ async runCountdown(seconds = 3) {
         if (!ok) { this.handleGameOver(); return; }
 
         if (NetworkManager.getInstance().isConnected() && (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL) {
-          NetworkManager.getInstance().send({ type: 'gameState', state: this.gameState1.getState() });
+          NetworkManager.getInstance().send({
+  type: 'gameState',
+  round: this.match.round,
+  state: this.gameState1.getState()
+});
+
           this.lastStateSendTime = timestamp;
         }
       }
