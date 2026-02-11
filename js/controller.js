@@ -16,6 +16,9 @@ class GameController {
       round: 0,
     };
 
+    // NEW: unique token for the currently active round
+    this.roundId = null;
+
     // Loop timing
     this.gameRunning = false; // "loop active"
     this.lastTime = 0;
@@ -69,7 +72,6 @@ class GameController {
     if (roundPill) roundPill.innerHTML = `ROUND: <strong>${Math.max(1, this.match.round)}</strong>`;
     if (scorePill) scorePill.innerHTML = `YOU <strong>${this.getLocalScore()}</strong> — <strong>${this.getOppScore()}</strong> OPP`;
 
-    // Show scoreboard once match is in any meaningful state
     const shouldShow = (this.phase !== 'idle');
     this.showScoreboard(shouldShow);
   }
@@ -125,7 +127,6 @@ class GameController {
     if (openBtn && modal) openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
     if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
 
-    // Close modal when clicking outside content
     if (modal) {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.classList.add('hidden');
@@ -153,7 +154,6 @@ class GameController {
     if (mf) mf.value = String(this.match.targetWins);
     if (cd) cd.value = String(this.match.countdownSeconds);
 
-    // Host decides; joiner gets locked
     if (lockUI) {
       if (mf) mf.disabled = true;
       if (cd) cd.disabled = true;
@@ -184,7 +184,6 @@ class GameController {
       this.setStatus('Waiting for opponent to join...');
       document.getElementById('createGameBtn').disabled = true;
 
-      // Host controls match settings (unlock)
       this.applyMatchConfig(this.readMatchConfigFromUI(), false);
     });
 
@@ -200,7 +199,6 @@ class GameController {
       this.acceptInput = false;
       this.updateScoreboard();
 
-      // Joiners will be locked when host sends config
       this.applyMatchConfig(this.readMatchConfigFromUI(), true);
 
       NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
@@ -208,8 +206,6 @@ class GameController {
     });
 
     document.getElementById('restartBtn').addEventListener('click', () => {
-      // For now: allow both. Later: make host-only.
-      // Treat restart as "reset match to 0-0 and start round 1"
       this.resetMatchScores();
       if (NetworkManager.getInstance().isConnected()) {
         NetworkManager.getInstance().send({
@@ -244,7 +240,7 @@ class GameController {
   }
 
   /* =========================
-     Input (locked during countdown/roundOver/matchOver)
+     Input
   ========================= */
   setupInput() {
     const input = InputManager.getInstance();
@@ -260,11 +256,9 @@ class GameController {
       const b = input.getBindings();
       const code = e.code;
 
-      // Still prevent arrow scrolling for bound codes even when locked
       if (Object.values(b).includes(code)) e.preventDefault();
 
       if (!this.acceptInput || !this.gameState1) {
-        // Still track held codes so IRS/etc works once round begins
         input.handleKeyDown(code);
         return;
       }
@@ -280,12 +274,11 @@ class GameController {
       if (code === b.softDrop) { this.gameState1.setSoftDropActive(true); return; }
 
       if (code === b.hardDrop) {
-      const ok = this.gameState1.hardDropAndSpawn();
-      if (!ok) { this.handleGameOver(); }
-      input.resetMovementOnSpawn();
-      return;
-    }
-
+        const ok = this.gameState1.hardDropAndSpawn();
+        if (!ok) { this.handleGameOver(); }
+        input.resetMovementOnSpawn();
+        return;
+      }
 
       if (code === b.rotateCW) {
         const ok = this.gameState1.rotate('cw');
@@ -309,11 +302,10 @@ class GameController {
       }
 
       if (code === b.hold) {
-  const ok = this.gameState1.holdCurrentPiece();
-  if (!ok) this.handleGameOver();
-  return;
-}
-
+        const ok = this.gameState1.holdCurrentPiece();
+        if (!ok) this.handleGameOver();
+        return;
+      }
     });
 
     document.addEventListener('keyup', (e) => {
@@ -327,54 +319,6 @@ class GameController {
     });
   }
 
-  showRoundOverlay(title, sub) {
-  const ov = document.getElementById('roundOverlay');
-  document.getElementById('roundOverlayTitle').textContent = title;
-  document.getElementById('roundOverlaySub').textContent = sub || '';
-  ov.classList.remove('hidden');
-}
-
-hideRoundOverlay() {
-  document.getElementById('roundOverlay').classList.add('hidden');
-}
-
-sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-async runCountdown(seconds = 3) {
-  for (let t = seconds; t >= 1; t--) {
-    this.showRoundOverlay(String(t), 'Get ready...');
-    await this.sleep(700);
-  }
-  this.showRoundOverlay('GO!', '');
-  await this.sleep(450);
-  this.hideRoundOverlay();
-}
-
-  resetBoardsForNewRound(seed) {
-  // Fresh states so loser doesn't keep old board
-  this.gameState1 = new GameState('gameCanvas1','holdCanvas1','queueCanvas1',1,seed);
-  this.gameState2 = new GameState('gameCanvas2','holdCanvas2','queueCanvas2',2,seed);
-
-  const startTime = Date.now();
-  this.gameState1.setGameStartTime(startTime);
-  this.gameState2.setGameStartTime(startTime);
-
-  InputManager.getInstance().reset();
-
-  // Spawn both; if fail, something is extremely wrong, but handle safely
-  const ok1 = this.gameState1.spawnPiece();
-  const ok2 = this.gameState2.spawnPiece();
-
-  // Force redraw immediately
-  this.gameState1.draw();
-  this.gameState2.draw();
-
-  return ok1 && ok2;
-}
-
-
   /* =========================
      Match helpers
   ========================= */
@@ -386,7 +330,6 @@ async runCountdown(seconds = 3) {
   }
 
   hostSetScoresAndBroadcast() {
-    // Send host/client absolute scores so receiver can map correctly
     NetworkManager.getInstance().send({
       type: 'scoreUpdate',
       hostScore: this.match.hostScore,
@@ -397,7 +340,7 @@ async runCountdown(seconds = 3) {
 
   isMatchOver() {
     const t = this.match.targetWins;
-    if (!t || t <= 0) return false; // infinite
+    if (!t || t <= 0) return false;
     return (this.match.hostScore >= t) || (this.match.clientScore >= t);
   }
 
@@ -410,23 +353,24 @@ async runCountdown(seconds = 3) {
   }
 
   /* =========================
-     Round start / loop
+     Round start
   ========================= */
-  async startRound(seed, roundNumber) {
+  async startRound(seed, roundNumber, roundId) {
+    // NEW: set the active round token before anything else
+    this.roundId = roundId || this.roundId || `${Date.now()}-local`;
+
     this.phase = 'countdown';
     this.acceptInput = false;
 
     document.getElementById('gameArea').classList.remove('hidden');
     document.getElementById('restartBtn').classList.remove('hidden');
 
-    // Update match round
     this.match.round = Math.max(1, Number(roundNumber) || (this.match.round + 1) || 1);
     this.updateScoreboard();
 
-    // Apply settings at round start
     GameSettings.getInstance().update();
 
-    // Create game states fresh each round (clean + simple)
+    // Fresh states each round
     this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
     this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
 
@@ -434,28 +378,14 @@ async runCountdown(seconds = 3) {
     this.gameState1.setGameStartTime(startTime);
     this.gameState2.setGameStartTime(startTime);
 
-    // Clear stuck inputs
     InputManager.getInstance().reset();
 
-    // Spawn initial pieces so boards look ready during countdown
     this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
-
-    // After spawnPiece() calls, before countdown:
-if (NetworkManager.getInstance().isConnected()) {
-  NetworkManager.getInstance().send({
-    type: 'gameState',
-    round: this.match.round,
-    state: this.gameState1.getState(),
-    init: true
-  });
-}
-
 
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
-    // Ensure loop is running
     if (!this.gameRunning) {
       this.gameRunning = true;
       this.lastTime = 0;
@@ -463,10 +393,8 @@ if (NetworkManager.getInstance().isConnected()) {
       this.gameLoop();
     }
 
-    // Countdown lock
     await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
 
-    // Start playing
     this.phase = 'playing';
     this.acceptInput = true;
     this.setStatus('Game in progress!');
@@ -482,15 +410,18 @@ if (NetworkManager.getInstance().isConnected()) {
     const seed = Math.floor(Math.random() * 1000000000);
     const nextRound = (this.match.round || 0) + 1;
 
-    // Broadcast start
+    // NEW: unique round token
+    const roundId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+    this.roundId = roundId;
+
     NetworkManager.getInstance().send({
       type: 'startRound',
       seed,
       round: nextRound,
+      roundId, // NEW
     });
 
-    // Start locally
-    this.startRound(seed, nextRound);
+    this.startRound(seed, nextRound, roundId);
   }
 
   /* =========================
@@ -506,11 +437,9 @@ if (NetworkManager.getInstance().isConnected()) {
         if (this.gameState1) this.gameState1.receiveAttack(msg.lines);
         break;
 
-      // Host: peer connected → send config + start round 1
       case 'peerConnected': {
         if (!this.isHost) break;
 
-        // Read settings from UI and broadcast
         const cfg = this.readMatchConfigFromUI();
         this.applyMatchConfig(cfg, false);
 
@@ -520,7 +449,6 @@ if (NetworkManager.getInstance().isConnected()) {
           countdownSeconds: cfg.countdownSeconds,
         });
 
-        // Reset scores at new connection
         this.resetMatchScores();
         this.hostSetScoresAndBroadcast();
 
@@ -529,12 +457,10 @@ if (NetworkManager.getInstance().isConnected()) {
         break;
       }
 
-      // Joiner has connected; nothing to do, wait for host config / round start
       case 'joinedLobby':
         this.setStatus('Connected! Waiting for host…');
         break;
 
-      // Joiner receives host config
       case 'matchConfig': {
         const cfg = {
           targetWins: Number(msg.targetWins) || 0,
@@ -548,7 +474,6 @@ if (NetworkManager.getInstance().isConnected()) {
       }
 
       case 'scoreUpdate': {
-        // Everyone receives absolute host/client scores
         if (typeof msg.hostScore === 'number') this.match.hostScore = msg.hostScore;
         if (typeof msg.clientScore === 'number') this.match.clientScore = msg.clientScore;
         if (typeof msg.round === 'number') this.match.round = msg.round;
@@ -557,7 +482,6 @@ if (NetworkManager.getInstance().isConnected()) {
       }
 
       case 'matchReset': {
-        // Host or peer requested reset; host is authoritative, but keep it simple:
         const cfg = {
           targetWins: Number(msg.targetWins) || this.match.targetWins,
           countdownSeconds: Number(msg.countdownSeconds) || this.match.countdownSeconds,
@@ -578,11 +502,15 @@ if (NetworkManager.getInstance().isConnected()) {
       case 'startRound': {
         const seed = Number(msg.seed) || Math.floor(Math.random() * 1000000000);
         const round = Number(msg.round) || ((this.match.round || 0) + 1);
-        this.startRound(seed, round);
+
+        // NEW: store active round token
+        const roundId = msg.roundId || `${Date.now()}-recv`;
+        this.roundId = roundId;
+
+        this.startRound(seed, round, roundId);
         break;
       }
 
-      // Opponent lost the round, so we won
       case 'gameOver': {
         this.acceptInput = false;
         this.phase = 'roundOver';
@@ -591,7 +519,6 @@ if (NetworkManager.getInstance().isConnected()) {
         this.setStatus('Round win!');
 
         if (this.isHost) {
-          // Host awards point to host-side player if host is local winner
           this.match.hostScore += 1;
           this.hostSetScoresAndBroadcast();
           this.updateScoreboard();
@@ -607,7 +534,6 @@ if (NetworkManager.getInstance().isConnected()) {
             setTimeout(() => this.startNextRoundAsHost(false), 1400);
           }
         } else {
-          // Client just waits for host to start next round
           this.setStatus('Round win! Waiting for next round…');
         }
 
@@ -627,19 +553,16 @@ if (NetworkManager.getInstance().isConnected()) {
       }
 
       case 'gameState': {
-  if (!this.gameState2 || !msg.state) break;
+        if (!this.gameState2 || !msg.state) break;
 
-  // Ignore late packets from previous rounds
-  if (Number(msg.round) !== Number(this.match.round)) break;
+        // NEW: ignore stale packets from older rounds
+        if (!msg.roundId || msg.roundId !== this.roundId) break;
 
-  // Only accept during countdown/playing
-  if (this.phase === 'playing' || this.phase === 'countdown') {
-    this.gameState2.setState(msg.state);
-  }
-  break;
-}
-
-
+        if (this.phase === 'playing' || this.phase === 'countdown') {
+          this.gameState2.setState(msg.state);
+        }
+        break;
+      }
 
       default:
         break;
@@ -655,10 +578,8 @@ if (NetworkManager.getInstance().isConnected()) {
     this.setStatus('You lost the round.');
     ChatManager.addMessage('You topped out! Round lost.', 'System');
 
-    // Tell opponent we lost
     NetworkManager.getInstance().send({ type: 'gameOver' });
 
-    // Host assigns point to client side when host loses
     if (this.isHost) {
       this.match.clientScore += 1;
       this.hostSetScoresAndBroadcast();
@@ -691,7 +612,6 @@ if (NetworkManager.getInstance().isConnected()) {
     if (this.gameState1) {
       const input = InputManager.getInstance();
 
-      // Only process movement + update during active play
       if (this.phase === 'playing' && this.acceptInput) {
         if (!this.gameState1.softDropActive) {
           input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
@@ -702,16 +622,15 @@ if (NetworkManager.getInstance().isConnected()) {
 
         if (NetworkManager.getInstance().isConnected() && (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL) {
           NetworkManager.getInstance().send({
-  type: 'gameState',
-  round: this.match.round,
-  state: this.gameState1.getState()
-});
+            type: 'gameState',
+            roundId: this.roundId, // NEW
+            state: this.gameState1.getState()
+          });
 
           this.lastStateSendTime = timestamp;
         }
       }
 
-      // Always draw (even during countdown / roundOver)
       this.gameState1.draw();
     }
 
