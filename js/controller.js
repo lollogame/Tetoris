@@ -322,6 +322,54 @@ class GameController {
     });
   }
 
+  showRoundOverlay(title, sub) {
+  const ov = document.getElementById('roundOverlay');
+  document.getElementById('roundOverlayTitle').textContent = title;
+  document.getElementById('roundOverlaySub').textContent = sub || '';
+  ov.classList.remove('hidden');
+}
+
+hideRoundOverlay() {
+  document.getElementById('roundOverlay').classList.add('hidden');
+}
+
+sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async runCountdown(seconds = 3) {
+  for (let t = seconds; t >= 1; t--) {
+    this.showRoundOverlay(String(t), 'Get ready...');
+    await this.sleep(700);
+  }
+  this.showRoundOverlay('GO!', '');
+  await this.sleep(450);
+  this.hideRoundOverlay();
+}
+
+  resetBoardsForNewRound(seed) {
+  // Fresh states so loser doesn't keep old board
+  this.gameState1 = new GameState('gameCanvas1','holdCanvas1','queueCanvas1',1,seed);
+  this.gameState2 = new GameState('gameCanvas2','holdCanvas2','queueCanvas2',2,seed);
+
+  const startTime = Date.now();
+  this.gameState1.setGameStartTime(startTime);
+  this.gameState2.setGameStartTime(startTime);
+
+  InputManager.getInstance().reset();
+
+  // Spawn both; if fail, something is extremely wrong, but handle safely
+  const ok1 = this.gameState1.spawnPiece();
+  const ok2 = this.gameState2.spawnPiece();
+
+  // Force redraw immediately
+  this.gameState1.draw();
+  this.gameState2.draw();
+
+  return ok1 && ok2;
+}
+
+
   /* =========================
      Match helpers
   ========================= */
