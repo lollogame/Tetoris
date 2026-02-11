@@ -566,6 +566,8 @@ const HOLD_IRS_BUFFER_MS = 120;
 
 const STATE_SEND_INTERVAL = 50;
 const ROTATION_STATES = ['0', 'R', '2', 'L'];
+const GARBAGE_APPLY_CAP = 8; // tweak: 8, 12, 16
+
 
 const BUILD_TAG = 'holdfix-20260210-10-fullscript';
 console.log('BUILD', BUILD_TAG);
@@ -1149,29 +1151,42 @@ class GameState {
   }
 
   receiveAttack(lines) {
-    this.pendingGarbage.push({ lines, hole: this.rng.nextInt(COLS) });
-  }
+  const safe = Math.max(0, Math.min(10, Number(lines) || 0));
+  if (safe === 0) return;
+  this.pendingGarbage.push({ lines: safe, hole: this.rng.nextInt(COLS) });
+}
+
 
   applyGarbage() {
-    if (this.pendingGarbage.length === 0) return;
+  if (this.pendingGarbage.length === 0) return;
 
-    let total = 0;
-    for (const g of this.pendingGarbage) total += g.lines;
+  // apply at most N lines per call (prevents "instant flood")
+  let remainingCap = GARBAGE_APPLY_CAP;
 
-    for (let i = 0; i < total && i < ROWS; i++) this.board.shift();
+  // We’ll apply oldest attacks first
+  while (this.pendingGarbage.length > 0 && remainingCap > 0) {
+    const g = this.pendingGarbage[0];
+    const take = Math.min(g.lines, remainingCap);
 
-    for (const g of this.pendingGarbage) {
-      const hole = g.hole;
-      for (let i = 0; i < g.lines; i++) {
-        const line = Array(COLS).fill('G');
-        line[hole] = 0;
-        this.board.push(line);
-      }
+    // remove top rows for each line we add
+    for (let i = 0; i < take && i < ROWS; i++) this.board.shift();
+
+    const hole = g.hole;
+    for (let i = 0; i < take; i++) {
+      const line = Array(COLS).fill('G');
+      line[hole] = 0;
+      this.board.push(line);
     }
 
-    this.pendingGarbage = [];
-    ChatManager.addMessage(`Received ${total} garbage lines!`, 'System');
+    g.lines -= take;
+    remainingCap -= take;
+
+    if (g.lines <= 0) this.pendingGarbage.shift();
   }
+
+  ChatManager.addMessage(`Applied garbage (cap ${GARBAGE_APPLY_CAP}). Pending: ${this.pendingGarbage.reduce((s,x)=>s+x.lines,0)}`, 'System');
+}
+
 
   holdCurrentPiece() {
     if (!this.canHold || !this.currentPiece) return false;
