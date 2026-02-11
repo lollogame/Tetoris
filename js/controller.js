@@ -1,10 +1,22 @@
 'use strict';
 
+/* =========================================================
+   Game Controller
+   - Main Menu with modes: Zen / 1v1 / Battle Royale (placeholder)
+   - Settings modal (keybinds + match config)
+   - PvP match logic: rounds, scoreboard, countdown, state sync
+========================================================= */
 class GameController {
   constructor() {
+    // Game states
     this.gameState1 = null; // local player
-    this.gameState2 = null; // remote player view
+    this.gameState2 = null; // remote player view (PvP)
 
+    // Modes
+    this.mode = 'zen'; // 'zen' | 'pvp_1v1' | 'battle_royale'
+    this.zenScore = 0;
+
+    // PvP match state
     this.isHost = false;
     this.phase = 'idle'; // idle | waiting | countdown | playing | roundOver | matchOver
     this.match = {
@@ -14,37 +26,83 @@ class GameController {
       clientScore: 0,
       round: 0,
     };
-
     this.roundId = null;
 
-    // Loop timing
+    // Loop
     this.gameRunning = false;
     this.lastTime = 0;
     this.lastStateSendTime = 0;
     this.animationFrameId = null;
 
-    // NEW: prevents multiple RAF loops
-    this.loopActive = false;
-
+    // Input gating
     this.acceptInput = false;
 
+    // UI
+    this.cacheUI();
     this.setupUI();
     this.setupInput();
     this.setupSettingsModal();
+    this.setupMenu();
+
+    this.applyModeUI();
     this.updateScoreboard();
+    this.showMenu(true);
   }
 
   /* =========================
-     UI helpers
+     Cache UI
+  ========================= */
+  cacheUI() {
+    // Topbar
+    this.btnOpenMenu = document.getElementById('openMenuBtn');
+    this.btnOpenSettings = document.getElementById('openSettingsBtn');
+
+    // Main menu overlay
+    this.elMenu = document.getElementById('mainMenu');
+    this.btnMenuPlay = document.getElementById('menuPlayBtn');
+    this.btnMenuSettings = document.getElementById('menuSettingsBtn');
+    this.btnMenuClose = document.getElementById('menuCloseBtn');
+    this.modeCards = Array.from(document.querySelectorAll('.mode-card'));
+
+    // Settings modal
+    this.settingsModal = document.getElementById('settingsModal');
+    this.btnCloseSettings = document.getElementById('closeSettingsBtn');
+
+    // PvP UI
+    this.createBtn = document.getElementById('createGameBtn');
+    this.joinBtn = document.getElementById('joinGameBtn');
+    this.restartBtn = document.getElementById('restartBtn');
+    this.opponentPeerIdInput = document.getElementById('opponentPeerId');
+
+    this.peerBox = document.getElementById('myPeerId');
+    this.peerIdDisplay = document.getElementById('peerIdDisplay');
+
+    this.gameArea = document.getElementById('gameArea');
+    this.gameStatus = document.getElementById('gameStatus');
+
+    this.scoreboard = document.getElementById('scoreboard');
+
+    // Countdown overlay
+    this.countdownOverlay = document.getElementById('countdownOverlay');
+
+    // Containers
+    const players = document.querySelectorAll('.player-container');
+    this.localContainer = players[0] || null;
+    this.opponentContainer = players[1] || null;
+
+    this.connPanel = document.querySelector('.connection-panel');
+  }
+
+  /* =========================
+     Small UI helpers
   ========================= */
   setStatus(text) {
-    document.getElementById('gameStatus').textContent = text;
+    if (this.gameStatus) this.gameStatus.textContent = text;
   }
 
   showScoreboard(show) {
-    const el = document.getElementById('scoreboard');
-    if (!el) return;
-    el.classList.toggle('hidden', !show);
+    if (!this.scoreboard) return;
+    this.scoreboard.classList.toggle('hidden', !show);
   }
 
   formatLabelFromTarget(targetWins) {
@@ -61,6 +119,12 @@ class GameController {
   }
 
   updateScoreboard() {
+    // Scoreboard is PvP-only
+    if (this.mode !== 'pvp_1v1') {
+      this.showScoreboard(false);
+      return;
+    }
+
     const formatPill = document.getElementById('matchFormatPill');
     const roundPill = document.getElementById('matchRoundPill');
     const scorePill = document.getElementById('matchScorePill');
@@ -73,60 +137,233 @@ class GameController {
     this.showScoreboard(this.phase !== 'idle');
   }
 
+  showMenu(show) {
+    if (!this.elMenu) return;
+
+    if (show) {
+      this.elMenu.classList.remove('hidden');
+      this.acceptInput = false;
+    } else {
+      this.elMenu.classList.add('hidden');
+      // restore input only if actually in a playable state
+      if (this.mode === 'zen') {
+        this.acceptInput = this.gameRunning;
+      } else {
+        this.acceptInput = (this.phase === 'playing');
+      }
+    }
+  }
+
+  openSettings() {
+    if (!this.settingsModal) return;
+    this.settingsModal.classList.remove('hidden');
+  }
+
+  closeSettings() {
+    if (!this.settingsModal) return;
+    this.settingsModal.classList.add('hidden');
+  }
+
   /* =========================
-     Countdown
+     Menu + Modes
   ========================= */
-  showCountdown(seconds, subtitle = 'Get ready…') {
-    const overlay = document.getElementById('countdownOverlay');
-    const textEl = document.getElementById('countdownText');
-    const subEl = document.getElementById('countdownSub');
+  setupMenu() {
+    if (this.btnOpenMenu) this.btnOpenMenu.addEventListener('click', () => this.showMenu(true));
 
-    if (!overlay || !textEl || !subEl) return Promise.resolve();
+    // Menu buttons
+    if (this.btnMenuPlay) {
+      this.btnMenuPlay.addEventListener('click', () => {
+        this.showMenu(false);
+        this.startSelectedMode();
+      });
+    }
 
-    overlay.classList.remove('hidden');
-    subEl.textContent = subtitle;
+    if (this.btnMenuSettings) {
+      this.btnMenuSettings.addEventListener('click', () => this.openSettings());
+    }
 
-    this.acceptInput = false;
-    this.phase = 'countdown';
+    if (this.btnMenuClose) {
+      this.btnMenuClose.addEventListener('click', () => this.showMenu(false));
+    }
+
+    // Click outside menu card closes
+    if (this.elMenu) {
+      this.elMenu.addEventListener('click', (e) => {
+        if (e.target === this.elMenu) this.showMenu(false);
+      });
+    }
+
+    // Mode cards
+    this.modeCards.forEach((card) => {
+      if (card.classList.contains('disabled')) return;
+      card.addEventListener('click', () => {
+        const m = card.dataset.mode;
+        if (!m) return;
+        this.setMode(m);
+      });
+    });
+
+    // Default selection visuals
+    this.setMode(this.mode);
+  }
+
+  setMode(mode) {
+    if (mode === 'battle_royale') {
+      ChatManager.addMessage('Battle Royale is not implemented yet.', 'System');
+      return;
+    }
+
+    this.mode = mode;
+
+    // Visual selection
+    this.modeCards.forEach((c) => c.classList.remove('selected'));
+    const selected = this.modeCards.find((c) => c.dataset.mode === mode);
+    if (selected) selected.classList.add('selected');
+
+    this.applyModeUI();
+  }
+
+  applyModeUI() {
+    // Opponent UI hidden in zen
+    if (this.opponentContainer) {
+      this.opponentContainer.classList.toggle('hidden', this.mode === 'zen');
+    }
+
+    // Connection panel + peer id only in PvP
+    if (this.connPanel) {
+      this.connPanel.classList.toggle('hidden', this.mode !== 'pvp_1v1');
+    }
+
+    if (this.peerBox) {
+      this.peerBox.classList.toggle('hidden', this.mode !== 'pvp_1v1');
+    }
+
+    // Scoreboard only PvP
     this.updateScoreboard();
 
-    return new Promise((resolve) => {
-      let t = Math.max(1, Number(seconds) || 3);
-      textEl.textContent = String(t);
+    // Set status message
+    if (this.mode === 'zen') {
+      this.setStatus('Zen mode: press Play in the Menu to start.');
+    } else if (this.mode === 'pvp_1v1') {
+      this.setStatus('1v1 mode: host or join, then play the match.');
+    }
 
-      const tick = () => {
-        t -= 1;
-        if (t > 0) {
-          textEl.textContent = String(t);
-          setTimeout(tick, 900);
-        } else {
-          textEl.textContent = 'GO!';
-          subEl.textContent = 'Fight!';
-          setTimeout(() => {
-            overlay.classList.add('hidden');
-            resolve();
-          }, 550);
-        }
-      };
+    // Hide game area until a mode actually starts
+    if (this.gameArea) {
+      const shouldShow = (this.mode === 'zen') ? this.gameRunning : (this.phase !== 'idle' && this.phase !== 'waiting');
+      this.gameArea.classList.toggle('hidden', !shouldShow);
+    }
+  }
 
-      setTimeout(tick, 900);
-    });
+  stopLoop() {
+    this.gameRunning = false;
+    if (this.animationFrameId != null) cancelAnimationFrame(this.animationFrameId);
+    this.animationFrameId = null;
+  }
+
+  resetForNewMode() {
+    this.stopLoop();
+    this.gameState1 = null;
+    this.gameState2 = null;
+    this.lastTime = 0;
+    this.lastStateSendTime = 0;
+
+    // PvP state reset (but keep match settings)
+    this.phase = 'idle';
+    this.roundId = null;
+    this.acceptInput = false;
+
+    // UI
+    if (this.gameArea) this.gameArea.classList.add('hidden');
+    if (this.restartBtn) this.restartBtn.classList.add('hidden');
+
+    // Clear local attack hook
+    const nm = NetworkManager.getInstance();
+    if (nm && typeof nm.setLocalAttackHandler === 'function') nm.setLocalAttackHandler(null);
+
+    this.updateScoreboard();
+  }
+
+  startSelectedMode() {
+    this.resetForNewMode();
+
+    // Always refresh settings
+    GameSettings.getInstance().update();
+    this.closeSettings();
+
+    if (this.mode === 'zen') {
+      this.startZen();
+    } else if (this.mode === 'pvp_1v1') {
+      // PvP doesn't auto-start; you host/join
+      this.phase = 'waiting';
+      this.isHost = false;
+      this.acceptInput = false;
+      this.updateScoreboard();
+      this.applyModeUI();
+      this.setStatus('1v1: Create or Join. Host starts automatically when opponent connects.');
+    }
+  }
+
+  startZen() {
+    this.zenScore = 0;
+    this.isHost = false;
+    this.phase = 'playing';
+    this.acceptInput = true;
+
+    // Optional local score hook: +100 per garbage line worth of attack
+    const nm = NetworkManager.getInstance();
+    if (nm && typeof nm.setLocalAttackHandler === 'function') {
+      nm.setLocalAttackHandler((attack) => {
+        const safe = Math.max(0, Number(attack) || 0);
+        this.zenScore += safe * 100;
+        this.setStatus(`Zen mode — Score: ${this.zenScore}`);
+      });
+    }
+
+    const seed = Math.floor(Math.random() * 1e9);
+
+    if (this.gameArea) this.gameArea.classList.remove('hidden');
+
+    this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+
+    const startTime = Date.now();
+    this.gameState1.setGameStartTime(startTime);
+
+    InputManager.getInstance().reset();
+
+    const ok = this.gameState1.spawnPiece();
+    if (!ok) {
+      this.handleGameOver();
+      return;
+    }
+
+    this.gameState1.draw();
+
+    this.setStatus(`Zen mode — Score: ${this.zenScore}`);
+    ChatManager.addMessage('Zen started. Good luck!', 'System');
+
+    this.gameRunning = true;
+    this.lastTime = 0;
+    this.lastStateSendTime = 0;
+    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+
+    this.applyModeUI();
   }
 
   /* =========================
      Settings modal
   ========================= */
   setupSettingsModal() {
-    const openBtn = document.getElementById('openSettingsBtn');
-    const closeBtn = document.getElementById('closeSettingsBtn');
-    const modal = document.getElementById('settingsModal');
+    if (this.btnOpenSettings && this.settingsModal) {
+      this.btnOpenSettings.addEventListener('click', () => this.openSettings());
+    }
+    if (this.btnCloseSettings && this.settingsModal) {
+      this.btnCloseSettings.addEventListener('click', () => this.closeSettings());
+    }
 
-    if (openBtn && modal) openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-    if (closeBtn && modal) closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-
-    if (modal) {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.add('hidden');
+    if (this.settingsModal) {
+      this.settingsModal.addEventListener('click', (e) => {
+        if (e.target === this.settingsModal) this.closeSettings();
       });
     }
   }
@@ -158,79 +395,106 @@ class GameController {
   }
 
   /* =========================
-     Core UI
+     Main UI (PvP + Chat)
   ========================= */
   setupUI() {
+    // Copy peer ID
     window.copyPeerId = () => {
-      const id = document.getElementById('peerIdDisplay').textContent;
+      const id = this.peerIdDisplay ? this.peerIdDisplay.textContent : '';
+      if (!id) return;
       navigator.clipboard.writeText(id).then(() => ChatManager.addMessage('Peer ID copied to clipboard!'));
     };
 
-    document.getElementById('createGameBtn').addEventListener('click', () => {
-      this.isHost = true;
-      this.phase = 'waiting';
-      this.acceptInput = false;
-      this.updateScoreboard();
+    // Host
+    if (this.createBtn) {
+      this.createBtn.addEventListener('click', () => {
+        if (this.mode !== 'pvp_1v1') return;
 
-      NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
-      this.setStatus('Waiting for opponent to join...');
-      document.getElementById('createGameBtn').disabled = true;
+        this.isHost = true;
+        this.phase = 'waiting';
+        this.acceptInput = false;
 
-      this.applyMatchConfig(this.readMatchConfigFromUI(), false);
-    });
+        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+        this.setStatus('Waiting for opponent to join...');
 
-    document.getElementById('joinGameBtn').addEventListener('click', () => {
-      const opponentId = document.getElementById('opponentPeerId').value.trim();
-      if (!opponentId) {
-        ChatManager.addMessage('Please enter an opponent Peer ID');
-        return;
-      }
+        this.createBtn.disabled = true;
 
-      this.isHost = false;
-      this.phase = 'waiting';
-      this.acceptInput = false;
-      this.updateScoreboard();
+        this.applyMatchConfig(this.readMatchConfigFromUI(), false);
+        this.updateScoreboard();
+      });
+    }
 
-      this.applyMatchConfig(this.readMatchConfigFromUI(), true);
+    // Join
+    if (this.joinBtn) {
+      this.joinBtn.addEventListener('click', () => {
+        if (this.mode !== 'pvp_1v1') return;
 
-      NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
-      setTimeout(() => NetworkManager.getInstance().connect(opponentId), 300);
-    });
+        const opponentId = (this.opponentPeerIdInput ? this.opponentPeerIdInput.value : '').trim();
+        if (!opponentId) {
+          ChatManager.addMessage('Please enter an opponent Peer ID');
+          return;
+        }
 
-    document.getElementById('restartBtn').addEventListener('click', () => {
-      this.resetMatchScores();
+        this.isHost = false;
+        this.phase = 'waiting';
+        this.acceptInput = false;
 
-      if (NetworkManager.getInstance().isConnected()) {
-        NetworkManager.getInstance().send({
-          type: 'matchReset',
-          targetWins: this.match.targetWins,
-          countdownSeconds: this.match.countdownSeconds,
-        });
-      }
+        this.applyMatchConfig(this.readMatchConfigFromUI(), true);
 
-      if (this.isHost) {
-        this.startNextRoundAsHost(true);
-      } else {
-        this.setStatus('Requested match reset. Waiting for host...');
-      }
-    });
+        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+        setTimeout(() => NetworkManager.getInstance().connect(opponentId), 300);
 
-    document.getElementById('sendChatBtn').addEventListener('click', () => {
-      const el = document.getElementById('chatInput');
-      const msg = el.value.trim();
-      if (msg && NetworkManager.getInstance().isConnected()) {
-        NetworkManager.getInstance().send({ type: 'chat', message: msg });
+        this.updateScoreboard();
+      });
+    }
+
+    // Restart
+    if (this.restartBtn) {
+      this.restartBtn.addEventListener('click', () => {
+        if (this.mode !== 'pvp_1v1') return;
+
+        this.resetMatchScores();
+
+        if (NetworkManager.getInstance().isConnected()) {
+          NetworkManager.getInstance().send({
+            type: 'matchReset',
+            targetWins: this.match.targetWins,
+            countdownSeconds: this.match.countdownSeconds,
+          });
+        }
+
+        if (this.isHost) {
+          this.startNextRoundAsHost(true);
+        } else {
+          this.setStatus('Requested match reset. Waiting for host...');
+        }
+      });
+    }
+
+    // Chat
+    const sendBtn = document.getElementById('sendChatBtn');
+    const chatInput = document.getElementById('chatInput');
+
+    if (sendBtn && chatInput) {
+      sendBtn.addEventListener('click', () => {
+        const msg = chatInput.value.trim();
+        if (!msg) return;
+
+        if (this.mode === 'pvp_1v1' && NetworkManager.getInstance().isConnected()) {
+          NetworkManager.getInstance().send({ type: 'chat', message: msg });
+        }
+
         ChatManager.addMessage(msg, 'You');
-        el.value = '';
-      }
-    });
+        chatInput.value = '';
+      });
 
-    document.getElementById('chatInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') document.getElementById('sendChatBtn').click();
-    });
+      chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendBtn.click();
+      });
+    }
 
     ChatManager.addMessage('Welcome to Tetris Online Battle!');
-    ChatManager.addMessage('Create a game to host, or enter a Peer ID to join.');
+    ChatManager.addMessage('Open the Menu to pick a mode and press Play.');
   }
 
   /* =========================
@@ -265,7 +529,10 @@ class GameController {
 
       if (alreadyHeld && isRepeatBlocked) return;
 
-      if (code === b.softDrop) { this.gameState1.setSoftDropActive(true); return; }
+      if (code === b.softDrop) {
+        this.gameState1.setSoftDropActive(true);
+        return;
+      }
 
       if (code === b.hardDrop) {
         const ok = this.gameState1.hardDropAndSpawn();
@@ -303,6 +570,7 @@ class GameController {
 
     document.addEventListener('keyup', (e) => {
       if (input.isCapturing()) return;
+
       const code = e.code;
       input.handleKeyUp(code);
 
@@ -312,7 +580,7 @@ class GameController {
   }
 
   /* =========================
-     Match helpers
+     PvP match helpers
   ========================= */
   resetMatchScores() {
     this.match.hostScore = 0;
@@ -344,26 +612,43 @@ class GameController {
     return localWon ? 'YOU' : 'OPPONENT';
   }
 
-  /* =========================
-     Loop control (NEW)
-  ========================= */
-  ensureLoopRunning() {
-    // If loop is already active, do nothing.
-    if (this.loopActive) return;
+  showCountdown(seconds, subtitle = 'Get ready…') {
+    const overlay = this.countdownOverlay;
+    const textEl = document.getElementById('countdownText');
+    const subEl = document.getElementById('countdownSub');
 
-    this.gameRunning = true;
-    this.loopActive = true;
+    if (!overlay || !textEl || !subEl) return Promise.resolve();
 
-    // Reset timing so next frame is clean
-    this.lastTime = 0;
-    this.lastStateSendTime = 0;
+    overlay.classList.remove('hidden');
+    subEl.textContent = subtitle;
 
-    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+    this.acceptInput = false;
+    this.phase = 'countdown';
+    this.updateScoreboard();
+
+    return new Promise((resolve) => {
+      let t = Math.max(1, Number(seconds) || 3);
+      textEl.textContent = String(t);
+
+      const tick = () => {
+        t -= 1;
+        if (t > 0) {
+          textEl.textContent = String(t);
+          setTimeout(tick, 900);
+        } else {
+          textEl.textContent = 'GO!';
+          subEl.textContent = 'Fight!';
+          setTimeout(() => {
+            overlay.classList.add('hidden');
+            resolve();
+          }, 550);
+        }
+      };
+
+      setTimeout(tick, 900);
+    });
   }
 
-  /* =========================
-     Send init snapshot
-  ========================= */
   sendInitStateSnapshot() {
     if (!NetworkManager.getInstance().isConnected()) return;
     if (!this.gameState1) return;
@@ -377,17 +662,16 @@ class GameController {
     });
   }
 
-  /* =========================
-     Round start
-  ========================= */
   async startRound(seed, roundNumber, roundId) {
+    if (this.mode !== 'pvp_1v1') return;
+
     this.roundId = roundId || this.roundId || `${Date.now()}-local`;
 
     this.phase = 'countdown';
     this.acceptInput = false;
 
-    document.getElementById('gameArea').classList.remove('hidden');
-    document.getElementById('restartBtn').classList.remove('hidden');
+    if (this.gameArea) this.gameArea.classList.remove('hidden');
+    if (this.restartBtn) this.restartBtn.classList.remove('hidden');
 
     this.match.round = Math.max(1, Number(roundNumber) || (this.match.round + 1) || 1);
     this.updateScoreboard();
@@ -401,24 +685,32 @@ class GameController {
     this.gameState1.setGameStartTime(startTime);
     this.gameState2.setGameStartTime(startTime);
 
+    // Reset loop timing
+    this.lastTime = 0;
+    this.lastStateSendTime = 0;
+
+    // Clear stuck inputs
     InputManager.getInstance().reset();
 
     const ok1 = this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
-    if (!ok1) { this.handleGameOver(); return; }
+    if (!ok1) {
+      this.handleGameOver();
+      return;
+    }
 
-    // Draw once immediately
     this.gameState1.draw();
     this.gameState2.draw();
 
-    // Force remote to clear/reset before countdown ends
     this.sendInitStateSnapshot();
 
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
-    // ✅ IMPORTANT: always ensure the RAF loop is alive
-    this.ensureLoopRunning();
+    if (!this.gameRunning) {
+      this.gameRunning = true;
+      this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+    }
 
     await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
 
@@ -434,7 +726,7 @@ class GameController {
 
     if (resetRoundCounter) this.match.round = 0;
 
-    const seed = Math.floor(Math.random() * 1000000000);
+    const seed = Math.floor(Math.random() * 1e9);
     const nextRound = (this.match.round || 0) + 1;
 
     const roundId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
@@ -451,14 +743,17 @@ class GameController {
   }
 
   /* =========================
-     Network message handling
+     Network handler (PvP)
   ========================= */
   handleNetworkMessage(msg) {
-    switch (msg.type) {
-      case 'chat':
-        ChatManager.addMessage(msg.message, 'Opponent');
-        break;
+    if (msg.type === 'chat') {
+      ChatManager.addMessage(msg.message, 'Opponent');
+      return;
+    }
 
+    if (this.mode !== 'pvp_1v1') return;
+
+    switch (msg.type) {
       case 'attack':
         if (this.gameState1) this.gameState1.receiveAttack(msg.lines);
         break;
@@ -526,7 +821,7 @@ class GameController {
       }
 
       case 'startRound': {
-        const seed = Number(msg.seed) || Math.floor(Math.random() * 1000000000);
+        const seed = Number(msg.seed) || Math.floor(Math.random() * 1e9);
         const round = Number(msg.round) || ((this.match.round || 0) + 1);
 
         const roundId = msg.roundId || `${Date.now()}-recv`;
@@ -599,11 +894,19 @@ class GameController {
   }
 
   /* =========================
-     Local game over (we lost)
+     Game over
   ========================= */
   handleGameOver() {
-    // Do not stop the loop. Ever.
     this.acceptInput = false;
+
+    if (this.mode === 'zen') {
+      this.gameRunning = false;
+      this.setStatus(`Zen over — Final score: ${this.zenScore}`);
+      ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
+      return;
+    }
+
+    // PvP round loss
     this.phase = 'roundOver';
     this.setStatus('You lost the round.');
     ChatManager.addMessage('You topped out! Round lost.', 'System');
@@ -634,10 +937,7 @@ class GameController {
      Main loop
   ========================= */
   gameLoop(timestamp) {
-    if (!this.gameRunning) {
-      this.loopActive = false;
-      return;
-    }
+    if (!this.gameRunning) return;
 
     if (!Number.isFinite(timestamp)) timestamp = performance.now();
 
@@ -652,41 +952,54 @@ class GameController {
       if (this.gameState1) {
         const input = InputManager.getInstance();
 
-        // Simulate only while playing
-        if (this.phase === 'playing') {
+        if (this.mode === 'zen') {
+          // Zen: always update
           if (this.acceptInput && !this.gameState1.softDropActive) {
             input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
           }
 
           const ok = this.gameState1.update(deltaTime);
-
-          // ✅ IMPORTANT FIX: do NOT return (would kill RAF)
           if (!ok) {
             this.handleGameOver();
+            return;
           }
-        }
 
-        // Send state during countdown + playing
-        const inRound = (this.phase === 'playing' || this.phase === 'countdown');
-        if (
-          inRound &&
-          this.roundId &&
-          NetworkManager.getInstance().isConnected() &&
-          (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
-        ) {
-          NetworkManager.getInstance().send({
-            type: 'gameState',
-            roundId: this.roundId,
-            state: this.gameState1.getState()
-          });
-          this.lastStateSendTime = timestamp;
-        }
+          this.gameState1.draw();
+        } else {
+          // PvP: only update during playing
+          if (this.phase === 'playing') {
+            if (this.acceptInput && !this.gameState1.softDropActive) {
+              input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+            }
 
-        // Always draw (even roundOver)
-        this.gameState1.draw();
+            const ok = this.gameState1.update(deltaTime);
+            if (!ok) {
+              this.handleGameOver();
+              return;
+            }
+          }
+
+          // Send state (during countdown + playing)
+          const inRound = (this.phase === 'playing' || this.phase === 'countdown');
+          if (
+            inRound &&
+            this.roundId &&
+            NetworkManager.getInstance().isConnected() &&
+            (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
+          ) {
+            NetworkManager.getInstance().send({
+              type: 'gameState',
+              roundId: this.roundId,
+              state: this.gameState1.getState(),
+            });
+            this.lastStateSendTime = timestamp;
+          }
+
+          this.gameState1.draw();
+        }
       }
 
-      if (this.gameState2) this.gameState2.draw();
+      if (this.gameState2 && this.mode === 'pvp_1v1') this.gameState2.draw();
     } catch (err) {
       console.error('gameLoop error:', err);
     }
