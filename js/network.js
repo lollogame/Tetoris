@@ -38,12 +38,21 @@ class NetworkManager {
     // HOST receives incoming connection
     this.peer.on('connection', (connection) => {
       this.conn = connection;
-      this.setupConnection();
-      ChatManager.addMessage('Opponent connected!');
-      document.getElementById('gameStatus').textContent = 'Connected! Preparing match...';
 
-      // Let controller decide what to do (send config, start round, etc.)
-      if (this.onMessageCallback) this.onMessageCallback({ type: 'peerConnected' });
+      // IMPORTANT: wait for open before notifying controller
+      this.conn.on('open', () => {
+        this.setupConnection();
+
+        ChatManager.addMessage('Opponent connected!');
+        document.getElementById('gameStatus').textContent = 'Connected! Preparing match...';
+
+        // Now it's safe to send matchConfig / startRound immediately
+        if (this.onMessageCallback) this.onMessageCallback({ type: 'peerConnected' });
+      });
+
+      this.conn.on('error', (err) => {
+        ChatManager.addMessage(`Connection error: ${err}`);
+      });
     });
 
     this.peer.on('error', (err) => {
@@ -74,6 +83,8 @@ class NetworkManager {
   }
 
   setupConnection() {
+    if (!this.conn) return;
+
     this.conn.on('data', (data) => {
       if (this.onMessageCallback) this.onMessageCallback(data);
     });
