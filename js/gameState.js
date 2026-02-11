@@ -238,19 +238,27 @@ class GameState {
     return ok;
   }
 
-   hardDropAndSpawn() {
-  // Hard drop to bottom
+  hardDropAndSpawn() {
+  const settings = GameSettings.getInstance();
+
+  // prevent "double hard drop" / missdrop spam
+  if (settings.preventMissdrop && this.hardDropCooldown > 0) return true;
+
   while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
     this.currentY++;
   }
 
-  // Attempt to lock
   const locked = this.lockPiece();
   if (!locked) return false;
+
+  if (settings.preventMissdrop) {
+    this.hardDropCooldown = this.hardDropCooldownFrames;
+  }
 
   // Spawn next; if blocked, game over
   return this.spawnPiece();
 }
+
 
 
   lockPiece() {
@@ -498,12 +506,16 @@ class GameState {
 
     if (this.holdPiece === null) {
       this.holdPiece = this.currentPiece;
-      this.spawnPiece();
+const ok = this.spawnPiece();
+if (!ok) return false;
+
     } else {
       const temp = this.holdPiece;
       this.holdPiece = this.currentPiece;
       this.resetPieceState(temp);
-      this.afterSpawnInput();
+if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) return false;
+this.afterSpawnInput();
+
     }
 
     this.canHold = false;
@@ -542,8 +554,10 @@ class GameState {
         const settings = GameSettings.getInstance();
         if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
 
-        this.spawnPiece();
-        this.lastGravityTime = 0;
+        const spawned = this.spawnPiece();
+if (!spawned) return false; // TOP OUT
+this.lastGravityTime = 0;
+
       }
     } else {
       const settings = GameSettings.getInstance();
