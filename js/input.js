@@ -39,11 +39,13 @@ class InputManager {
 
   getBindings() { return this.bindings; }
   getHeldCodes() { return this.heldCodes; }
+
   getLastPressedAt(code) {
     return Object.prototype.hasOwnProperty.call(this.lastPressedAt, code)
       ? this.lastPressedAt[code]
       : -Infinity;
   }
+
   isCapturing() { return this.bindingCaptureActive; }
   setCapturing(active) { this.bindingCaptureActive = active; }
 
@@ -96,6 +98,7 @@ class InputManager {
 
   handleKeyDown(code) {
     if (this.heldCodes[code]) return false;
+
     this.heldCodes[code] = true;
     this.lastPressedAt[code] = performance.now();
 
@@ -165,6 +168,35 @@ class InputManager {
     }
   }
 
+  /* =========================================================
+     ✅ NEW: Round-safe reset
+     Keeps heldCodes so key-repeat doesn't become "fresh presses"
+     (prevents invisible instant hard-drops/holds after round starts)
+  ========================================================= */
+  resetForNewRound() {
+    // wipe press timestamps (buffering) but KEEP heldCodes
+    this.lastPressedAt = {};
+
+    // reset movement timers/state but derive held movement from heldCodes
+    const b = this.bindings;
+    const heldLeft  = !!this.heldCodes[b.left];
+    const heldRight = !!this.heldCodes[b.right];
+
+    this.move = {
+      left: heldLeft,
+      right: heldRight,
+      direction: 0,
+      lastDirection: heldRight ? 1 : (heldLeft ? -1 : 0),
+      dasTimer: 0,
+      arrTimer: 0,
+      dcdTimer: GameSettings.getInstance().dcd
+    };
+
+    // recompute direction WITHOUT immediate movement
+    this.recomputeDirection(false);
+  }
+
+  // Full reset (use when leaving/entering game, not between rounds)
   reset() {
     this.move = { left:false, right:false, direction:0, lastDirection:0, dasTimer:0, arrTimer:0, dcdTimer:0 };
     this.heldCodes = {};
