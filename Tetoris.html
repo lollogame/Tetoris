@@ -60,7 +60,7 @@
       font-family: 'Press Start 2P', cursive;
       text-align: center;
       font-size: 2rem;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       text-transform: uppercase;
       background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
       -webkit-background-clip: text;
@@ -91,11 +91,7 @@
       margin-bottom: 15px;
     }
 
-    .control-item {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
+    .control-item { display: flex; flex-direction: column; gap: 5px; }
 
     .control-item label {
       font-size: 0.8rem;
@@ -136,7 +132,6 @@
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
     }
-
     button:active { transform: translateY(0); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -148,12 +143,7 @@
       flex-wrap: wrap;
     }
 
-    .player-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 15px;
-    }
+    .player-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
 
     .player-header {
       font-family: 'Press Start 2P', cursive;
@@ -162,17 +152,8 @@
       text-shadow: 0 0 10px var(--accent-cyan);
     }
 
-    .game-wrapper {
-      display: flex;
-      gap: 20px;
-      align-items: flex-start;
-    }
-
-    .side-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
+    .game-wrapper { display: flex; gap: 20px; align-items: flex-start; }
+    .side-panel { display: flex; flex-direction: column; gap: 15px; }
 
     .info-box {
       background: rgba(21, 27, 61, 0.9);
@@ -191,13 +172,7 @@
       text-align: center;
     }
 
-    .stat {
-      display: flex;
-      justify-content: space-between;
-      margin: 5px 0;
-      font-size: 0.9rem;
-    }
-
+    .stat { display: flex; justify-content: space-between; margin: 5px 0; font-size: 0.9rem; }
     .stat-label { color: var(--text-secondary); font-size: 0.75rem; }
     .stat-value { color: var(--accent-cyan); font-weight: bold; }
 
@@ -209,11 +184,7 @@
       background: rgba(10, 14, 39, 0.95);
     }
 
-    canvas {
-      display: block;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-    }
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
 
     .mini-canvas-container {
       background: rgba(10, 14, 39, 0.9);
@@ -254,7 +225,6 @@
     }
 
     .chat-input-container { display: flex; gap: 10px; }
-
     .chat-input {
       flex: 1;
       background: rgba(10, 14, 39, 0.9);
@@ -269,7 +239,7 @@
       display: flex;
       gap: 10px;
       justify-content: center;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
       align-items: center;
     }
@@ -286,7 +256,7 @@
 
     #gameStatus {
       text-align: center;
-      margin-top: 20px;
+      margin-top: 12px;
       font-family: 'Press Start 2P', cursive;
       font-size: 0.8rem;
       color: var(--accent-yellow);
@@ -299,7 +269,7 @@
       padding: 15px;
       border-radius: 10px;
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
       box-shadow: var(--shadow-glow);
     }
 
@@ -323,15 +293,10 @@
     }
 
     .hidden { display: none !important; }
-
-    .copy-btn {
-      margin-top: 10px;
-      font-size: 0.6rem;
-      padding: 8px 16px;
-    }
+    .copy-btn { margin-top: 10px; font-size: 0.6rem; padding: 8px 16px; }
 
     /* =========================
-       Menu + Modal UI
+       Topbar + Settings Modal
     ========================= */
     .topbar {
       display: flex;
@@ -341,102 +306,10 @@
       margin-bottom: 10px;
     }
 
-    .topbar .topbar-left,
-    .topbar .topbar-right {
+    .topbar .topbar-left, .topbar .topbar-right {
       display: flex;
       gap: 10px;
       align-items: center;
-    }
-
-    .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(5, 8, 24, 0.88);
-      backdrop-filter: blur(6px);
-      z-index: 9999;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-
-    .overlay-card {
-      width: min(900px, 95vw);
-      background: rgba(21, 27, 61, 0.92);
-      border: 2px solid var(--border-glow);
-      border-radius: 12px;
-      box-shadow: var(--shadow-glow);
-      padding: 20px;
-    }
-
-    .overlay-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1rem;
-      text-align: center;
-      margin-bottom: 18px;
-      color: var(--accent-yellow);
-    }
-
-    .menu-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 14px;
-      margin-bottom: 16px;
-    }
-
-    .mode-card {
-      border: 2px solid rgba(0, 255, 255, 0.35);
-      border-radius: 12px;
-      padding: 14px;
-      background: rgba(10, 14, 39, 0.7);
-      cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-      user-select: none;
-    }
-
-    .mode-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(255, 0, 255, 0.22);
-      border-color: rgba(255, 0, 255, 0.55);
-    }
-
-    .mode-card.selected {
-      border-color: var(--accent-cyan);
-      box-shadow: 0 0 0 2px rgba(0,255,255,0.35), 0 10px 30px rgba(0,255,255,0.15);
-    }
-
-    .mode-card.disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      filter: grayscale(0.2);
-    }
-
-    .mode-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 0.7rem;
-      margin-bottom: 10px;
-      color: var(--accent-cyan);
-    }
-
-    .mode-desc {
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      line-height: 1.35;
-    }
-
-    .menu-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-      margin-top: 12px;
-    }
-
-    .small-note {
-      text-align: center;
-      margin-top: 12px;
-      font-size: 0.75rem;
-      color: var(--text-secondary);
     }
 
     .modal {
@@ -476,10 +349,82 @@
       color: var(--accent-yellow);
     }
 
-    .modal-close {
-      font-size: 0.6rem;
-      padding: 10px 14px;
+    .modal-close { font-size: 0.6rem; padding: 10px 14px; }
+
+    /* =========================
+       NEW: Match Scoreboard
+    ========================= */
+    .scoreboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px 16px;
+      padding: 12px 14px;
+      margin: 10px auto 16px;
+      width: min(900px, 96vw);
+      background: rgba(21, 27, 61, 0.75);
+      border: 2px solid rgba(0, 255, 255, 0.55);
+      border-radius: 12px;
+      box-shadow: var(--shadow-glow);
+      text-align: center;
     }
+
+    .score-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 0, 255, 0.45);
+      background: rgba(10, 14, 39, 0.75);
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.65rem;
+      color: var(--text-primary);
+      letter-spacing: 0.5px;
+    }
+
+    .score-pill strong {
+      color: var(--accent-cyan);
+      text-shadow: 0 0 10px rgba(0,255,255,0.35);
+    }
+
+    /* =========================
+       NEW: Countdown Overlay
+    ========================= */
+    .countdown-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
+      backdrop-filter: blur(3px);
+      pointer-events: none;
+    }
+
+    .countdown-card {
+      text-align: center;
+      padding: 24px 26px;
+      border-radius: 16px;
+      border: 2px solid rgba(0, 255, 255, 0.65);
+      background: rgba(21, 27, 61, 0.82);
+      box-shadow: var(--shadow-glow);
+      width: min(520px, 92vw);
+    }
+
+    .countdown-big {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 3.2rem;
+      line-height: 1.1;
+      color: var(--accent-yellow);
+      text-shadow: 0 0 18px rgba(255,255,0,0.35);
+      margin-bottom: 10px;
+    }
+
+    .countdown-sub {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
   </style>
 </head>
 
@@ -487,13 +432,27 @@
   <div class="container">
     <h1>⬛ Tetris Online Battle ⬛</h1>
 
-    <!-- Top bar -->
     <div class="topbar">
       <div class="topbar-left">
         <button id="openMenuBtn">☰ Menu</button>
       </div>
       <div class="topbar-right">
         <button id="openSettingsBtn">⚙ Settings</button>
+      </div>
+    </div>
+
+    <!-- NEW: Match scoreboard -->
+    <div id="scoreboard" class="scoreboard hidden">
+      <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
+      <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
+      <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> — <strong>0</strong> OPP</div>
+    </div>
+
+    <!-- Countdown overlay -->
+    <div id="countdownOverlay" class="countdown-overlay hidden">
+      <div class="countdown-card">
+        <div class="countdown-big" id="countdownText">3</div>
+        <div class="countdown-sub" id="countdownSub">Get ready…</div>
       </div>
     </div>
 
@@ -505,58 +464,49 @@
           <button class="modal-close" id="closeSettingsBtn">Close</button>
         </div>
 
-        <!-- Your existing settings panel moved here -->
+        <!-- NEW: Match format selector -->
         <div class="controls-panel">
-          <h2 style="font-family: 'Press Start 2P', cursive; font-size: 1rem; margin-bottom: 15px; text-align: center;">
-            Game Settings
-          </h2>
-
+          <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Match</h2>
           <div class="controls-grid">
             <div class="control-item">
-              <label>Move Left</label>
-              <input type="text" id="keyLeft" value="ArrowLeft" readonly>
+              <label>Match Format</label>
+              <select id="matchFormat">
+                <option value="3" selected>FT3 (first to 3)</option>
+                <option value="5">FT5 (first to 5)</option>
+                <option value="7">FT7 (first to 7)</option>
+                <option value="0">Infinite</option>
+              </select>
             </div>
             <div class="control-item">
-              <label>Move Right</label>
-              <input type="text" id="keyRight" value="ArrowRight" readonly>
+              <label>Countdown</label>
+              <select id="countdownSeconds">
+                <option value="2">2s</option>
+                <option value="3" selected>3s</option>
+                <option value="4">4s</option>
+                <option value="5">5s</option>
+              </select>
             </div>
-            <div class="control-item">
-              <label>Soft Drop</label>
-              <input type="text" id="keySoftDrop" value="ArrowDown" readonly>
-            </div>
-            <div class="control-item">
-              <label>Hard Drop</label>
-              <input type="text" id="keyHardDrop" value="Space" readonly>
-            </div>
-            <div class="control-item">
-              <label>Rotate CW</label>
-              <input type="text" id="keyRotateCW" value="ArrowUp" readonly>
-            </div>
-            <div class="control-item">
-              <label>Rotate CCW</label>
-              <input type="text" id="keyRotateCCW" value="z" readonly>
-            </div>
-            <div class="control-item">
-              <label>Rotate 180</label>
-              <input type="text" id="keyRotate180" value="x" readonly>
-            </div>
-            <div class="control-item">
-              <label>Hold Piece</label>
-              <input type="text" id="keyHold" value="LShift" readonly>
-            </div>
+          </div>
+          <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
+            Host decides match settings. Joiners will be locked to the host’s config.
+          </div>
+        </div>
 
-            <div class="control-item">
-              <label>ARR (ms)</label>
-              <input type="number" id="arr" value="0" min="0" max="200">
-            </div>
-            <div class="control-item">
-              <label>DAS (ms)</label>
-              <input type="number" id="das" value="167" min="0" max="500">
-            </div>
-            <div class="control-item">
-              <label>DCD (ms)</label>
-              <input type="number" id="dcd" value="0" min="0" max="100">
-            </div>
+        <!-- Your existing controls -->
+        <div class="controls-panel">
+          <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Controls</h2>
+          <div class="controls-grid">
+            <div class="control-item"><label>Move Left</label><input type="text" id="keyLeft" value="ArrowLeft" readonly></div>
+            <div class="control-item"><label>Move Right</label><input type="text" id="keyRight" value="ArrowRight" readonly></div>
+            <div class="control-item"><label>Soft Drop</label><input type="text" id="keySoftDrop" value="ArrowDown" readonly></div>
+            <div class="control-item"><label>Hard Drop</label><input type="text" id="keyHardDrop" value="Space" readonly></div>
+            <div class="control-item"><label>Rotate CW</label><input type="text" id="keyRotateCW" value="ArrowUp" readonly></div>
+            <div class="control-item"><label>Rotate CCW</label><input type="text" id="keyRotateCCW" value="z" readonly></div>
+            <div class="control-item"><label>Rotate 180</label><input type="text" id="keyRotate180" value="x" readonly></div>
+            <div class="control-item"><label>Hold Piece</label><input type="text" id="keyHold" value="LShift" readonly></div>
+            <div class="control-item"><label>ARR (ms)</label><input type="number" id="arr" value="0" min="0" max="200"></div>
+            <div class="control-item"><label>DAS (ms)</label><input type="number" id="das" value="167" min="0" max="500"></div>
+            <div class="control-item"><label>DCD (ms)</label><input type="number" id="dcd" value="0" min="0" max="100"></div>
             <div class="control-item">
               <label>SDF (multiplier)</label>
               <select id="sdf">
@@ -577,70 +527,27 @@
             </div>
           </div>
 
-          <div style="text-align: center; margin-top: 15px; color: var(--text-secondary); font-size: 0.75rem;">
+          <div style="text-align:center;margin-top:15px;color:var(--text-secondary);font-size:0.75rem;">
             Click on any key binding to change it
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Main Menu Overlay -->
-    <div id="mainMenu" class="overlay">
-      <div class="overlay-card">
-        <div class="overlay-title">Main Menu</div>
-
-        <div class="menu-grid">
-          <div class="mode-card selected" data-mode="zen" id="modeZen">
-            <div class="mode-title">Zen (Solo)</div>
-            <div class="mode-desc">
-              Practice alone. Attacks become score. No networking required.
-            </div>
-          </div>
-
-          <div class="mode-card" data-mode="pvp_1v1" id="modePvp1v1">
-            <div class="mode-title">PvP (1v1)</div>
-            <div class="mode-desc">
-              Host or join a match. Host gets Start + Restart controls.
-            </div>
-          </div>
-
-          <div class="mode-card disabled" data-mode="pvp_lobby" id="modeLobby" title="Coming soon">
-            <div class="mode-title">PvP Lobby (Soon)</div>
-            <div class="mode-desc">
-              Multi-player lobby modes (payback / target / etc). Placeholder for now.
-            </div>
-          </div>
-        </div>
-
-        <div class="menu-actions">
-          <button id="menuPlayBtn">Play</button>
-          <button id="menuSettingsBtn">Settings</button>
-          <button id="menuCloseBtn">Close</button>
-        </div>
-
-        <div class="small-note">
-          Tip: PvP host must press Start after opponent connects.
-        </div>
-      </div>
-    </div>
-
-    <!-- Peer ID (PvP only; controller toggles) -->
     <div id="myPeerId" class="hidden">
       <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
       <div class="peer-id-value" id="peerIdDisplay" onclick="window.copyPeerId()">Connecting...</div>
       <button class="copy-btn" onclick="window.copyPeerId()">📋 Copy ID</button>
     </div>
 
-    <!-- Connection Panel (PvP only; controller toggles) -->
-    <div class="connection-panel hidden">
+    <div class="connection-panel">
       <button id="createGameBtn">Create Game</button>
       <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
       <button id="joinGameBtn">Join Game</button>
-      <button id="hostStartBtn" class="hidden">Start (Host)</button>
       <button id="restartBtn" class="hidden">Restart Game</button>
     </div>
 
-    <div id="gameStatus">Open the Menu to pick a mode and press Play</div>
+    <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
 
     <div class="game-area hidden" id="gameArea">
       <div class="player-container">
@@ -649,41 +556,21 @@
           <div class="side-panel">
             <div class="info-box">
               <h3>HOLD</h3>
-              <div class="mini-canvas-container">
-                <canvas id="holdCanvas1" width="80" height="80"></canvas>
-              </div>
+              <div class="mini-canvas-container"><canvas id="holdCanvas1" width="80" height="80"></canvas></div>
             </div>
             <div class="info-box">
               <h3>STATS</h3>
-              <div class="stat">
-                <span class="stat-label">PPS:</span>
-                <span class="stat-value" id="pps1">0.00</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">APM:</span>
-                <span class="stat-value" id="apm1">0.00</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">B2B:</span>
-                <span class="stat-value" id="b2b1">0</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">Combo:</span>
-                <span class="stat-value" id="combo1">0</span>
-              </div>
+              <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps1">0.00</span></div>
+              <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm1">0.00</span></div>
+              <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b1">0</span></div>
+              <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo1">0</span></div>
             </div>
           </div>
-
-          <div class="canvas-container">
-            <canvas id="gameCanvas1" width="320" height="640"></canvas>
-          </div>
-
+          <div class="canvas-container"><canvas id="gameCanvas1" width="320" height="640"></canvas></div>
           <div class="side-panel">
             <div class="info-box">
               <h3>NEXT</h3>
-              <div class="mini-canvas-container">
-                <canvas id="queueCanvas1" width="80" height="480"></canvas>
-              </div>
+              <div class="mini-canvas-container"><canvas id="queueCanvas1" width="80" height="480"></canvas></div>
             </div>
           </div>
         </div>
@@ -695,41 +582,21 @@
           <div class="side-panel">
             <div class="info-box">
               <h3>HOLD</h3>
-              <div class="mini-canvas-container">
-                <canvas id="holdCanvas2" width="80" height="80"></canvas>
-              </div>
+              <div class="mini-canvas-container"><canvas id="holdCanvas2" width="80" height="80"></canvas></div>
             </div>
             <div class="info-box">
               <h3>STATS</h3>
-              <div class="stat">
-                <span class="stat-label">PPS:</span>
-                <span class="stat-value" id="pps2">0.00</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">APM:</span>
-                <span class="stat-value" id="apm2">0.00</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">B2B:</span>
-                <span class="stat-value" id="b2b2">0</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">Combo:</span>
-                <span class="stat-value" id="combo2">0</span>
-              </div>
+              <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps2">0.00</span></div>
+              <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm2">0.00</span></div>
+              <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b2">0</span></div>
+              <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo2">0</span></div>
             </div>
           </div>
-
-          <div class="canvas-container">
-            <canvas id="gameCanvas2" width="320" height="640"></canvas>
-          </div>
-
+          <div class="canvas-container"><canvas id="gameCanvas2" width="320" height="640"></canvas></div>
           <div class="side-panel">
             <div class="info-box">
               <h3>NEXT</h3>
-              <div class="mini-canvas-container">
-                <canvas id="queueCanvas2" width="80" height="480"></canvas>
-              </div>
+              <div class="mini-canvas-container"><canvas id="queueCanvas2" width="80" height="480"></canvas></div>
             </div>
           </div>
         </div>
@@ -737,9 +604,7 @@
     </div>
 
     <div class="chat-container">
-      <h3 style="font-family: 'Press Start 2P', cursive; font-size: 0.8rem; margin-bottom: 10px; text-align: center; color: var(--accent-yellow);">
-        💬 CHAT
-      </h3>
+      <h3 style="font-family:'Press Start 2P',cursive;font-size:0.8rem;margin-bottom:10px;text-align:center;color:var(--accent-yellow);">💬 CHAT</h3>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-container">
         <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
@@ -748,7 +613,7 @@
     </div>
   </div>
 
-  <!-- Your JS modules -->
+  <!-- Your split JS -->
   <script src="js/constants.js"></script>
   <script src="js/rng.js"></script>
   <script src="js/renderer.js"></script>
