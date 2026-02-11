@@ -8,6 +8,9 @@ class NetworkManager {
     this.conn = null;
     this.myPeerId = null;
     this.onMessageCallback = null;
+
+    // Optional local hook (e.g., Zen scoring)
+    this.localAttackHandler = null;
   }
 
   static getInstance() {
@@ -100,7 +103,21 @@ class NetworkManager {
   }
 
   sendAttack(lines) {
-    this.send({ type: 'attack', lines: Math.min(lines, 10) });
+    const safe = Math.max(0, Math.min(10, Number(lines) || 0));
+
+    // Always allow local hook (even if not connected)
+    if (typeof this.localAttackHandler === 'function' && safe > 0) {
+      try { this.localAttackHandler(safe); } catch (e) { console.error('localAttackHandler error:', e); }
+    }
+
+    // Only send over network if connected
+    if (this.conn && this.conn.open && safe > 0) {
+      this.conn.send({ type: 'attack', lines: safe });
+    }
+  }
+
+  setLocalAttackHandler(fn) {
+    this.localAttackHandler = (typeof fn === 'function') ? fn : null;
   }
 
   isConnected() {
