@@ -5,27 +5,23 @@ class GameController {
     this.gameState1 = null; // local player
     this.gameState2 = null; // remote player view
 
-    // Match / round flow
     this.isHost = false;
     this.phase = 'idle'; // idle | waiting | countdown | playing | roundOver | matchOver
     this.match = {
-      targetWins: 3,        // 0 means infinite
+      targetWins: 3,
       countdownSeconds: 3,
       hostScore: 0,
       clientScore: 0,
       round: 0,
     };
 
-    // Unique token for the currently active round
     this.roundId = null;
 
-    // Loop timing
     this.gameRunning = false;
     this.lastTime = 0;
     this.lastStateSendTime = 0;
     this.animationFrameId = null;
 
-    // Input gating
     this.acceptInput = false;
 
     this.setupUI();
@@ -35,9 +31,6 @@ class GameController {
     this.updateScoreboard();
   }
 
-  /* =========================
-     UI helpers
-  ========================= */
   setStatus(text) {
     document.getElementById('gameStatus').textContent = text;
   }
@@ -74,9 +67,6 @@ class GameController {
     this.showScoreboard(this.phase !== 'idle');
   }
 
-  /* =========================
-     Countdown Overlay
-  ========================= */
   showCountdown(seconds, subtitle = 'Get ready…') {
     const overlay = document.getElementById('countdownOverlay');
     const textEl = document.getElementById('countdownText');
@@ -114,9 +104,6 @@ class GameController {
     });
   }
 
-  /* =========================
-     Settings modal
-  ========================= */
   setupSettingsModal() {
     const openBtn = document.getElementById('openSettingsBtn');
     const closeBtn = document.getElementById('closeSettingsBtn');
@@ -158,9 +145,6 @@ class GameController {
     this.updateScoreboard();
   }
 
-  /* =========================
-     Core UI wiring
-  ========================= */
   setupUI() {
     window.copyPeerId = () => {
       const id = document.getElementById('peerIdDisplay').textContent;
@@ -234,9 +218,6 @@ class GameController {
     ChatManager.addMessage('Create a game to host, or enter a Peer ID to join.');
   }
 
-  /* =========================
-     Input
-  ========================= */
   setupInput() {
     const input = InputManager.getInstance();
     input.setupKeyBindings();
@@ -296,7 +277,6 @@ class GameController {
         return;
       }
 
-      // ✅ IMPORTANT FIX: failed hold is NOT a game over
       if (code === b.hold) {
         this.gameState1.holdCurrentPiece();
         return;
@@ -314,9 +294,6 @@ class GameController {
     });
   }
 
-  /* =========================
-     Match helpers
-  ========================= */
   resetMatchScores() {
     this.match.hostScore = 0;
     this.match.clientScore = 0;
@@ -347,9 +324,6 @@ class GameController {
     return localWon ? 'YOU' : 'OPPONENT';
   }
 
-  /* =========================
-     NEW: send a forced "round reset" snapshot
-  ========================= */
   sendInitStateSnapshot() {
     if (!NetworkManager.getInstance().isConnected()) return;
     if (!this.gameState1) return;
@@ -358,16 +332,12 @@ class GameController {
     NetworkManager.getInstance().send({
       type: 'gameState',
       roundId: this.roundId,
-      init: true, // 👈 tell receiver "this is the reset snapshot"
+      init: true,
       state: this.gameState1.getState(),
     });
   }
 
-  /* =========================
-     Round start
-  ========================= */
   async startRound(seed, roundNumber, roundId) {
-    // Set the active round token FIRST
     this.roundId = roundId || this.roundId || `${Date.now()}-local`;
 
     this.phase = 'countdown';
@@ -381,7 +351,6 @@ class GameController {
 
     GameSettings.getInstance().update();
 
-    // Fresh states each round
     this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
     this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
 
@@ -389,32 +358,29 @@ class GameController {
     this.gameState1.setGameStartTime(startTime);
     this.gameState2.setGameStartTime(startTime);
 
-    InputManager.getInstance().resetForNewRound();
+    // ✅ IMPORTANT: do NOT poison timing; reset lastTime before (re)starting loop
+    this.lastTime = 0;
+    this.lastStateSendTime = 0;
 
-    // Spawn initial pieces
+    // Clear stuck inputs (fine)
+    InputManager.getInstance().reset();
+
     const ok1 = this.gameState1.spawnPiece();
-    const ok2 = this.gameState2.spawnPiece();
+    this.gameState2.spawnPiece();
     if (!ok1) { this.handleGameOver(); return; }
-    if (!ok2) { /* remote visual only */ }
 
-    // Draw once immediately so local sees reset instantly
     this.gameState1.draw();
     this.gameState2.draw();
 
-    // ✅ CRITICAL: push a "reset snapshot" so opponent board clears BEFORE countdown ends
     this.sendInitStateSnapshot();
 
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
+    // ✅ CRITICAL FIX: never call gameLoop() directly
     if (!this.gameRunning) {
       this.gameRunning = true;
-      this.lastTime = 0;
-      this.lastStateSendTime = 0;
-      this.gameLoop();
-    } else {
-      // Make sure we send quickly on a new round
-      this.lastStateSendTime = 0;
+      this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
     }
 
     await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
@@ -434,7 +400,6 @@ class GameController {
     const seed = Math.floor(Math.random() * 1000000000);
     const nextRound = (this.match.round || 0) + 1;
 
-    // Unique round token
     const roundId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     this.roundId = roundId;
 
@@ -448,9 +413,6 @@ class GameController {
     this.startRound(seed, nextRound, roundId);
   }
 
-  /* =========================
-     Network message handling
-  ========================= */
   handleNetworkMessage(msg) {
     switch (msg.type) {
       case 'chat':
@@ -527,7 +489,6 @@ class GameController {
         const seed = Number(msg.seed) || Math.floor(Math.random() * 1000000000);
         const round = Number(msg.round) || ((this.match.round || 0) + 1);
 
-        // Store active round token
         const roundId = msg.roundId || `${Date.now()}-recv`;
         this.roundId = roundId;
 
@@ -577,17 +538,13 @@ class GameController {
 
       case 'gameState': {
         if (!this.gameState2 || !msg.state) break;
-
-        // Ignore stale packets from older rounds
         if (!msg.roundId || msg.roundId !== this.roundId) break;
 
-        // ✅ IMPORTANT: accept init snapshots even if we're not "playing" yet
         if (msg.init === true) {
           this.gameState2.setState(msg.state);
           break;
         }
 
-        // Otherwise accept only when in-round
         if (this.phase === 'playing' || this.phase === 'countdown') {
           this.gameState2.setState(msg.state);
         }
@@ -599,9 +556,6 @@ class GameController {
     }
   }
 
-  /* =========================
-     Local game over (we lost)
-  ========================= */
   handleGameOver() {
     this.acceptInput = false;
     this.phase = 'roundOver';
@@ -630,57 +584,55 @@ class GameController {
     }
   }
 
-  /* =========================
-     Main loop
-  ========================= */
-  gameLoop(timestamp = 0) {
-  if (!this.gameRunning) return;
+  gameLoop(timestamp) {
+    if (!this.gameRunning) return;
 
-  const deltaTime = (this.lastTime === 0) ? 0 : (timestamp - this.lastTime);
-  this.lastTime = timestamp;
+    // ✅ Robust timestamp handling
+    if (!Number.isFinite(timestamp)) timestamp = performance.now();
 
-  try {
-    if (this.gameState1) {
-      const input = InputManager.getInstance();
+    let deltaTime = 0;
+    if (Number.isFinite(this.lastTime) && this.lastTime > 0) {
+      deltaTime = timestamp - this.lastTime;
+      if (!Number.isFinite(deltaTime) || deltaTime < 0 || deltaTime > 1000) deltaTime = 0;
+    }
+    this.lastTime = timestamp;
 
-      // ✅ GAME SIMULATION runs whenever phase is playing
-      if (this.phase === 'playing') {
-        // Only movement is gated by acceptInput
-        if (this.acceptInput && !this.gameState1.softDropActive) {
-          input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+    try {
+      if (this.gameState1) {
+        const input = InputManager.getInstance();
+
+        if (this.phase === 'playing') {
+          if (this.acceptInput && !this.gameState1.softDropActive) {
+            input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+          }
+
+          const ok = this.gameState1.update(deltaTime);
+          if (!ok) { this.handleGameOver(); return; }
         }
 
-        const ok = this.gameState1.update(deltaTime);
-        if (!ok) { this.handleGameOver(); return; }
+        const inRound = (this.phase === 'playing' || this.phase === 'countdown');
+        if (
+          inRound &&
+          this.roundId &&
+          NetworkManager.getInstance().isConnected() &&
+          (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
+        ) {
+          NetworkManager.getInstance().send({
+            type: 'gameState',
+            roundId: this.roundId,
+            state: this.gameState1.getState()
+          });
+          this.lastStateSendTime = timestamp;
+        }
+
+        this.gameState1.draw();
       }
 
-      // ✅ SEND STATE during countdown + playing (so resets are visible)
-      const inRound = (this.phase === 'playing' || this.phase === 'countdown');
-      if (
-        inRound &&
-        this.roundId &&
-        NetworkManager.getInstance().isConnected() &&
-        (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
-      ) {
-        NetworkManager.getInstance().send({
-          type: 'gameState',
-          roundId: this.roundId,
-          state: this.gameState1.getState()
-        });
-        this.lastStateSendTime = timestamp;
-      }
-
-      // Always draw
-      this.gameState1.draw();
+      if (this.gameState2) this.gameState2.draw();
+    } catch (err) {
+      console.error('gameLoop error:', err);
     }
 
-    if (this.gameState2) this.gameState2.draw();
-  } catch (err) {
-    // ✅ If something throws, log it instead of silently killing the loop
-    console.error('gameLoop error:', err);
+    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
   }
-
-  this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 }
-}
-
