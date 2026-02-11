@@ -308,7 +308,12 @@ class GameController {
         return;
       }
 
-      if (code === b.hold) { this.gameState1.holdCurrentPiece(); return; }
+      if (code === b.hold) {
+  const ok = this.gameState1.holdCurrentPiece();
+  if (!ok) this.handleGameOver();
+  return;
+}
+
     });
 
     document.addEventListener('keyup', (e) => {
