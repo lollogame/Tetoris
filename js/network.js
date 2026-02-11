@@ -11,6 +11,13 @@ class NetworkManager {
 
     // Optional local hook (e.g., Zen scoring)
     this.localAttackHandler = null;
+
+    // Optional: used only for UI wording
+    this.role = 'host'; // 'host' | 'client'
+
+    // Internal: retry if preferred ID is already taken
+    this._initAttempt = 0;
+    this._initOpts = null;
   }
 
   static getInstance() {
@@ -18,109 +25,202 @@ class NetworkManager {
     return NetworkManager.instance;
   }
 
-  initialize(onMessage) {
+  // Short, easy-to-type room code (no 0/O/1/I)
+  generateRoomCode(len = 6) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = '';
+    for (let i = 0; i < len; i++) {
+      out += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return out;
+  }
+
+  initialize(onMessage, opts = {}) {
     this.onMessageCallback = onMessage;
 
-    this.peer = new Peer({
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-      },
-    });
+    // room-code options (host can pass these)
+    this._initOpts = { ...opts };
+    this.role = (opts.role === 'client') ? 'client' : 'host';
+    this._initAttempt = 0;
 
-    this.peer.on('open', (id) => {
-      this.myPeerId = id;
-      document.getElementById('peerIdDisplay').textContent = id;
-      document.getElementById('myPeerId').classList.remove('hidden');
-      ChatManager.addMessage(`Your Peer ID: ${id}`);
-      ChatManager.addMessage('Share this ID with your opponent to let them join!');
-    });
+    const createPeer = () => {
+      // tear down previous peer cleanly
+      try { if (this.conn && this.conn.open) this.conn.close(); } catch (_) {}
+      this.conn = null;
 
-    // HOST receives incoming connection
-    this.peer.on('connection', (connection) => {
-      this.conn = connection;
+      try {
+        if (this.peer && !this.peer.destroyed) this.peer.destroy();
+      } catch (_) {}
+      this.peer = null;
+      this.myPeerId = null;
 
-      // IMPORTANT: wait for open before notifying controller
-      this.conn.on('open', () => {
-        this.setupConnection();
+      const wantRoomCode = !!this._initOpts.useRoomCode;
+      const codeLen = Math.max(4, Math.min(12, Number(this._initOpts.roomCodeLength) || 6));
 
-        ChatManager.addMessage('Opponent connected!');
-        document.getElementById('gameStatus').textContent = 'Connected! Preparing match...';
+      let desiredId = (typeof this._initOpts.preferredId === 'string') ? this._initOpts.preferredId.trim() : '';
 
-        // Now it's safe to send matchConfig / startRound immediately
-        if (this.onMessageCallback) this.onMessageCallback({ type: 'peerConnected' });
+      // host: generate a short room code unless one was provided
+      if (!desiredId && wantRoomCode) {
+        desiredId = this.generateRoomCode(codeLen);
+        this._initOpts.preferredId = desiredId;
+      }
+
+      // retry: if taken, generate a new one
+      if (this._initAttempt > 0 && wantRoomCode) {
+        desiredId = this.generateRoomCode(codeLen);
+        this._initOpts.preferredId = desiredId;
+      }
+
+      const peerOptions = {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+        },
+      };
+
+      // If desiredId exists => use it as PeerJS ID (this is the “alias”)
+      this.peer = desiredId ? new Peer(desiredId, peerOptions) : new Peer(peerOptions);
+
+      this.peer.on('open', (id) => {
+        this.myPeerId = id;
+
+        const peerIdEl = document.getElementById('peerIdDisplay');
+        if (peerIdEl) peerIdEl.textContent = id;
+
+        const peerBox = document.getElementById('myPeerId');
+        if (peerBox) peerBox.classList.remove('hidden');
+
+        if (typeof ChatManager !== 'undefined') {
+          if (this.role === 'host' && wantRoomCode) {
+            ChatManager.addMessage(`Room code ready: ${id}`, 'System');
+            ChatManager.addMessage('Share the room code with your opponent so they can join.', 'System');
+          } else {
+            ChatManager.addMessage(`Your Peer ID: ${id}`, 'System');
+          }
+        }
+
+        console.log('Peer opened with ID:', id);
       });
 
-      this.conn.on('error', (err) => {
-        ChatManager.addMessage(`Connection error: ${err}`);
-      });
-    });
+      this.peer.on('connection', (conn) => {
+        if (this.conn && this.conn.open) {
+          try { this.conn.close(); } catch (_) {}
+        }
 
-    this.peer.on('error', (err) => {
-      console.error('PeerJS error:', err);
-      ChatManager.addMessage(`Connection error: ${err.type}`);
-    });
+        this.conn = conn;
+        this.setupConnectionHandlers();
+
+        if (typeof ChatManager !== 'undefined') {
+          ChatManager.addMessage('Opponent connected!', 'System');
+        }
+        this.handleInternalMessage({ type: 'peerConnected' });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('Peer error:', err);
+
+        // If our short room code is taken, retry a few times automatically
+        if (err && err.type === 'unavailable-id' && wantRoomCode && this._initAttempt < 5) {
+          this._initAttempt += 1;
+          if (typeof ChatManager !== 'undefined') {
+            ChatManager.addMessage('Room code already in use — generating a new one…', 'System');
+          }
+          createPeer();
+          return;
+        }
+
+        if (typeof ChatManager !== 'undefined') {
+          ChatManager.addMessage(`Network error: ${err?.type || err?.message || 'unknown'}`, 'System');
+        }
+      });
+    };
+
+    createPeer();
   }
 
-  // JOINER connects to host
   connect(peerId) {
-    setTimeout(() => {
-      this.conn = this.peer.connect(peerId);
+    if (!this.peer) {
+      ChatManager.addMessage('Peer not initialized yet.', 'System');
+      return;
+    }
 
-      this.conn.on('open', () => {
-        this.setupConnection();
-        ChatManager.addMessage('Connected to opponent!');
-        document.getElementById('gameStatus').textContent =
-          'Connected! Waiting for host to start...';
-        document.getElementById('joinGameBtn').disabled = true;
+    const cleanId = String(peerId || '').trim();
+    if (!cleanId) return;
 
-        if (this.onMessageCallback) this.onMessageCallback({ type: 'joinedLobby' });
-      });
+    this.role = 'client';
 
-      this.conn.on('error', (err) => {
-        ChatManager.addMessage(`Failed to connect: ${err}`);
-      });
-    }, 200);
+    this.conn = this.peer.connect(cleanId);
+
+    this.conn.on('open', () => {
+      this.setupConnectionHandlers();
+      ChatManager.addMessage('Connected to host!', 'System');
+
+      const joinBtn = document.getElementById('joinGameBtn');
+      if (joinBtn) joinBtn.disabled = true;
+
+      this.handleInternalMessage({ type: 'joinedLobby' });
+    });
+
+    this.conn.on('error', (err) => {
+      console.error('Connection error:', err);
+      ChatManager.addMessage(`Connection error: ${err?.message || err?.type || 'unknown'}`, 'System');
+    });
   }
 
-  setupConnection() {
+  setupConnectionHandlers() {
     if (!this.conn) return;
 
     this.conn.on('data', (data) => {
+      // Local-only hook (Zen etc)
+      if (data?.type === 'attack' && typeof this.localAttackHandler === 'function') {
+        this.localAttackHandler(data.lines);
+        return;
+      }
+
       if (this.onMessageCallback) this.onMessageCallback(data);
     });
 
     this.conn.on('close', () => {
-      ChatManager.addMessage('Opponent disconnected');
-      document.getElementById('gameStatus').textContent = 'Opponent disconnected';
+      console.log('Connection closed');
+      ChatManager.addMessage('Opponent disconnected.', 'System');
+      this.handleInternalMessage({ type: 'peerDisconnected' });
+
+      const joinBtn = document.getElementById('joinGameBtn');
+      if (joinBtn) joinBtn.disabled = false;
     });
   }
 
-  send(msg) {
-    if (this.conn && this.conn.open) this.conn.send(msg);
-  }
-
-  sendAttack(lines) {
-    const safe = Math.max(0, Math.min(10, Number(lines) || 0));
-
-    // Always allow local hook (even if not connected)
-    if (typeof this.localAttackHandler === 'function' && safe > 0) {
-      try { this.localAttackHandler(safe); } catch (e) { console.error('localAttackHandler error:', e); }
-    }
-
-    // Only send over network if connected
-    if (this.conn && this.conn.open && safe > 0) {
-      this.conn.send({ type: 'attack', lines: safe });
-    }
-  }
-
-  setLocalAttackHandler(fn) {
-    this.localAttackHandler = (typeof fn === 'function') ? fn : null;
+  handleInternalMessage(msg) {
+    if (this.onMessageCallback) this.onMessageCallback(msg);
   }
 
   isConnected() {
     return this.conn && this.conn.open;
+  }
+
+  send(message) {
+    if (this.conn && this.conn.open) {
+      this.conn.send(message);
+    }
+  }
+
+  sendAttack(lines) {
+    // clamp
+    const safe = Math.max(0, Math.min(10, Number(lines) || 0));
+    if (safe === 0) return;
+
+    // if local hook exists, don't network it
+    if (typeof this.localAttackHandler === 'function') {
+      this.localAttackHandler(safe);
+      return;
+    }
+
+    this.send({ type: 'attack', lines: safe });
+  }
+
+  setLocalAttackHandler(handler) {
+    this.localAttackHandler = (typeof handler === 'function') ? handler : null;
   }
 }
