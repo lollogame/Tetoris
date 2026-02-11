@@ -975,7 +975,6 @@ class GameController {
             const ok = this.gameState1.update(deltaTime);
             if (!ok) {
               this.handleGameOver();
-              return;
             }
           }
 
