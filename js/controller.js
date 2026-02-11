@@ -615,9 +615,17 @@ async runCountdown(seconds = 3) {
         break;
       }
 
-      case 'gameState':
-        if (this.gameState2 && msg.state) this.gameState2.setState(msg.state);
-        break;
+      case 'gameState': {
+  if (!this.gameState2 || !msg.state) break;
+
+  // Only accept board updates while we're actually in-round
+  // (prevents stale packets from overwriting freshly reset boards)
+  if (this.phase === 'playing' || this.phase === 'countdown') {
+    this.gameState2.setState(msg.state);
+  }
+  break;
+}
+
 
       default:
         break;
