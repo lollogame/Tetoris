@@ -280,11 +280,12 @@ class GameController {
       if (code === b.softDrop) { this.gameState1.setSoftDropActive(true); return; }
 
       if (code === b.hardDrop) {
-        this.gameState1.hardDrop();
-        this.gameState1.spawnPiece();
-        input.resetMovementOnSpawn();
-        return;
-      }
+      const ok = this.gameState1.hardDropAndSpawn();
+      if (!ok) { this.handleGameOver(); }
+      input.resetMovementOnSpawn();
+      return;
+    }
+
 
       if (code === b.rotateCW) {
         const ok = this.gameState1.rotate('cw');
