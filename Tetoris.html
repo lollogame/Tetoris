@@ -304,6 +304,17 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
+
+      /* ✅ FIX: keep it clickable above canvas/overlays */
+      position: relative;
+      z-index: 30001;
+    }
+
+    /* ✅ FIX: make sure buttons always accept clicks */
+    #openMenuBtn, #openSettingsBtn {
+      position: relative;
+      z-index: 30002;
+      pointer-events: auto;
     }
 
     .topbar .topbar-left, .topbar .topbar-right {
@@ -351,8 +362,14 @@
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
+    /* ✅ FIX: if hidden, it MUST NOT intercept clicks */
+    #settingsModal.hidden,
+    #countdownOverlay.hidden {
+      pointer-events: none !important;
+    }
+
     /* =========================
-       NEW: Match Scoreboard
+       Match Scoreboard
     ========================= */
     .scoreboard {
       display: flex;
@@ -387,7 +404,7 @@
     }
 
     /* =========================
-       NEW: Countdown Overlay
+       Countdown Overlay
     ========================= */
     .countdown-overlay {
       position: fixed;
@@ -398,6 +415,8 @@
       align-items: center;
       background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
       backdrop-filter: blur(3px);
+
+      /* ✅ Keep clicks going through (so Menu still works) */
       pointer-events: none;
     }
 
@@ -424,7 +443,6 @@
       font-size: 0.9rem;
       color: var(--text-secondary);
     }
-
   </style>
 </head>
 
@@ -441,7 +459,7 @@
       </div>
     </div>
 
-    <!-- NEW: Match scoreboard -->
+    <!-- Match scoreboard -->
     <div id="scoreboard" class="scoreboard hidden">
       <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
       <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
@@ -464,7 +482,7 @@
           <button class="modal-close" id="closeSettingsBtn">Close</button>
         </div>
 
-        <!-- NEW: Match format selector -->
+        <!-- Match format selector -->
         <div class="controls-panel">
           <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Match</h2>
           <div class="controls-grid">
@@ -492,7 +510,7 @@
           </div>
         </div>
 
-        <!-- Your existing controls -->
+        <!-- Controls -->
         <div class="controls-panel">
           <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Controls</h2>
           <div class="controls-grid">
@@ -625,5 +643,22 @@
   <script src="js/controller.js"></script>
   <script src="js/debugHeartbeat.js"></script>
   <script src="js/main.js"></script>
+
+  <!-- ✅ FIX: Menu button wiring (no need to touch controller.js) -->
+  <script>
+    (function () {
+      const menuBtn = document.getElementById('openMenuBtn');
+      const settingsBtn = document.getElementById('openSettingsBtn');
+      const settingsModal = document.getElementById('settingsModal');
+
+      function openSettings() {
+        if (settingsModal) settingsModal.classList.remove('hidden');
+      }
+
+      if (menuBtn) menuBtn.addEventListener('click', openSettings);
+      // optional redundancy (in case your controller wiring changes later)
+      if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+    })();
+  </script>
 </body>
 </html>
