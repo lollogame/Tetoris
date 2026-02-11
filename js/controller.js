@@ -629,13 +629,16 @@ if (NetworkManager.getInstance().isConnected()) {
       case 'gameState': {
   if (!this.gameState2 || !msg.state) break;
 
-  // Only accept board updates while we're actually in-round
-  // (prevents stale packets from overwriting freshly reset boards)
+  // Ignore late packets from previous rounds
+  if (Number(msg.round) !== Number(this.match.round)) break;
+
+  // Only accept during countdown/playing
   if (this.phase === 'playing' || this.phase === 'countdown') {
     this.gameState2.setState(msg.state);
   }
   break;
 }
+
 
 
       default:
