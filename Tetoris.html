@@ -296,7 +296,7 @@
     .copy-btn { margin-top: 10px; font-size: 0.6rem; padding: 8px 16px; }
 
     /* =========================
-       Topbar + Settings Modal
+       Topbar + Modals
     ========================= */
     .topbar {
       display: flex;
@@ -305,12 +305,11 @@
       gap: 10px;
       margin-bottom: 10px;
 
-      /* ✅ FIX: keep it clickable above canvas/overlays */
+      /* keep clickable */
       position: relative;
       z-index: 30001;
     }
 
-    /* ✅ FIX: make sure buttons always accept clicks */
     #openMenuBtn, #openSettingsBtn {
       position: relative;
       z-index: 30002;
@@ -362,8 +361,9 @@
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
-    /* ✅ FIX: if hidden, it MUST NOT intercept clicks */
+    /* when hidden, must not intercept clicks */
     #settingsModal.hidden,
+    #menuModal.hidden,
     #countdownOverlay.hidden {
       pointer-events: none !important;
     }
@@ -415,9 +415,7 @@
       align-items: center;
       background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
       backdrop-filter: blur(3px);
-
-      /* ✅ Keep clicks going through (so Menu still works) */
-      pointer-events: none;
+      pointer-events: none; /* let clicks go through */
     }
 
     .countdown-card {
@@ -471,6 +469,26 @@
       <div class="countdown-card">
         <div class="countdown-big" id="countdownText">3</div>
         <div class="countdown-sub" id="countdownSub">Get ready…</div>
+      </div>
+    </div>
+
+    <!-- ✅ MENU MODAL (NEW) -->
+    <div id="menuModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Menu</h2>
+          <button class="modal-close" id="closeMenuBtn">Close</button>
+        </div>
+
+        <div class="controls-panel" style="margin-bottom:0;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+            <button id="menuResumeBtn">Resume</button>
+            <button id="menuRestartBtn">Restart</button>
+          </div>
+          <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
+            Menu is separate from Settings.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -644,20 +662,50 @@
   <script src="js/debugHeartbeat.js"></script>
   <script src="js/main.js"></script>
 
-  <!-- ✅ FIX: Menu button wiring (no need to touch controller.js) -->
+  <!-- ✅ FIXED: proper Menu + Settings wiring -->
   <script>
     (function () {
       const menuBtn = document.getElementById('openMenuBtn');
       const settingsBtn = document.getElementById('openSettingsBtn');
+
+      const menuModal = document.getElementById('menuModal');
       const settingsModal = document.getElementById('settingsModal');
 
-      function openSettings() {
-        if (settingsModal) settingsModal.classList.remove('hidden');
-      }
+      const closeMenuBtn = document.getElementById('closeMenuBtn');
+      const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 
-      if (menuBtn) menuBtn.addEventListener('click', openSettings);
-      // optional redundancy (in case your controller wiring changes later)
-      if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+      const resumeBtn = document.getElementById('menuResumeBtn');
+      const restartBtn = document.getElementById('menuRestartBtn');
+
+      function openModal(modal) { if (modal) modal.classList.remove('hidden'); }
+      function closeModal(modal) { if (modal) modal.classList.add('hidden'); }
+
+      // Openers
+      if (menuBtn) menuBtn.addEventListener('click', () => openModal(menuModal));
+      if (settingsBtn) settingsBtn.addEventListener('click', () => openModal(settingsModal));
+
+      // Closers
+      if (closeMenuBtn) closeMenuBtn.addEventListener('click', () => closeModal(menuModal));
+      if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+
+      // Click outside closes
+      if (menuModal) menuModal.addEventListener('click', (e) => { if (e.target === menuModal) closeModal(menuModal); });
+      if (settingsModal) settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeModal(settingsModal); });
+
+      // Menu actions
+      if (resumeBtn) resumeBtn.addEventListener('click', () => closeModal(menuModal));
+      if (restartBtn) restartBtn.addEventListener('click', () => {
+        closeModal(menuModal);
+        const r = document.getElementById('restartBtn');
+        if (r) r.click();
+      });
+
+      // Escape closes whichever is open
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (settingsModal && !settingsModal.classList.contains('hidden')) closeModal(settingsModal);
+        if (menuModal && !menuModal.classList.contains('hidden')) closeModal(menuModal);
+      });
     })();
   </script>
 </body>
