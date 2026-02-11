@@ -803,6 +803,8 @@ class GameState {
     this.softDropActive = false;
 
     this.pendingGarbage = [];
+    this.garbageHole = this.rng.nextInt(COLS);
+
 
     const canvas = document.getElementById(canvasId);
     const holdCanvas = document.getElementById(holdCanvasId);
@@ -1102,6 +1104,26 @@ class GameState {
     return attack;
   }
 
+    getNextGarbageHole() {
+  // tweak these
+  const DRIFT_CHANCE = 0.80; // chance to drift instead of stay
+  const JUMP_CHANCE  = 0.10; // rare teleport
+
+  if (this.rng.next() < JUMP_CHANCE) {
+    this.garbageHole = this.rng.nextInt(COLS);
+    return this.garbageHole;
+  }
+
+  if (this.rng.next() < DRIFT_CHANCE) {
+    const step = [-1, 0, 1][this.rng.nextInt(3)];
+    this.garbageHole = (this.garbageHole + step + COLS) % COLS;
+  }
+  // else: keep same hole
+
+  return this.garbageHole;
+}
+
+
   clearLines(lastPiece, isSpin) {
     const clearedRows = [];
     for (let row = 0; row < ROWS; row++) {
@@ -1153,8 +1175,11 @@ class GameState {
   receiveAttack(lines) {
   const safe = Math.max(0, Math.min(10, Number(lines) || 0));
   if (safe === 0) return;
-  this.pendingGarbage.push({ lines: safe, hole: this.rng.nextInt(COLS) });
+
+  const hole = this.getNextGarbageHole(); // ✅ one hole per attack
+  this.pendingGarbage.push({ lines: safe, hole });
 }
+
 
 
   applyGarbage() {
