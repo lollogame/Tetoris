@@ -97,14 +97,21 @@ class GameState {
   }
 
   spawnPiece() {
-    const pieceType = this.queue.shift();
-    this.queue.push(this.getNextPiece());
-    this.resetPieceState(pieceType);
-    this.canHold = true;
+  const pieceType = this.queue.shift();
+  this.queue.push(this.getNextPiece());
+  this.resetPieceState(pieceType);
+  this.canHold = true;
 
-    this.afterSpawnInput();
-    return true;
+  // If the spawn position itself is invalid, top-out
+  if (!this.isValidPosition(this.currentX, this.currentY, this.currentRotation)) {
+    return false;
   }
+
+  // Apply IRS / buffered rotation immediately, and re-arm movement
+  this.afterSpawnInput();
+  return true;
+}
+
 
   bufferRotation(dir) { this.rotateBuffer = { dir, time: performance.now() }; }
 
@@ -230,6 +237,21 @@ class GameState {
     }
     return ok;
   }
+
+   hardDropAndSpawn() {
+  // Hard drop to bottom
+  while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+    this.currentY++;
+  }
+
+  // Attempt to lock
+  const locked = this.lockPiece();
+  if (!locked) return false;
+
+  // Spawn next; if blocked, game over
+  return this.spawnPiece();
+}
+
 
   lockPiece() {
     if (!this.currentPiece) return false;
