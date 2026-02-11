@@ -757,6 +757,7 @@ class GameState {
     this.playerId = playerId;
     this.rng = new SeededRandom(seed);
     this.gameStartTime = Date.now();
+    this._lastUpdateNow = performance.now();
 
     this.board = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
     this.currentPiece = null;
@@ -1191,67 +1192,100 @@ class GameState {
   }
 
   update(deltaTime) {
-    if (!this.currentPiece) return true;
+  if (!this.currentPiece) return true;
 
-    this.consumeRotationBuffer();
+  // ---- HARDEN TIMING: avoid NaN / weird deltaTime on some systems ----
+  let dt = Number(deltaTime);
 
-    if (this.hardDropCooldown > 0) this.hardDropCooldown--;
-    if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
+  // If dt is invalid, rebuild it from performance.now()
+  if (!Number.isFinite(dt) || dt < 0) {
+    const now = performance.now();
+    dt = now - (this._lastUpdateNow ?? now);
+    this._lastUpdateNow = now;
+  }
 
-    const wasTouching = this.isTouchingGround;
-    this.isTouchingGround = !this.isValidPosition(
-      this.currentX,
-      this.currentY + 1,
-      this.currentRotation
-    );
+  // Final clamps
+  if (!Number.isFinite(dt) || dt < 0) dt = 0;
+  if (dt > 50) dt = 50; // clamp big hitches
 
-    if (this.isTouchingGround && !wasTouching) {
-      this.lockDelayTimer = 0;
+  // Ensure accumulators never become NaN
+  if (!Number.isFinite(this.lastGravityTime)) this.lastGravityTime = 0;
+  if (!Number.isFinite(this.lockDelayTimer)) this.lockDelayTimer = 0;
+  if (!Number.isFinite(this.dcdTimer)) this.dcdTimer = 0;
+
+  // Rotation buffer / IRS
+  this.consumeRotationBuffer();
+
+  // Cooldowns/timers
+  if (this.hardDropCooldown > 0) this.hardDropCooldown--;
+  if (this.dcdTimer > 0) this.dcdTimer -= dt;
+
+  // Ground check
+  const wasTouching = this.isTouchingGround;
+  this.isTouchingGround = !this.isValidPosition(
+    this.currentX,
+    this.currentY + 1,
+    this.currentRotation
+  );
+
+  if (this.isTouchingGround && !wasTouching) {
+    this.lockDelayTimer = 0;
+    this.lastGravityTime = 0;
+  }
+
+  // Gravity accumulator
+  this.lastGravityTime += dt;
+
+  if (this.isTouchingGround) {
+    // Lock delay
+    this.lockDelayTimer += dt;
+
+    if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
+      const ok = this.lockPiece();
+      if (!ok) return false;
+
+      const settings = GameSettings.getInstance();
+      if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
+
+      this.spawnPiece();
       this.lastGravityTime = 0;
     }
+  } else {
+    const settings = GameSettings.getInstance();
+    let fallInterval = this.gravity; // ms per cell
 
-    this.lastGravityTime += deltaTime;
-
-    if (this.isTouchingGround) {
-      this.lockDelayTimer += deltaTime;
-
-      if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
-        const ok = this.lockPiece();
-        if (!ok) return false;
-
-        const settings = GameSettings.getInstance();
-        if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
-
-        this.spawnPiece();
+    // Soft drop handling
+    if (this.softDropActive) {
+      if (settings.sdf === 'inf') {
+        while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+          this.currentY++;
+        }
         this.lastGravityTime = 0;
-      }
-    } else {
-      const settings = GameSettings.getInstance();
-      let fallInterval = this.gravity;
-
-      if (this.softDropActive) {
-        if (settings.sdf === 'inf') {
-          while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-            this.currentY++;
-          }
-          this.lastGravityTime = 0;
-        } else {
-          fallInterval = this.gravity / Math.max(1, settings.sdf);
-        }
-      }
-
-      if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
-        while (this.lastGravityTime >= fallInterval) {
-          if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
-          else break;
-          this.lastGravityTime -= fallInterval;
-        }
+      } else {
+        const sdf = Number(settings.sdf);
+        fallInterval = this.gravity / Math.max(1, Number.isFinite(sdf) ? sdf : 1);
       }
     }
 
-    if (this.spawnGrace) this.spawnGrace = false;
-    return true;
+    // Apply gravity steps
+    if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
+      while (this.lastGravityTime >= fallInterval) {
+        if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+          this.currentY++;
+        } else {
+          break;
+        }
+        this.lastGravityTime -= fallInterval;
+      }
+    }
   }
+
+  // End spawn grace after one update tick
+  if (this.spawnGrace) this.spawnGrace = false;
+
+  return true;
+}
+
 
   updateStats() {
     const elapsed = (Date.now() - this.gameStartTime) / 1000;
@@ -1321,16 +1355,28 @@ class GameSettings {
   static instance=null;
   constructor(){ this.arr=0; this.das=167; this.dcd=0; this.sdf=6; this.preventMissdrop=true; }
   static getInstance(){ if(!GameSettings.instance) GameSettings.instance=new GameSettings(); return GameSettings.instance; }
+    
   update(){
-    this.arr=parseInt(document.getElementById('arr').value);
-    this.das=parseInt(document.getElementById('das').value);
-    this.dcd=parseInt(document.getElementById('dcd').value);
+  const safeInt = (id, fallback) => {
+    const v = parseInt(document.getElementById(id).value, 10);
+    return Number.isFinite(v) ? v : fallback;
+  };
 
-    const sdfValue=document.getElementById('sdf').value;
-    this.sdf = (sdfValue==='inf') ? 'inf' : parseFloat(sdfValue);
+  this.arr = safeInt('arr', 0);
+  this.das = safeInt('das', 167);
+  this.dcd = safeInt('dcd', 0);
 
-    this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+  const sdfValue = document.getElementById('sdf').value;
+  if (sdfValue === 'inf') {
+    this.sdf = 'inf';
+  } else {
+    const f = parseFloat(sdfValue);
+    this.sdf = Number.isFinite(f) ? f : 6;
   }
+
+  this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+}
+
 }
 
 class ChatManager {
