@@ -1290,6 +1290,7 @@ if (this.playerId === 1) {
 }
 
 return true;
+  }
 
 
 
@@ -1919,7 +1920,7 @@ class GameController {
     // 1) Simulation loop (interval) — drives gravity
     this.simIntervalId = setInterval(() => {
       if (!this.gameRunning) return;
-      this.simulateFixedSteps();
+      this.edSteps();
     }, this.FIXED_DT);
 
     // 2) Render loop (rAF) — draws as often as possible
@@ -1972,8 +1973,6 @@ class GameController {
     // On-screen heartbeat so you can SEE if this tab is ticking
     const focus = document.hasFocus();
     const hidden = document.hidden;
-    document.getElementById('gameStatus').textContent =
-      `Game in progress! tick=${this.simTickCount} focus=${focus} hidden=${hidden}`;
   }
 
   stepSimulation(dt) {
