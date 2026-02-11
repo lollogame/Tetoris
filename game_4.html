@@ -1226,7 +1226,7 @@ class GameState {
         this.lastGravityTime = 0;
       }
     } else {
-      const settings = GameSettings.getInstance();
+            const settings = GameSettings.getInstance();
       let fallInterval = this.gravity;
 
       if (this.softDropActive) {
@@ -1236,8 +1236,17 @@ class GameState {
           }
           this.lastGravityTime = 0;
         } else {
-          fallInterval = this.gravity / Math.max(1, settings.sdf);
+          // settings.sdf is guaranteed numeric by GameSettings.update(), but clamp anyway
+          const sdfNum = Number(settings.sdf);
+          const safeSdf = Number.isFinite(sdfNum) ? Math.max(1, sdfNum) : 1;
+          fallInterval = this.gravity / safeSdf;
         }
+      }
+
+      // ✅ Safety clamp so fallInterval can never be NaN/0/negative
+      if (!Number.isFinite(fallInterval) || fallInterval <= 0) {
+        console.warn('Bad fallInterval; forcing default', { fallInterval, sdf: settings.sdf });
+        fallInterval = this.gravity;
       }
 
       if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
@@ -1247,6 +1256,7 @@ class GameState {
           this.lastGravityTime -= fallInterval;
         }
       }
+
     }
 
     if (this.spawnGrace) this.spawnGrace = false;
@@ -1318,20 +1328,59 @@ class GameState {
    Settings / Chat / Network
 ========================================================= */
 class GameSettings {
-  static instance=null;
-  constructor(){ this.arr=0; this.das=167; this.dcd=0; this.sdf=6; this.preventMissdrop=true; }
-  static getInstance(){ if(!GameSettings.instance) GameSettings.instance=new GameSettings(); return GameSettings.instance; }
-  update(){
-    this.arr=parseInt(document.getElementById('arr').value);
-    this.das=parseInt(document.getElementById('das').value);
-    this.dcd=parseInt(document.getElementById('dcd').value);
+  static instance = null;
 
-    const sdfValue=document.getElementById('sdf').value;
-    this.sdf = (sdfValue==='inf') ? 'inf' : parseFloat(sdfValue);
+  constructor() {
+    this.arr = 0;
+    this.das = 167;
+    this.dcd = 0;
+    this.sdf = 6;              // number or 'inf'
+    this.preventMissdrop = true;
+  }
 
-    this.preventMissdrop = document.getElementById('preventMissdrop').value === 'true';
+  static getInstance() {
+    if (!GameSettings.instance) GameSettings.instance = new GameSettings();
+    return GameSettings.instance;
+  }
+
+  // safe int read with fallback
+  _int(id, def, min = -Infinity, max = Infinity) {
+    const el = document.getElementById(id);
+    const raw = el ? el.value : '';
+    const v = parseInt(raw, 10);
+    if (!Number.isFinite(v)) return def;
+    return Math.min(max, Math.max(min, v));
+  }
+
+  // safe float read with fallback
+  _floatStr(str, def, min = -Infinity, max = Infinity) {
+    const v = parseFloat(str);
+    if (!Number.isFinite(v)) return def;
+    return Math.min(max, Math.max(min, v));
+  }
+
+  update() {
+    // clamp to your intended ranges (you can tweak)
+    this.arr = this._int('arr', 0, 0, 200);
+    this.das = this._int('das', 167, 0, 500);
+    this.dcd = this._int('dcd', 0, 0, 100);
+
+    const sdfEl = document.getElementById('sdf');
+    const rawSdf = sdfEl ? sdfEl.value : '6';
+
+    if (rawSdf === 'inf') {
+      this.sdf = 'inf';
+    } else {
+      // if browser restores "" or garbage, fall back to 6
+      this.sdf = this._floatStr(rawSdf, 6, 1, 999999);
+    }
+
+    const pmEl = document.getElementById('preventMissdrop');
+    const rawPM = pmEl ? pmEl.value : 'true';
+    this.preventMissdrop = (rawPM === 'true');
   }
 }
+
 
 class ChatManager {
   static addMessage(message,sender='System'){
@@ -1845,7 +1894,7 @@ class GameController {
     const deltaTime = (this.lastTime===0) ? 0 : (timestamp-this.lastTime);
     this.lastTime=timestamp;
 
-    GameSettings.getInstance().update();
+    //GameSettings.getInstance().update();
 
     if(this.gameState1){
       const input=InputManager.getInstance();
