@@ -634,17 +634,19 @@ class GameController {
      Main loop
   ========================= */
   gameLoop(timestamp = 0) {
-    if (!this.gameRunning) return;
+  if (!this.gameRunning) return;
 
-    const deltaTime = (this.lastTime === 0) ? 0 : (timestamp - this.lastTime);
-    this.lastTime = timestamp;
+  const deltaTime = (this.lastTime === 0) ? 0 : (timestamp - this.lastTime);
+  this.lastTime = timestamp;
 
+  try {
     if (this.gameState1) {
       const input = InputManager.getInstance();
 
-      // Update local gameplay only during active play
-      if (this.phase === 'playing' && this.acceptInput) {
-        if (!this.gameState1.softDropActive) {
+      // ✅ GAME SIMULATION runs whenever phase is playing
+      if (this.phase === 'playing') {
+        // Only movement is gated by acceptInput
+        if (this.acceptInput && !this.gameState1.softDropActive) {
           input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
         }
 
@@ -652,12 +654,12 @@ class GameController {
         if (!ok) { this.handleGameOver(); return; }
       }
 
-      // ✅ SEND STATE DURING COUNTDOWN + PLAYING
+      // ✅ SEND STATE during countdown + playing (so resets are visible)
       const inRound = (this.phase === 'playing' || this.phase === 'countdown');
       if (
         inRound &&
-        NetworkManager.getInstance().isConnected() &&
         this.roundId &&
+        NetworkManager.getInstance().isConnected() &&
         (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
       ) {
         NetworkManager.getInstance().send({
@@ -673,7 +675,12 @@ class GameController {
     }
 
     if (this.gameState2) this.gameState2.draw();
-
-    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+  } catch (err) {
+    // ✅ If something throws, log it instead of silently killing the loop
+    console.error('gameLoop error:', err);
   }
+
+  this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 }
+}
+
