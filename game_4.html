@@ -1628,6 +1628,9 @@ class InputManager {
 /* =========================================================
    Game Controller
 ========================================================= */
+/* =========================================================
+   Game Controller (robust timing)
+========================================================= */
 class GameController {
   constructor() {
     this.gameState1 = null;
@@ -1635,27 +1638,26 @@ class GameController {
     this.gameRunning = false;
     this.gameSeed = null;
 
-    this.lastStateSendTime = 0;
     this.animationFrameId = null;
 
-    // Fixed-step sim timing
-    this.simLast = performance.now();
-    this.simAcc = 0;
-    this.FIXED_DT = 1000 / 60; // 60 Hz simulation
-    this.MAX_FRAME = 250;      // clamp hitches/stalls
+    // Networking send
+    this.lastStateSendTime = 0;
 
-    // Bind once (important!)
-    this.gameLoop = this.gameLoop.bind(this);
+    // Fixed-step sim
+    this.FIXED_DT = 1000 / 60; // 60 Hz
+    this.MAX_CATCHUP_STEPS = 10; // avoid spiral of death
+    this.simIntervalId = null;
+
+    // For debug/overlay
+    this.simTickCount = 0;
+    this.lastSimTickAt = performance.now();
 
     this.setupUI();
     this.setupInput();
 
-    // Reset sim clock when page regains visibility (prevents weird catch-up)
+    // If tab regains visibility, reset tick timestamps so we don't "jump"
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        this.simLast = performance.now();
-        this.simAcc = 0;
-      }
+      this.lastSimTickAt = performance.now();
     });
   }
 
@@ -1677,7 +1679,6 @@ class GameController {
         ChatManager.addMessage('Please enter an opponent Peer ID');
         return;
       }
-
       NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
       setTimeout(() => NetworkManager.getInstance().connect(opponentId), 300);
     });
@@ -1802,6 +1803,7 @@ class GameController {
       this.restartGame();
     } else if (msg.type === 'gameOver') {
       this.gameRunning = false;
+      this.stopLoops();
       ChatManager.addMessage('Opponent lost! You win! 🎉', 'System');
       document.getElementById('gameStatus').textContent = 'You Win! 🏆';
     }
@@ -1811,7 +1813,6 @@ class GameController {
     this.gameRunning = true;
     document.getElementById('gameArea').classList.remove('hidden');
     document.getElementById('restartBtn').classList.remove('hidden');
-    document.getElementById('gameStatus').textContent = 'Game in progress!';
 
     if (!this.gameSeed) {
       this.gameSeed = Math.floor(Math.random() * 1000000000);
@@ -1832,21 +1833,21 @@ class GameController {
     this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
 
-    ChatManager.addMessage('Game started! Good luck!');
-
-    // Reset sim clock + start loop
-    this.simLast = performance.now();
-    this.simAcc = 0;
     this.lastStateSendTime = 0;
 
-    // Cancel any old loop just in case
-    if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId);
-    this.animationFrameId = requestAnimationFrame(this.gameLoop);
+    // Reset tick debug
+    this.simTickCount = 0;
+    this.lastSimTickAt = performance.now();
+
+    this.stopLoops();
+    this.startLoops();
+
+    ChatManager.addMessage('Game started! Good luck!');
   }
 
   restartGame() {
     this.gameRunning = false;
-    if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId);
+    this.stopLoops();
 
     setTimeout(() => {
       this.startGame();
@@ -1858,11 +1859,73 @@ class GameController {
     ChatManager.addMessage('You lost! Click Restart to play again.', 'System');
     document.getElementById('gameStatus').textContent = 'Game Over! You lost.';
     this.gameRunning = false;
+    this.stopLoops();
     NetworkManager.getInstance().send({ type: 'gameOver' });
   }
 
+  startLoops() {
+    // 1) Simulation loop (interval) — drives gravity
+    this.simIntervalId = setInterval(() => {
+      if (!this.gameRunning) return;
+      this.simulateFixedSteps();
+    }, this.FIXED_DT);
+
+    // 2) Render loop (rAF) — draws as often as possible
+    const render = () => {
+      if (!this.gameRunning) return;
+
+      // Render both boards
+      if (this.gameState1) this.gameState1.draw();
+      if (this.gameState2) this.gameState2.draw();
+
+      this.animationFrameId = requestAnimationFrame(render);
+    };
+
+    this.animationFrameId = requestAnimationFrame(render);
+  }
+
+  stopLoops() {
+    if (this.simIntervalId !== null) {
+      clearInterval(this.simIntervalId);
+      this.simIntervalId = null;
+    }
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+
+  simulateFixedSteps() {
+    // We use a catch-up mechanism in case the interval fires late.
+    const now = performance.now();
+    let elapsed = now - this.lastSimTickAt;
+    if (elapsed < 0) elapsed = 0;
+
+    // Convert elapsed into fixed steps, cap it
+    let steps = Math.floor(elapsed / this.FIXED_DT);
+    if (steps < 1) steps = 1;
+    if (steps > this.MAX_CATCHUP_STEPS) steps = this.MAX_CATCHUP_STEPS;
+
+    // advance the "last tick" by the amount we actually simulated
+    this.lastSimTickAt += steps * this.FIXED_DT;
+
+    // Update settings once per simulate batch
+    GameSettings.getInstance().update();
+
+    for (let i = 0; i < steps; i++) {
+      if (!this.stepSimulation(this.FIXED_DT)) return; // game over, stop
+      this.simTickCount++;
+    }
+
+    // On-screen heartbeat so you can SEE if this tab is ticking
+    const focus = document.hasFocus();
+    const hidden = document.hidden;
+    document.getElementById('gameStatus').textContent =
+      `Game in progress! tick=${this.simTickCount} focus=${focus} hidden=${hidden}`;
+  }
+
   stepSimulation(dt) {
-    if (!this.gameState1) return;
+    if (!this.gameState1) return true;
 
     const input = InputManager.getInstance();
 
@@ -1873,7 +1936,7 @@ class GameController {
     const ok = this.gameState1.update(dt);
     if (!ok) {
       this.handleGameOver();
-      return;
+      return false;
     }
 
     const t = performance.now();
@@ -1881,38 +1944,8 @@ class GameController {
       NetworkManager.getInstance().send({ type: 'gameState', state: this.gameState1.getState() });
       this.lastStateSendTime = t;
     }
-  }
 
-  gameLoop() {
-    if (!this.gameRunning) return;
-
-    try {
-      const now = performance.now();
-      let frameDt = now - this.simLast;
-      this.simLast = now;
-
-      if (frameDt > this.MAX_FRAME) frameDt = this.MAX_FRAME;
-      if (frameDt < 0) frameDt = 0;
-
-      this.simAcc += frameDt;
-
-      GameSettings.getInstance().update();
-
-      while (this.simAcc >= this.FIXED_DT) {
-        this.stepSimulation(this.FIXED_DT);
-        this.simAcc -= this.FIXED_DT;
-      }
-
-      if (this.gameState1) this.gameState1.draw();
-      if (this.gameState2) this.gameState2.draw();
-    } catch (e) {
-      console.error('GAME LOOP CRASH', e);
-      ChatManager.addMessage('Game loop crashed — check console.', 'System');
-      this.gameRunning = false;
-      return;
-    }
-
-    this.animationFrameId = requestAnimationFrame(this.gameLoop);
+    return true;
   }
 }
 
