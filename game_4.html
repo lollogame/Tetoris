@@ -1225,39 +1225,45 @@ class GameState {
         this.spawnPiece();
         this.lastGravityTime = 0;
       }
-    } else {
-            const settings = GameSettings.getInstance();
+        } else {
+      const settings = GameSettings.getInstance();
       let fallInterval = this.gravity;
 
+      // Soft drop modifies fall interval (or instant drop)
       if (this.softDropActive) {
         if (settings.sdf === 'inf') {
+          // Infinite SDF = instant fall while key is held
           while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
             this.currentY++;
           }
           this.lastGravityTime = 0;
         } else {
-          // settings.sdf is guaranteed numeric by GameSettings.update(), but clamp anyway
           const sdfNum = Number(settings.sdf);
           const safeSdf = Number.isFinite(sdfNum) ? Math.max(1, sdfNum) : 1;
           fallInterval = this.gravity / safeSdf;
         }
       }
 
-      // ✅ Safety clamp so fallInterval can never be NaN/0/negative
+      // Safety clamp: fallInterval must be a positive finite number
       if (!Number.isFinite(fallInterval) || fallInterval <= 0) {
         console.warn('Bad fallInterval; forcing default', { fallInterval, sdf: settings.sdf });
         fallInterval = this.gravity;
       }
 
-      if (settings.sdf !== 'inf' && this.lastGravityTime >= fallInterval) {
+      // ✅ IMPORTANT FIX:
+      // Gravity should ALWAYS run. "inf" only affects soft drop, not normal gravity.
+      if (this.lastGravityTime >= fallInterval) {
         while (this.lastGravityTime >= fallInterval) {
-          if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) this.currentY++;
-          else break;
+          if (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
+            this.currentY++;
+          } else {
+            break;
+          }
           this.lastGravityTime -= fallInterval;
         }
       }
-
     }
+
 
     if (this.spawnGrace) this.spawnGrace = false;
     return true;
