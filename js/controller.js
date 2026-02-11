@@ -17,20 +17,26 @@ class GameController {
 
     this.roundId = null;
 
+    // Loop timing
     this.gameRunning = false;
     this.lastTime = 0;
     this.lastStateSendTime = 0;
     this.animationFrameId = null;
+
+    // NEW: prevents multiple RAF loops
+    this.loopActive = false;
 
     this.acceptInput = false;
 
     this.setupUI();
     this.setupInput();
     this.setupSettingsModal();
-
     this.updateScoreboard();
   }
 
+  /* =========================
+     UI helpers
+  ========================= */
   setStatus(text) {
     document.getElementById('gameStatus').textContent = text;
   }
@@ -67,6 +73,9 @@ class GameController {
     this.showScoreboard(this.phase !== 'idle');
   }
 
+  /* =========================
+     Countdown
+  ========================= */
   showCountdown(seconds, subtitle = 'Get ready…') {
     const overlay = document.getElementById('countdownOverlay');
     const textEl = document.getElementById('countdownText');
@@ -104,6 +113,9 @@ class GameController {
     });
   }
 
+  /* =========================
+     Settings modal
+  ========================= */
   setupSettingsModal() {
     const openBtn = document.getElementById('openSettingsBtn');
     const closeBtn = document.getElementById('closeSettingsBtn');
@@ -145,6 +157,9 @@ class GameController {
     this.updateScoreboard();
   }
 
+  /* =========================
+     Core UI
+  ========================= */
   setupUI() {
     window.copyPeerId = () => {
       const id = document.getElementById('peerIdDisplay').textContent;
@@ -218,6 +233,9 @@ class GameController {
     ChatManager.addMessage('Create a game to host, or enter a Peer ID to join.');
   }
 
+  /* =========================
+     Input
+  ========================= */
   setupInput() {
     const input = InputManager.getInstance();
     input.setupKeyBindings();
@@ -285,7 +303,6 @@ class GameController {
 
     document.addEventListener('keyup', (e) => {
       if (input.isCapturing()) return;
-
       const code = e.code;
       input.handleKeyUp(code);
 
@@ -294,6 +311,9 @@ class GameController {
     });
   }
 
+  /* =========================
+     Match helpers
+  ========================= */
   resetMatchScores() {
     this.match.hostScore = 0;
     this.match.clientScore = 0;
@@ -324,6 +344,26 @@ class GameController {
     return localWon ? 'YOU' : 'OPPONENT';
   }
 
+  /* =========================
+     Loop control (NEW)
+  ========================= */
+  ensureLoopRunning() {
+    // If loop is already active, do nothing.
+    if (this.loopActive) return;
+
+    this.gameRunning = true;
+    this.loopActive = true;
+
+    // Reset timing so next frame is clean
+    this.lastTime = 0;
+    this.lastStateSendTime = 0;
+
+    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+  }
+
+  /* =========================
+     Send init snapshot
+  ========================= */
   sendInitStateSnapshot() {
     if (!NetworkManager.getInstance().isConnected()) return;
     if (!this.gameState1) return;
@@ -337,6 +377,9 @@ class GameController {
     });
   }
 
+  /* =========================
+     Round start
+  ========================= */
   async startRound(seed, roundNumber, roundId) {
     this.roundId = roundId || this.roundId || `${Date.now()}-local`;
 
@@ -358,30 +401,24 @@ class GameController {
     this.gameState1.setGameStartTime(startTime);
     this.gameState2.setGameStartTime(startTime);
 
-    // ✅ IMPORTANT: do NOT poison timing; reset lastTime before (re)starting loop
-    this.lastTime = 0;
-    this.lastStateSendTime = 0;
-
-    // Clear stuck inputs (fine)
     InputManager.getInstance().reset();
 
     const ok1 = this.gameState1.spawnPiece();
     this.gameState2.spawnPiece();
     if (!ok1) { this.handleGameOver(); return; }
 
+    // Draw once immediately
     this.gameState1.draw();
     this.gameState2.draw();
 
+    // Force remote to clear/reset before countdown ends
     this.sendInitStateSnapshot();
 
     this.setStatus(`Round ${this.match.round} starting…`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
-    // ✅ CRITICAL FIX: never call gameLoop() directly
-    if (!this.gameRunning) {
-      this.gameRunning = true;
-      this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
-    }
+    // ✅ IMPORTANT: always ensure the RAF loop is alive
+    this.ensureLoopRunning();
 
     await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
 
@@ -413,6 +450,9 @@ class GameController {
     this.startRound(seed, nextRound, roundId);
   }
 
+  /* =========================
+     Network message handling
+  ========================= */
   handleNetworkMessage(msg) {
     switch (msg.type) {
       case 'chat':
@@ -528,9 +568,11 @@ class GameController {
         this.acceptInput = false;
         this.phase = 'matchOver';
         this.updateScoreboard();
+
         const winner = msg.winner === 'HOST'
           ? (this.isHost ? 'YOU' : 'OPPONENT')
           : (this.isHost ? 'OPPONENT' : 'YOU');
+
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         break;
@@ -556,7 +598,11 @@ class GameController {
     }
   }
 
+  /* =========================
+     Local game over (we lost)
+  ========================= */
   handleGameOver() {
+    // Do not stop the loop. Ever.
     this.acceptInput = false;
     this.phase = 'roundOver';
     this.setStatus('You lost the round.');
@@ -584,10 +630,15 @@ class GameController {
     }
   }
 
+  /* =========================
+     Main loop
+  ========================= */
   gameLoop(timestamp) {
-    if (!this.gameRunning) return;
+    if (!this.gameRunning) {
+      this.loopActive = false;
+      return;
+    }
 
-    // ✅ Robust timestamp handling
     if (!Number.isFinite(timestamp)) timestamp = performance.now();
 
     let deltaTime = 0;
@@ -601,15 +652,21 @@ class GameController {
       if (this.gameState1) {
         const input = InputManager.getInstance();
 
+        // Simulate only while playing
         if (this.phase === 'playing') {
           if (this.acceptInput && !this.gameState1.softDropActive) {
             input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
           }
 
           const ok = this.gameState1.update(deltaTime);
-          if (!ok) { this.handleGameOver(); return; }
+
+          // ✅ IMPORTANT FIX: do NOT return (would kill RAF)
+          if (!ok) {
+            this.handleGameOver();
+          }
         }
 
+        // Send state during countdown + playing
         const inRound = (this.phase === 'playing' || this.phase === 'countdown');
         if (
           inRound &&
@@ -625,6 +682,7 @@ class GameController {
           this.lastStateSendTime = timestamp;
         }
 
+        // Always draw (even roundOver)
         this.gameState1.draw();
       }
 
