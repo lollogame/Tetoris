@@ -389,7 +389,7 @@ class GameController {
     this.gameState1.setGameStartTime(startTime);
     this.gameState2.setGameStartTime(startTime);
 
-    InputManager.getInstance().reset();
+    InputManager.getInstance().resetForNewRound();
 
     // Spawn initial pieces
     const ok1 = this.gameState1.spawnPiece();
