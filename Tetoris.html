@@ -296,7 +296,7 @@
     .copy-btn { margin-top: 10px; font-size: 0.6rem; padding: 8px 16px; }
 
     /* =========================
-       Topbar + Modals
+       Topbar
     ========================= */
     .topbar {
       display: flex;
@@ -304,17 +304,10 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
-
-      /* keep clickable */
       position: relative;
-      z-index: 30001;
+      z-index: 30001; /* above everything */
     }
-
-    #openMenuBtn, #openSettingsBtn {
-      position: relative;
-      z-index: 30002;
-      pointer-events: auto;
-    }
+    #openMenuBtn, #openSettingsBtn { position: relative; z-index: 30002; }
 
     .topbar .topbar-left, .topbar .topbar-right {
       display: flex;
@@ -322,20 +315,24 @@
       align-items: center;
     }
 
+    /* =========================
+       Modals
+    ========================= */
     .modal {
       position: fixed;
       inset: 0;
       background: rgba(5, 8, 24, 0.78);
       backdrop-filter: blur(5px);
-      z-index: 10000;
+      z-index: 25000;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }
+    .modal.hidden { display: none !important; pointer-events: none !important; }
 
     .modal-content {
-      width: min(1100px, 96vw);
+      width: min(900px, 96vw);
       max-height: 90vh;
       overflow: auto;
       background: rgba(21, 27, 61, 0.95);
@@ -361,15 +358,43 @@
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
-    /* when hidden, must not intercept clicks */
-    #settingsModal.hidden,
-    #menuModal.hidden,
-    #countdownOverlay.hidden {
-      pointer-events: none !important;
+    /* =========================
+       Menu modal layout
+    ========================= */
+    .mode-grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .mode-card{
+      background: rgba(10, 14, 39, 0.85);
+      border: 1px solid rgba(0,255,255,0.45);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: inset 0 0 18px rgba(0,255,255,0.06);
+    }
+    .mode-title{
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.72rem;
+      color: var(--accent-cyan);
+      margin-bottom: 10px;
+      line-height: 1.25;
+    }
+    .mode-desc{
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      line-height: 1.35;
+    }
+    .mode-card button{
+      width: 100%;
+      font-size: 0.65rem;
+      padding: 12px 10px;
     }
 
     /* =========================
-       Match Scoreboard
+       Scoreboard
     ========================= */
     .scoreboard {
       display: flex;
@@ -415,7 +440,7 @@
       align-items: center;
       background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
       backdrop-filter: blur(3px);
-      pointer-events: none; /* let clicks go through */
+      pointer-events: none; /* overlay never blocks clicks */
     }
 
     .countdown-card {
@@ -457,6 +482,40 @@
       </div>
     </div>
 
+    <!-- ✅ MENU MODAL (Mode select like before) -->
+    <div id="menuModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Game Mode</h2>
+          <button class="modal-close" id="closeMenuBtn">Close</button>
+        </div>
+
+        <div style="text-align:center;color:var(--text-secondary);font-size:0.85rem;margin-bottom:8px;">
+          Choose a mode. Zen is single-player; 1v1 uses PeerJS; Battle Royale is placeholder for now.
+        </div>
+
+        <div class="mode-grid">
+          <div class="mode-card">
+            <div class="mode-title">🧘 ZEN MODE</div>
+            <div class="mode-desc">Single-player practice. No garbage. No network required.</div>
+            <button id="modeZenBtn">Play Zen</button>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-title">⚔️ 1v1</div>
+            <div class="mode-desc">Classic versus. Create/Join a room to battle.</div>
+            <button id="mode1v1Btn">Play 1v1</button>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-title">👑 BATTLE ROYALE</div>
+            <div class="mode-desc">Coming soon. Button stays here so you remember to implement it 😄</div>
+            <button id="modeBRBtn">Battle Royale</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Match scoreboard -->
     <div id="scoreboard" class="scoreboard hidden">
       <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
@@ -472,28 +531,8 @@
       </div>
     </div>
 
-    <!-- ✅ MENU MODAL (NEW) -->
-    <div id="menuModal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Menu</h2>
-          <button class="modal-close" id="closeMenuBtn">Close</button>
-        </div>
-
-        <div class="controls-panel" style="margin-bottom:0;">
-          <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-            <button id="menuResumeBtn">Resume</button>
-            <button id="menuRestartBtn">Restart</button>
-          </div>
-          <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
-            Menu is separate from Settings.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal hidden">
+    <!-- ✅ SETTINGS MODAL (unchanged) -->
+    <div id="settingsModal" class="modal hidden" aria-hidden="true">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Game Settings</h2>
@@ -662,7 +701,7 @@
   <script src="js/debugHeartbeat.js"></script>
   <script src="js/main.js"></script>
 
-  <!-- ✅ FIXED: proper Menu + Settings wiring -->
+  <!-- ✅ FIX: Menu + Settings wiring (separate, and overrides old listeners) -->
   <script>
     (function () {
       const menuBtn = document.getElementById('openMenuBtn');
@@ -674,38 +713,67 @@
       const closeMenuBtn = document.getElementById('closeMenuBtn');
       const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 
-      const resumeBtn = document.getElementById('menuResumeBtn');
-      const restartBtn = document.getElementById('menuRestartBtn');
+      const zenBtn = document.getElementById('modeZenBtn');
+      const v1Btn  = document.getElementById('mode1v1Btn');
+      const brBtn  = document.getElementById('modeBRBtn');
 
-      function openModal(modal) { if (modal) modal.classList.remove('hidden'); }
-      function closeModal(modal) { if (modal) modal.classList.add('hidden'); }
+      function open(modal) { if (modal) modal.classList.remove('hidden'); }
+      function close(modal) { if (modal) modal.classList.add('hidden'); }
 
-      // Openers
-      if (menuBtn) menuBtn.addEventListener('click', () => openModal(menuModal));
-      if (settingsBtn) settingsBtn.addEventListener('click', () => openModal(settingsModal));
+      // Close when clicking outside modal-content
+      function outsideClose(modal) {
+        if (!modal) return;
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) close(modal);
+        });
+      }
+      outsideClose(menuModal);
+      outsideClose(settingsModal);
 
-      // Closers
-      if (closeMenuBtn) closeMenuBtn.addEventListener('click', () => closeModal(menuModal));
-      if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => closeModal(settingsModal));
+      // 🔥 Use CAPTURE and stopImmediatePropagation to override any old wiring in controller.js
+      if (menuBtn) {
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          close(settingsModal);
+          open(menuModal);
+        }, true);
+      }
 
-      // Click outside closes
-      if (menuModal) menuModal.addEventListener('click', (e) => { if (e.target === menuModal) closeModal(menuModal); });
-      if (settingsModal) settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeModal(settingsModal); });
+      if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          close(menuModal);
+          open(settingsModal);
+        }, true);
+      }
 
-      // Menu actions
-      if (resumeBtn) resumeBtn.addEventListener('click', () => closeModal(menuModal));
-      if (restartBtn) restartBtn.addEventListener('click', () => {
-        closeModal(menuModal);
-        const r = document.getElementById('restartBtn');
-        if (r) r.click();
-      });
+      if (closeMenuBtn) closeMenuBtn.addEventListener('click', () => close(menuModal));
+      if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => close(settingsModal));
 
-      // Escape closes whichever is open
-      document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape') return;
-        if (settingsModal && !settingsModal.classList.contains('hidden')) closeModal(settingsModal);
-        if (menuModal && !menuModal.classList.contains('hidden')) closeModal(menuModal);
-      });
+      // Mode buttons — call your existing hook if you have it, else just message
+      function chooseMode(mode) {
+        close(menuModal);
+
+        if (typeof window.setMode === 'function') {
+          window.setMode(mode);
+          return;
+        }
+
+        // fallback: don't break anything if your mode hook name differs
+        if (window.ChatManager && typeof window.ChatManager.addMessage === 'function') {
+          window.ChatManager.addMessage(`Selected mode: ${mode} (hook not found: window.setMode)`, 'System');
+        } else {
+          console.log('Selected mode:', mode, '(hook not found: window.setMode)');
+        }
+      }
+
+      if (zenBtn) zenBtn.addEventListener('click', () => chooseMode('zen'));
+      if (v1Btn)  v1Btn.addEventListener('click', () => chooseMode('1v1'));
+      if (brBtn)  brBtn.addEventListener('click', () => chooseMode('br'));
     })();
   </script>
 </body>
