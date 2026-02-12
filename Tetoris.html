@@ -364,51 +364,9 @@
     /* If hidden, MUST NOT intercept clicks */
     #settingsModal.hidden,
     #countdownOverlay.hidden,
-    #resultOverlay.hidden,
     #mainMenu.hidden {
       pointer-events: none !important;
     }
-
-
-/* =========================
-   Result / KO Overlay
-========================= */
-.result-overlay{
-  position: fixed;
-  inset: 0;
-  z-index: 20005;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: rgba(5, 8, 24, 0.35);
-  backdrop-filter: blur(3px);
-  pointer-events: none;
-}
-
-.result-card{
-  text-align: center;
-  padding: 22px 24px;
-  border: 2px solid var(--accent-pink);
-  border-radius: 12px;
-  background: rgba(10, 14, 39, 0.95);
-  box-shadow: var(--shadow-glow);
-  width: min(520px, 92vw);
-}
-
-.result-big{
-  font-family: 'Press Start 2P', cursive;
-  font-size: 1.9rem;
-  color: var(--accent-yellow);
-  text-shadow: 0 0 12px rgba(255,255,0,0.35);
-  margin-bottom: 10px;
-  line-height: 1.2;
-}
-
-.result-sub{
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
 
     /* =========================
        Main Menu (Mode Select)
@@ -567,7 +525,48 @@
       color: var(--text-secondary);
     }
 
-  </style>
+  
+        /* =========================
+           Result / KO Overlay
+        ========================= */
+        .result-overlay{
+            position: fixed;
+            inset: 0;
+            z-index: 20005;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(5, 8, 24, 0.35);
+            backdrop-filter: blur(3px);
+            pointer-events: none;
+        }
+
+        .result-card{
+            text-align: center;
+            padding: 22px 24px;
+            border: 2px solid var(--accent-pink);
+            border-radius: 12px;
+            background: rgba(10, 14, 39, 0.95);
+            box-shadow: var(--shadow-glow);
+            width: min(520px, 92vw);
+        }
+
+        .result-big{
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.9rem;
+            color: var(--accent-yellow);
+            text-shadow: 0 0 12px rgba(255,255,0,0.35);
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .result-sub{
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+</style>
 </head>
 
 <body>
@@ -628,15 +627,15 @@
         <div class="countdown-big" id="countdownText">3</div>
         <div class="countdown-sub" id="countdownSub">Get ready…</div>
       </div>
-
-<!-- Result / KO overlay -->
-<div id="resultOverlay" class="result-overlay hidden">
-  <div class="result-card">
-    <div class="result-big" id="resultText">ROUND OVER</div>
-    <div class="result-sub" id="resultSub">…</div>
-  </div>
-</div>
     </div>
+    <!-- Result / KO overlay -->
+    <div id="resultOverlay" class="result-overlay hidden">
+      <div class="result-card">
+        <div class="result-big" id="resultText">ROUND OVER</div>
+        <div class="result-sub" id="resultSub">…</div>
+      </div>
+    </div>
+
 
     <!-- Settings Modal -->
     <div id="settingsModal" class="modal hidden">
@@ -724,7 +723,7 @@
 
     <div class="connection-panel">
       <button id="createGameBtn">Create Game</button>
-      <input type="text" id="opponentPeerId" placeholder="Enter opponent's Peer ID to join">
+      <input type="text" id="opponentPeerId" placeholder="Enter room code (or Peer ID) to join">
       <button id="joinGameBtn">Join Game</button>
       <button id="restartBtn" class="hidden">Restart Game</button>
     </div>
