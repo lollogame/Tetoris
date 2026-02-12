@@ -769,6 +769,30 @@ wireMatchDefaultsAutoSave() {
     });
   }
 
+  /* =========================
+     Result / KO overlay
+  ========================= */
+  hideResultOverlay() {
+    if (this.resultOverlay) this.resultOverlay.classList.add('hidden');
+  }
+
+  showResultOverlay(title, subtitle = '', { persistent = false, durationMs = 1300 } = {}) {
+    if (!this.resultOverlay || !this.resultText || !this.resultSub) return;
+
+    this.resultText.textContent = String(title ?? '');
+    this.resultSub.textContent = String(subtitle ?? '');
+    this.resultOverlay.classList.remove('hidden');
+
+    if (persistent) return;
+
+    window.clearTimeout(this._resultOverlayTimer);
+    this._resultOverlayTimer = window.setTimeout(() => {
+      this.hideResultOverlay();
+    }, Math.max(200, Number(durationMs) || 1300));
+  }
+
+
+
   sendInitStateSnapshot() {
     if (!NetworkManager.getInstance().isConnected()) return;
     if (!this.gameState1) return;
