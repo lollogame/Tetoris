@@ -87,6 +87,11 @@ class GameController {
     // Countdown overlay
     this.countdownOverlay = document.getElementById('countdownOverlay');
 
+    // Result / KO overlay
+    this.resultOverlay = document.getElementById('resultOverlay');
+    this.resultText = document.getElementById('resultText');
+    this.resultSub = document.getElementById('resultSub');
+
     // Containers
     const players = document.querySelectorAll('.player-container');
     this.localContainer = players[0] || null;
@@ -145,6 +150,7 @@ class GameController {
     if (show) {
       this.elMenu.classList.remove('hidden');
       this.acceptInput = false;
+      this.hideResultOverlay();
     } else {
       this.elMenu.classList.add('hidden');
       // restore input only if actually in a playable state
@@ -275,6 +281,8 @@ class GameController {
     this.roundId = null;
     this.acceptInput = false;
 
+    this.hideResultOverlay();
+
     // UI
     if (this.gameArea) this.gameArea.classList.add('hidden');
     if (this.restartBtn) this.restartBtn.classList.add('hidden');
@@ -288,6 +296,7 @@ class GameController {
 
   startSelectedMode() {
     this.resetForNewMode();
+    this.hideResultOverlay();
 
     // Always refresh settings
     GameSettings.getInstance().update();
@@ -311,6 +320,8 @@ class GameController {
     this.isHost = false;
     this.phase = 'playing';
     this.acceptInput = true;
+
+    this.hideResultOverlay();
 
     // Optional local score hook: +100 per garbage line worth of attack
     const nm = NetworkManager.getInstance();
@@ -706,6 +717,8 @@ wireMatchDefaultsAutoSave() {
 
     if (!overlay || !textEl || !subEl) return Promise.resolve();
 
+    this.hideResultOverlay();
+
     overlay.classList.remove('hidden');
     subEl.textContent = subtitle;
 
@@ -756,6 +769,8 @@ wireMatchDefaultsAutoSave() {
 
     this.phase = 'countdown';
     this.acceptInput = false;
+
+    this.hideResultOverlay();
 
     if (this.gameArea) this.gameArea.classList.remove('hidden');
     if (this.restartBtn) this.restartBtn.classList.remove('hidden');
@@ -898,6 +913,8 @@ wireMatchDefaultsAutoSave() {
         this.resetMatchScores();
         this.updateScoreboard();
 
+        this.hideResultOverlay();
+
         if (this.isHost) {
           this.hostSetScoresAndBroadcast();
           this.startNextRoundAsHost(true);
@@ -924,6 +941,7 @@ wireMatchDefaultsAutoSave() {
 
         ChatManager.addMessage('Opponent topped out! You win the round! 🎉', 'System');
         this.setStatus('Round win!');
+        this.showResultOverlay('ROUND WON', 'Opponent topped out!', { durationMs: 1400 });
 
         if (this.isHost) {
           this.match.hostScore += 1;
@@ -936,6 +954,7 @@ wireMatchDefaultsAutoSave() {
             this.phase = 'matchOver';
             this.setStatus(`MATCH OVER — ${winner} WINS!`);
             ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+            this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
           } else {
             this.setStatus('Next round starting…');
             setTimeout(() => this.startNextRoundAsHost(false), 1400);
@@ -957,6 +976,7 @@ wireMatchDefaultsAutoSave() {
 
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+        this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
         break;
       }
 
@@ -990,6 +1010,7 @@ wireMatchDefaultsAutoSave() {
       this.gameRunning = false;
       this.setStatus(`Zen over — Final score: ${this.zenScore}`);
       ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
+      this.showResultOverlay('GAME OVER', `Final score: ${this.zenScore}`, { persistent: true });
       return;
     }
 
@@ -997,6 +1018,8 @@ wireMatchDefaultsAutoSave() {
     this.phase = 'roundOver';
     this.setStatus('You lost the round.');
     ChatManager.addMessage('You topped out! Round lost.', 'System');
+
+    this.showResultOverlay('ROUND LOST', 'You topped out!', { durationMs: 1400 });
 
     NetworkManager.getInstance().send({ type: 'gameOver' });
 
@@ -1011,6 +1034,7 @@ wireMatchDefaultsAutoSave() {
         this.phase = 'matchOver';
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+        this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
       } else {
         this.setStatus('Next round starting…');
         setTimeout(() => this.startNextRoundAsHost(false), 1400);
