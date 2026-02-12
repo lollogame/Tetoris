@@ -88,6 +88,8 @@ class TetrisRenderer {
   drawBoard(board) {
     this._clearAndFill(this.ctx, this.canvas.width, this.canvas.height);
 
+    const now = performance.now();
+
     // Grid
     this.ctx.strokeStyle = 'rgba(139,157,195,0.1)';
     this.ctx.lineWidth = 1;
