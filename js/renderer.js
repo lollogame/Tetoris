@@ -13,16 +13,6 @@ class TetrisRenderer {
     this.holdCtx = holdCanvas.getContext('2d');
     this.queueCtx = queueCanvas.getContext('2d');
 
-    // Tiny FX timers (flash/shake)
-    this._fx = {
-      clearUntil: 0,
-      clearStrength: 0,
-      garbageInUntil: 0,
-      garbageApplyUntil: 0,
-      shakeUntil: 0,
-      shakeMag: 0
-    };
-
     // ✅ CRITICAL: Ensure canvas internal resolution matches what we draw
     this._ensureSizes();
 
@@ -88,8 +78,6 @@ class TetrisRenderer {
   drawBoard(board) {
     this._clearAndFill(this.ctx, this.canvas.width, this.canvas.height);
 
-    const now = performance.now();
-
     // Grid
     this.ctx.strokeStyle = 'rgba(139,157,195,0.1)';
     this.ctx.lineWidth = 1;
@@ -116,28 +104,6 @@ class TetrisRenderer {
         const color = (v === 'G') ? '#666666' : SHAPES[v].color;
         this.drawBlock(c * BLOCK_SIZE, r * BLOCK_SIZE, color, 1);
       }
-    }
-
-    // FX overlays (simple, fast)
-    if (now < this._fx.clearUntil) {
-      this.ctx.globalAlpha = Math.min(0.35, Math.max(0.05, this._fx.clearStrength));
-      this.ctx.fillStyle = 'rgba(255,255,255,1)';
-      this.ctx.fillRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-      this.ctx.globalAlpha = 1;
-    }
-
-    if (now < this._fx.garbageInUntil) {
-      this.ctx.globalAlpha = 0.12;
-      this.ctx.fillStyle = 'rgba(255,0,180,1)';
-      this.ctx.fillRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-      this.ctx.globalAlpha = 1;
-    }
-
-    if (now < this._fx.garbageApplyUntil) {
-      this.ctx.globalAlpha = 0.10;
-      this.ctx.fillStyle = 'rgba(255,80,0,1)';
-      this.ctx.fillRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
-      this.ctx.globalAlpha = 1;
     }
   }
 
@@ -193,29 +159,12 @@ class TetrisRenderer {
     }
   }
 
-  flashClear(lines = 1) {
-    const now = performance.now();
-    const l = Math.max(1, Math.min(4, Number(lines) || 1));
-    this._fx.clearUntil = now + 120;
-    this._fx.clearStrength = 0.10 + (l - 1) * 0.05;
-    this.shake(70, 2 + l); // tiny punch
-  }
+  /* ---------------------------------------------------------
+     No-op FX hooks (user requested no flashes)
+     These are called by the SFX-enabled gameState.js patch.
+  --------------------------------------------------------- */
+  flashClear(_lines) { /* intentionally blank */ }
+  flashGarbageIn() { /* intentionally blank */ }
+  flashGarbageApply() { /* intentionally blank */ }
 
-  flashGarbageIn() {
-    const now = performance.now();
-    this._fx.garbageInUntil = now + 120;
-    this.shake(90, 4);
-  }
-
-  flashGarbageApply() {
-    const now = performance.now();
-    this._fx.garbageApplyUntil = now + 140;
-    this.shake(120, 5);
-  }
-
-  shake(durationMs = 80, magnitude = 4) {
-    const now = performance.now();
-    this._fx.shakeUntil = Math.max(this._fx.shakeUntil, now + durationMs);
-    this._fx.shakeMag = Math.max(this._fx.shakeMag, magnitude);
-  }
 }
