@@ -258,7 +258,7 @@ class GameController {
 
     // Hide game area until a mode actually starts
     if (this.gameArea) {
-      const shouldShow = (this.mode === 'zen') ? this.gameRunning : (this.phase !== 'idle' && this.phase !== 'waiting');
+      const shouldShow = (this.mode === 'zen') ? this.gameRunning : (this.phase !== 'idle');
       this.gameArea.classList.toggle('hidden', !shouldShow);
     }
   }
@@ -337,20 +337,29 @@ class GameController {
 
     if (this.gameArea) this.gameArea.classList.remove('hidden');
 
-    this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+    try {
+      this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
 
-    const startTime = Date.now();
-    this.gameState1.setGameStartTime(startTime);
+      const startTime = Date.now();
+      this.gameState1.setGameStartTime(startTime);
 
-    InputManager.getInstance().reset();
+      InputManager.getInstance().reset();
 
-    const ok = this.gameState1.spawnPiece();
-    if (!ok) {
-      this.handleGameOver();
+      const ok = this.gameState1.spawnPiece();
+      if (!ok) {
+        this.handleGameOver();
+        return;
+      }
+
+      this.gameState1.draw();
+    } catch (err) {
+      console.error('Zen failed to start:', err);
+      this.setStatus(`Zen failed to start: ${err?.message || err}`);
+      ChatManager.addMessage('Zen failed to start. Check console for details.', 'System');
+      this.gameRunning = false;
+      this.acceptInput = false;
       return;
     }
-
-    this.gameState1.draw();
 
     this.setStatus(`Zen mode — Score: ${this.zenScore}`);
     ChatManager.addMessage('Zen started. Good luck!', 'System');
@@ -519,8 +528,18 @@ wireMatchDefaultsAutoSave() {
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), true);
 
-        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'host' });
-        setTimeout(() => NetworkManager.getInstance().connect(normalizedId), 300);
+        const nm = NetworkManager.getInstance();
+        nm.initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'client' });
+
+        const connectWhenReady = () => {
+          // PeerJS is more reliable if we wait for the underlying peer to be open
+          if (nm.peer && nm.peer.open) {
+            nm.connect(normalizedId);
+          } else {
+            setTimeout(connectWhenReady, 60);
+          }
+        };
+        connectWhenReady();
 
         this.updateScoreboard();
       });
@@ -781,29 +800,39 @@ wireMatchDefaultsAutoSave() {
 
     GameSettings.getInstance().update();
 
-    this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
-    this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
+    try {
+      this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+      this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
 
-    const startTime = Date.now();
-    this.gameState1.setGameStartTime(startTime);
-    this.gameState2.setGameStartTime(startTime);
+      const startTime = Date.now();
+      this.gameState1.setGameStartTime(startTime);
+      this.gameState2.setGameStartTime(startTime);
 
-    // Reset loop timing
-    this.lastTime = 0;
-    this.lastStateSendTime = 0;
+      // Reset loop timing
+      this.lastTime = 0;
+      this.lastStateSendTime = 0;
 
-    // Clear stuck inputs
-    InputManager.getInstance().reset();
+      // Clear stuck inputs
+      InputManager.getInstance().reset();
 
-    const ok1 = this.gameState1.spawnPiece();
-    this.gameState2.spawnPiece();
-    if (!ok1) {
-      this.handleGameOver();
+      const ok1 = this.gameState1.spawnPiece();
+      this.gameState2.spawnPiece();
+      if (!ok1) {
+        this.handleGameOver();
+        return;
+      }
+
+      this.gameState1.draw();
+      this.gameState2.draw();
+    } catch (err) {
+      console.error('PvP round failed to start:', err);
+      this.setStatus(`Round failed to start: ${err?.message || err}`);
+      ChatManager.addMessage('Round failed to start. Check console for details.', 'System');
+      this.acceptInput = false;
+      this.phase = 'waiting';
+      this.updateScoreboard();
       return;
     }
-
-    this.gameState1.draw();
-    this.gameState2.draw();
 
     this.sendInitStateSnapshot();
 
