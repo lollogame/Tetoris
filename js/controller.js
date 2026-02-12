@@ -43,8 +43,13 @@ class GameController {
     this.setupInput();
     this.setupSettingsModal();
     this.setupMenu();
-    this.initLocalPersistence();
 
+    // Apply persisted settings to the UI (if any)
+    try { GameSettings.getInstance().applyToUI(); } catch (_) {}
+    try {
+      const mc = this.loadMatchConfigFromStorage();
+      if (mc) this.applyMatchConfig(mc, false);
+    } catch (_) {}
 
     this.applyModeUI();
     this.updateScoreboard();
@@ -87,7 +92,7 @@ class GameController {
     // Countdown overlay
     this.countdownOverlay = document.getElementById('countdownOverlay');
 
-    // Result / KO overlay
+    // Result / KO overlay (optional)
     this.resultOverlay = document.getElementById('resultOverlay');
     this.resultText = document.getElementById('resultText');
     this.resultSub = document.getElementById('resultSub');
@@ -148,9 +153,9 @@ class GameController {
     if (!this.elMenu) return;
 
     if (show) {
+      this.hideResultOverlay();
       this.elMenu.classList.remove('hidden');
       this.acceptInput = false;
-      this.hideResultOverlay();
     } else {
       this.elMenu.classList.add('hidden');
       // restore input only if actually in a playable state
@@ -281,8 +286,6 @@ class GameController {
     this.roundId = null;
     this.acceptInput = false;
 
-    this.hideResultOverlay();
-
     // UI
     if (this.gameArea) this.gameArea.classList.add('hidden');
     if (this.restartBtn) this.restartBtn.classList.add('hidden');
@@ -296,7 +299,6 @@ class GameController {
 
   startSelectedMode() {
     this.resetForNewMode();
-    this.hideResultOverlay();
 
     // Always refresh settings
     GameSettings.getInstance().update();
@@ -307,6 +309,7 @@ class GameController {
     } else if (this.mode === 'pvp_1v1') {
       // PvP doesn't auto-start; you host/join
       this.phase = 'waiting';
+      this.hideResultOverlay();
       this.isHost = false;
       this.acceptInput = false;
       this.updateScoreboard();
@@ -320,7 +323,6 @@ class GameController {
     this.isHost = false;
     this.phase = 'playing';
     this.acceptInput = true;
-
     this.hideResultOverlay();
 
     // Optional local score hook: +100 per garbage line worth of attack
@@ -381,6 +383,37 @@ class GameController {
     }
   }
 
+
+  /* =========================
+     Match config persistence
+  ========================= */
+  loadMatchConfigFromStorage() {
+    try {
+      const raw = localStorage.getItem('tetoris_matchcfg_v1');
+      if (!raw) return null;
+      const cfg = JSON.parse(raw);
+      if (!cfg || typeof cfg !== 'object') return null;
+
+      const targetWins = Math.max(1, parseInt(cfg.targetWins, 10) || 3);
+      const countdownSeconds = Math.max(2, Math.min(5, parseInt(cfg.countdownSeconds, 10) || 3));
+      return { targetWins, countdownSeconds };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  saveMatchConfigToStorage(cfg) {
+    try {
+      localStorage.setItem('tetoris_matchcfg_v1', JSON.stringify({
+        targetWins: cfg.targetWins,
+        countdownSeconds: cfg.countdownSeconds,
+      }));
+    } catch (_) {
+      // ignore
+    }
+  }
+
+
   readMatchConfigFromUI() {
     const mf = document.getElementById('matchFormat');
     const cd = document.getElementById('countdownSeconds');
@@ -407,70 +440,6 @@ class GameController {
     this.updateScoreboard();
   }
 
-/* =========================
-   Local persistence (settings + keybinds + match defaults)
-========================= */
-static STORAGE_KEYS = {
-  match: 'tetoris_matchcfg_v1'
-};
-
-initLocalPersistence() {
-  // 1) Settings + keybind persistence are handled by their own modules (settings.js / input.js),
-  // but we trigger their DOM wiring here after UI exists.
-  if (typeof GameSettings !== 'undefined' && typeof GameSettings.getInstance === 'function') {
-    const gs = GameSettings.getInstance();
-    if (typeof gs.initPersistence === 'function') gs.initPersistence();
-  }
-  if (typeof InputManager !== 'undefined' && typeof InputManager.getInstance === 'function') {
-    const im = InputManager.getInstance();
-    if (typeof im.initPersistence === 'function') im.initPersistence();
-  }
-
-  // 2) Match defaults persistence (host-side convenience)
-  this.loadMatchDefaultsFromStorage();
-  this.wireMatchDefaultsAutoSave();
-}
-
-loadMatchDefaultsFromStorage() {
-  try {
-    const raw = localStorage.getItem(GameController.STORAGE_KEYS.match);
-    if (!raw) return;
-
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object') return;
-
-    const targetWins = Number.isFinite(Number(data.targetWins)) ? Math.max(0, parseInt(data.targetWins, 10)) : undefined;
-    const countdownSeconds = Number.isFinite(Number(data.countdownSeconds))
-      ? Math.max(2, Math.min(5, parseInt(data.countdownSeconds, 10)))
-      : undefined;
-
-    const cfg = {};
-    if (typeof targetWins === 'number') cfg.targetWins = targetWins;
-    if (typeof countdownSeconds === 'number') cfg.countdownSeconds = countdownSeconds;
-
-    if (Object.keys(cfg).length > 0) this.applyMatchConfig(cfg, false);
-  } catch (err) {
-    console.warn('Failed to load match defaults', err);
-  }
-}
-
-saveMatchDefaultsToStorage() {
-  try {
-    const cfg = this.readMatchConfigFromUI();
-    localStorage.setItem(GameController.STORAGE_KEYS.match, JSON.stringify(cfg));
-  } catch (err) {
-    console.warn('Failed to save match defaults', err);
-  }
-}
-
-wireMatchDefaultsAutoSave() {
-  const mf = document.getElementById('matchFormat');
-  const cd = document.getElementById('countdownSeconds');
-  if (mf) mf.addEventListener('change', () => this.saveMatchDefaultsToStorage());
-  if (cd) cd.addEventListener('change', () => this.saveMatchDefaultsToStorage());
-}
-
-
   /* =========================
      Main UI (PvP + Chat)
   ========================= */
@@ -491,7 +460,7 @@ wireMatchDefaultsAutoSave() {
         this.phase = 'waiting';
         this.acceptInput = false;
 
-        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this), { role: 'host', useRoomCode: true, roomCodeLength: 6 });
         this.setStatus('Waiting for opponent to join...');
 
         this.createBtn.disabled = true;
@@ -506,7 +475,7 @@ wireMatchDefaultsAutoSave() {
       this.joinBtn.addEventListener('click', () => {
         if (this.mode !== 'pvp_1v1') return;
 
-        const opponentId = (this.opponentPeerIdInput ? this.opponentPeerIdInput.value : '').trim();
+        const opponentId = ((this.opponentPeerIdInput ? this.opponentPeerIdInput.value : '').trim()).toUpperCase();
         if (!opponentId) {
           ChatManager.addMessage('Please enter an opponent Peer ID');
           return;
@@ -518,7 +487,7 @@ wireMatchDefaultsAutoSave() {
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), true);
 
-        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this));
+        NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this), { role: 'host', useRoomCode: true, roomCodeLength: 6 });
         setTimeout(() => NetworkManager.getInstance().connect(opponentId), 300);
 
         this.updateScoreboard();
@@ -570,6 +539,13 @@ wireMatchDefaultsAutoSave() {
       });
     }
 
+    // Persist match settings when changed (host defaults)
+    const mf = document.getElementById('matchFormat');
+    const cd = document.getElementById('countdownSeconds');
+    const persistMatch = () => this.saveMatchConfigToStorage(this.readMatchConfigFromUI());
+    if (mf) mf.addEventListener('change', persistMatch);
+    if (cd) cd.addEventListener('change', persistMatch);
+
     ChatManager.addMessage('Welcome to Tetris Online Battle!');
     ChatManager.addMessage('Open the Menu to pick a mode and press Play.');
   }
@@ -577,6 +553,17 @@ wireMatchDefaultsAutoSave() {
   /* =========================
      Input
   ========================= */
+  // Returns true when user is typing in a UI field (chat, join id, etc.)
+  isTypingContext() {
+    const ae = document.activeElement;
+    if (!ae) return false;
+    const tag = (ae.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (ae.isContentEditable) return true;
+    return false;
+  }
+
+
   setupInput() {
     const input = InputManager.getInstance();
     input.setupKeyBindings();
@@ -585,32 +572,15 @@ wireMatchDefaultsAutoSave() {
       if (this.gameState1 && this.acceptInput) this.gameState1.move(dx);
     };
 
-    const isTypingContext = (target) => {
-      if (!target) return false;
-      // Contenteditable or inside contenteditable
-      if (target.isContentEditable) return true;
-      const ce = target.closest ? target.closest('[contenteditable="true"]') : null;
-      if (ce) return true;
-
-      const tag = (target.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-
-      // If the event target is inside an input wrapper (rare but happens with icons inside inputs)
-      const insideFormControl = target.closest
-        ? target.closest('input, textarea, select')
-        : null;
-      return !!insideFormControl;
-    };
-
-
+    
     document.addEventListener('keydown', (e) => {
       if (input.isCapturing()) return;
 
-      // Don't hijack keyboard input when typing in chat / join fields / settings.
-      if (isTypingContext(e.target)) return;
-
       const b = input.getBindings();
       const code = e.code;
+
+      // If user is typing in an input/textarea (chat, join-id, etc.), don't hijack keys.
+      if (this.isTypingContext()) return;
 
       if (Object.values(b).includes(code)) e.preventDefault();
 
@@ -673,7 +643,11 @@ wireMatchDefaultsAutoSave() {
       input.handleKeyUp(code);
 
       const b = input.getBindings();
-      if (this.gameState1 && code === b.softDrop) this.gameState1.setSoftDropActive(false);
+      if (this.gameState1 && this.acceptInput && code === b.softDrop) this.gameState1.setSoftDropActive(false);
+    });
+
+      const b = input.getBindings();
+      if (this.gameState1 && this.acceptInput && code === b.softDrop) this.gameState1.setSoftDropActive(false);
     });
   }
 
@@ -716,7 +690,6 @@ wireMatchDefaultsAutoSave() {
     const subEl = document.getElementById('countdownSub');
 
     if (!overlay || !textEl || !subEl) return Promise.resolve();
-
     this.hideResultOverlay();
 
     overlay.classList.remove('hidden');
@@ -749,6 +722,29 @@ wireMatchDefaultsAutoSave() {
     });
   }
 
+  /* =========================
+     Result / KO overlay
+  ========================= */
+  hideResultOverlay() {
+    if (this.resultOverlay) this.resultOverlay.classList.add('hidden');
+  }
+
+  showResultOverlay(title, subtitle = '', { persistent = false, durationMs = 1300 } = {}) {
+    if (!this.resultOverlay || !this.resultText || !this.resultSub) return;
+
+    this.resultText.textContent = String(title || '');
+    this.resultSub.textContent = String(subtitle || '');
+    this.resultOverlay.classList.remove('hidden');
+
+    if (persistent) return;
+
+    window.clearTimeout(this._resultOverlayTimer);
+    this._resultOverlayTimer = window.setTimeout(() => {
+      this.hideResultOverlay();
+    }, Math.max(200, Number(durationMs) || 1300));
+  }
+
+
   sendInitStateSnapshot() {
     if (!NetworkManager.getInstance().isConnected()) return;
     if (!this.gameState1) return;
@@ -769,8 +765,6 @@ wireMatchDefaultsAutoSave() {
 
     this.phase = 'countdown';
     this.acceptInput = false;
-
-    this.hideResultOverlay();
 
     if (this.gameArea) this.gameArea.classList.remove('hidden');
     if (this.restartBtn) this.restartBtn.classList.remove('hidden');
@@ -913,8 +907,6 @@ wireMatchDefaultsAutoSave() {
         this.resetMatchScores();
         this.updateScoreboard();
 
-        this.hideResultOverlay();
-
         if (this.isHost) {
           this.hostSetScoresAndBroadcast();
           this.startNextRoundAsHost(true);
@@ -940,8 +932,8 @@ wireMatchDefaultsAutoSave() {
         this.phase = 'roundOver';
 
         ChatManager.addMessage('Opponent topped out! You win the round! 🎉', 'System');
-        this.setStatus('Round win!');
         this.showResultOverlay('ROUND WON', 'Opponent topped out!', { durationMs: 1400 });
+        this.setStatus('Round win!');
 
         if (this.isHost) {
           this.match.hostScore += 1;
@@ -954,7 +946,7 @@ wireMatchDefaultsAutoSave() {
             this.phase = 'matchOver';
             this.setStatus(`MATCH OVER — ${winner} WINS!`);
             ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
-            this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+        this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
           } else {
             this.setStatus('Next round starting…');
             setTimeout(() => this.startNextRoundAsHost(false), 1400);
@@ -1009,8 +1001,8 @@ wireMatchDefaultsAutoSave() {
     if (this.mode === 'zen') {
       this.gameRunning = false;
       this.setStatus(`Zen over — Final score: ${this.zenScore}`);
-      ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
       this.showResultOverlay('GAME OVER', `Final score: ${this.zenScore}`, { persistent: true });
+      ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
       return;
     }
 
@@ -1018,7 +1010,6 @@ wireMatchDefaultsAutoSave() {
     this.phase = 'roundOver';
     this.setStatus('You lost the round.');
     ChatManager.addMessage('You topped out! Round lost.', 'System');
-
     this.showResultOverlay('ROUND LOST', 'You topped out!', { durationMs: 1400 });
 
     NetworkManager.getInstance().send({ type: 'gameOver' });
