@@ -112,10 +112,14 @@ class NetworkManager {
         this.conn = conn;
         this.setupConnectionHandlers();
 
-        if (typeof ChatManager !== 'undefined') {
-          ChatManager.addMessage('Opponent connected!', 'System');
-        }
-        this.handleInternalMessage({ type: 'peerConnected' });
+        conn.on('open', () => {
+          if (typeof ChatManager !== 'undefined') {
+            ChatManager.addMessage('Opponent connected!', 'System');
+          }
+          // Now it is safe to send data, so we tell the controller to start
+          this.handleInternalMessage({ type: 'peerConnected' });
+        });
+        // --- END FIX ---
       });
 
       this.peer.on('error', (err) => {
