@@ -2,11 +2,9 @@
 
 /* =========================================================
    Input Manager (USES e.code so ShiftLeft works)
-   + localStorage persistence for keybinds
 ========================================================= */
 class InputManager {
   static instance = null;
-  static STORAGE_KEY = 'tetoris_keybinds_v1';
 
   constructor() {
     this.heldCodes = {};
@@ -32,9 +30,11 @@ class InputManager {
     };
 
     this.onMoveImmediate = null;
-
-    this._persistenceLoaded = false;
-  }
+  
+    // Persistence
+    this._storageKey = 'tetoris_keybinds_v1';
+    this.loadBindingsFromStorage();
+}
 
   static getInstance() {
     if (!InputManager.instance) InputManager.instance = new InputManager();
@@ -72,54 +72,7 @@ class InputManager {
     return code;
   }
 
-  /* =========================
-     Keybind persistence
-  ========================= */
-  initPersistence() {
-    if (this._persistenceLoaded) return;
-    this._persistenceLoaded = true;
-
-    this.loadBindingsFromStorage();
-  }
-
-  loadBindingsFromStorage() {
-    try {
-      const raw = localStorage.getItem(InputManager.STORAGE_KEY);
-      if (!raw) return;
-
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== 'object') return;
-
-      for (const action of Object.keys(this.bindings)) {
-        const v = data[action];
-        if (typeof v === 'string' && v.length > 0) this.bindings[action] = v;
-      }
-    } catch (err) {
-      console.warn('Failed to load keybinds', err);
-    }
-  }
-
-  saveBindingsToStorage() {
-    try {
-      localStorage.setItem(InputManager.STORAGE_KEY, JSON.stringify(this.bindings));
-    } catch (err) {
-      console.warn('Failed to save keybinds', err);
-    }
-  }
-
-  refreshBindingUI() {
-    for (const action of Object.keys(this.bindings)) {
-      const inputId = InputManager.actionToInputId[action];
-      const el = document.getElementById(inputId);
-      if (!el) continue;
-      el.value = InputManager.prettyCode(this.bindings[action]);
-    }
-  }
-
   setupKeyBindings() {
-    // Ensure we load saved binds before showing them.
-    this.initPersistence();
-
     for (const action of Object.keys(this.bindings)) {
       const inputId = InputManager.actionToInputId[action];
       const el = document.getElementById(inputId);
@@ -147,6 +100,31 @@ class InputManager {
       });
     }
   }
+
+  loadBindingsFromStorage() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+
+      for (const k of Object.keys(this.bindings)) {
+        const v = parsed[k];
+        if (typeof v === 'string' && v.length > 0) this.bindings[k] = v;
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  saveBindingsToStorage() {
+    try {
+      localStorage.setItem(this._storageKey, JSON.stringify(this.bindings));
+    } catch (_) {
+      // ignore
+    }
+  }
+
 
   handleKeyDown(code) {
     if (this.heldCodes[code]) return false;
@@ -221,7 +199,7 @@ class InputManager {
   }
 
   /* =========================================================
-     ✅ Round-safe reset
+     ✅ NEW: Round-safe reset
      Keeps heldCodes so key-repeat doesn't become "fresh presses"
      (prevents invisible instant hard-drops/holds after round starts)
   ========================================================= */
