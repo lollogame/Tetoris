@@ -2,9 +2,11 @@
 
 /* =========================================================
    Input Manager (USES e.code so ShiftLeft works)
+   + localStorage persistence for keybinds
 ========================================================= */
 class InputManager {
   static instance = null;
+  static STORAGE_KEY = 'tetoris_keybinds_v1';
 
   constructor() {
     this.heldCodes = {};
@@ -30,40 +32,13 @@ class InputManager {
     };
 
     this.onMoveImmediate = null;
+
+    this._persistenceLoaded = false;
   }
 
   static getInstance() {
     if (!InputManager.instance) InputManager.instance = new InputManager();
     return InputManager.instance;
-  }
-
-  /* =========================================================
-     Persistence (localStorage)
-  ========================================================= */
-  static STORAGE_KEY = 'tetoris.bindings.v1';
-
-  loadBindingsFromStorage() {
-    try {
-      const raw = localStorage.getItem(InputManager.STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== 'object') return;
-
-      for (const action of Object.keys(this.bindings)) {
-        const v = data[action];
-        if (typeof v === 'string' && v.length > 0) this.bindings[action] = v;
-      }
-    } catch (_) {
-      // ignore
-    }
-  }
-
-  saveBindingsToStorage() {
-    try {
-      localStorage.setItem(InputManager.STORAGE_KEY, JSON.stringify(this.bindings));
-    } catch (_) {
-      // ignore
-    }
   }
 
   getBindings() { return this.bindings; }
@@ -97,7 +72,54 @@ class InputManager {
     return code;
   }
 
+  /* =========================
+     Keybind persistence
+  ========================= */
+  initPersistence() {
+    if (this._persistenceLoaded) return;
+    this._persistenceLoaded = true;
+
+    this.loadBindingsFromStorage();
+  }
+
+  loadBindingsFromStorage() {
+    try {
+      const raw = localStorage.getItem(InputManager.STORAGE_KEY);
+      if (!raw) return;
+
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return;
+
+      for (const action of Object.keys(this.bindings)) {
+        const v = data[action];
+        if (typeof v === 'string' && v.length > 0) this.bindings[action] = v;
+      }
+    } catch (err) {
+      console.warn('Failed to load keybinds', err);
+    }
+  }
+
+  saveBindingsToStorage() {
+    try {
+      localStorage.setItem(InputManager.STORAGE_KEY, JSON.stringify(this.bindings));
+    } catch (err) {
+      console.warn('Failed to save keybinds', err);
+    }
+  }
+
+  refreshBindingUI() {
+    for (const action of Object.keys(this.bindings)) {
+      const inputId = InputManager.actionToInputId[action];
+      const el = document.getElementById(inputId);
+      if (!el) continue;
+      el.value = InputManager.prettyCode(this.bindings[action]);
+    }
+  }
+
   setupKeyBindings() {
+    // Ensure we load saved binds before showing them.
+    this.initPersistence();
+
     for (const action of Object.keys(this.bindings)) {
       const inputId = InputManager.actionToInputId[action];
       const el = document.getElementById(inputId);
@@ -114,8 +136,8 @@ class InputManager {
           e.stopPropagation();
 
           this.bindings[action] = e.code;
-          this.saveBindingsToStorage();
           el.value = InputManager.prettyCode(e.code);
+          this.saveBindingsToStorage();
 
           document.removeEventListener('keydown', capture, true);
           this.setCapturing(false);
@@ -199,7 +221,7 @@ class InputManager {
   }
 
   /* =========================================================
-     ✅ NEW: Round-safe reset
+     ✅ Round-safe reset
      Keeps heldCodes so key-repeat doesn't become "fresh presses"
      (prevents invisible instant hard-drops/holds after round starts)
   ========================================================= */
