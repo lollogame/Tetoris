@@ -39,11 +39,12 @@ class GameController {
 
     // UI
     this.cacheUI();
-    this.initPersistence();
     this.setupUI();
     this.setupInput();
     this.setupSettingsModal();
     this.setupMenu();
+    this.initLocalPersistence();
+
 
     this.applyModeUI();
     this.updateScoreboard();
@@ -369,83 +370,6 @@ class GameController {
     }
   }
 
-
-  /* =========================
-     Persistence (localStorage)
-  ========================= */
-  static MATCH_STORAGE_KEY = 'tetoris.match.v1';
-
-  initPersistence() {
-    // Gameplay settings
-    const gs = GameSettings.getInstance();
-    gs.loadFromStorage();
-    gs.applyToDOM();     // ensure UI shows saved values
-    gs.update();         // sync instance from DOM (clamped)
-    gs.saveToStorage();  // normalize stored values
-    gs.setupAutoSave();  // autosave on change
-
-    // Keybindings
-    const input = InputManager.getInstance();
-    input.loadBindingsFromStorage();
-
-    // PvP match config (host defaults)
-    const savedMatch = this.loadMatchConfigFromStorage();
-    if (savedMatch) this.applyMatchConfig(savedMatch, false);
-    this.setupMatchConfigAutoSave();
-  }
-
-  loadMatchConfigFromStorage() {
-    try {
-      const raw = localStorage.getItem(GameController.MATCH_STORAGE_KEY);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== 'object') return null;
-
-      const targetWins = Number.isFinite(data.targetWins)
-        ? Math.max(0, Math.trunc(data.targetWins))
-        : null;
-
-      const countdownSeconds = Number.isFinite(data.countdownSeconds)
-        ? Math.max(2, Math.min(5, Math.trunc(data.countdownSeconds)))
-        : null;
-
-      const cfg = {};
-      if (targetWins !== null) cfg.targetWins = targetWins;
-      if (countdownSeconds !== null) cfg.countdownSeconds = countdownSeconds;
-
-      return Object.keys(cfg).length ? cfg : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  saveMatchConfigToStorage(cfg) {
-    try {
-      localStorage.setItem(GameController.MATCH_STORAGE_KEY, JSON.stringify({
-        targetWins: this.match.targetWins,
-        countdownSeconds: this.match.countdownSeconds,
-        ...cfg
-      }));
-    } catch (_) {}
-  }
-
-  setupMatchConfigAutoSave() {
-    const mf = document.getElementById('matchFormat');
-    const cd = document.getElementById('countdownSeconds');
-
-    const onChange = () => {
-      // If joiner is locked, ignore.
-      if ((mf && mf.disabled) || (cd && cd.disabled)) return;
-
-      const cfg = this.readMatchConfigFromUI();
-      this.applyMatchConfig(cfg, false);
-      this.saveMatchConfigToStorage(cfg);
-    };
-
-    if (mf) mf.addEventListener('change', onChange);
-    if (cd) cd.addEventListener('change', onChange);
-  }
-
   readMatchConfigFromUI() {
     const mf = document.getElementById('matchFormat');
     const cd = document.getElementById('countdownSeconds');
@@ -471,6 +395,70 @@ class GameController {
 
     this.updateScoreboard();
   }
+
+/* =========================
+   Local persistence (settings + keybinds + match defaults)
+========================= */
+static STORAGE_KEYS = {
+  match: 'tetoris_matchcfg_v1'
+};
+
+initLocalPersistence() {
+  // 1) Settings + keybind persistence are handled by their own modules (settings.js / input.js),
+  // but we trigger their DOM wiring here after UI exists.
+  if (typeof GameSettings !== 'undefined' && typeof GameSettings.getInstance === 'function') {
+    const gs = GameSettings.getInstance();
+    if (typeof gs.initPersistence === 'function') gs.initPersistence();
+  }
+  if (typeof InputManager !== 'undefined' && typeof InputManager.getInstance === 'function') {
+    const im = InputManager.getInstance();
+    if (typeof im.initPersistence === 'function') im.initPersistence();
+  }
+
+  // 2) Match defaults persistence (host-side convenience)
+  this.loadMatchDefaultsFromStorage();
+  this.wireMatchDefaultsAutoSave();
+}
+
+loadMatchDefaultsFromStorage() {
+  try {
+    const raw = localStorage.getItem(GameController.STORAGE_KEYS.match);
+    if (!raw) return;
+
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return;
+
+    const targetWins = Number.isFinite(Number(data.targetWins)) ? Math.max(0, parseInt(data.targetWins, 10)) : undefined;
+    const countdownSeconds = Number.isFinite(Number(data.countdownSeconds))
+      ? Math.max(2, Math.min(5, parseInt(data.countdownSeconds, 10)))
+      : undefined;
+
+    const cfg = {};
+    if (typeof targetWins === 'number') cfg.targetWins = targetWins;
+    if (typeof countdownSeconds === 'number') cfg.countdownSeconds = countdownSeconds;
+
+    if (Object.keys(cfg).length > 0) this.applyMatchConfig(cfg, false);
+  } catch (err) {
+    console.warn('Failed to load match defaults', err);
+  }
+}
+
+saveMatchDefaultsToStorage() {
+  try {
+    const cfg = this.readMatchConfigFromUI();
+    localStorage.setItem(GameController.STORAGE_KEYS.match, JSON.stringify(cfg));
+  } catch (err) {
+    console.warn('Failed to save match defaults', err);
+  }
+}
+
+wireMatchDefaultsAutoSave() {
+  const mf = document.getElementById('matchFormat');
+  const cd = document.getElementById('countdownSeconds');
+  if (mf) mf.addEventListener('change', () => this.saveMatchDefaultsToStorage());
+  if (cd) cd.addEventListener('change', () => this.saveMatchDefaultsToStorage());
+}
+
 
   /* =========================
      Main UI (PvP + Chat)
@@ -498,7 +486,6 @@ class GameController {
         this.createBtn.disabled = true;
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), false);
-        this.saveMatchConfigToStorage(this.readMatchConfigFromUI());
         this.updateScoreboard();
       });
     }
