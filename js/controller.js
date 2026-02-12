@@ -508,32 +508,42 @@ class GameController {
       if (this.gameState1 && this.acceptInput) this.gameState1.move(dx);
     };
 
-    const isTypingContext = () => {
-      const el = document.activeElement;
-      if (!el) return false;
-      if (el.isContentEditable) return true;
-      const tag = (el.tagName || '').toUpperCase();
-      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    const isTypingContext = (target) => {
+      if (!target) return false;
+      // Contenteditable or inside contenteditable
+      if (target.isContentEditable) return true;
+      const ce = target.closest ? target.closest('[contenteditable="true"]') : null;
+      if (ce) return true;
+
+      const tag = (target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+
+      // If the event target is inside an input wrapper (rare but happens with icons inside inputs)
+      const insideFormControl = target.closest
+        ? target.closest('input, textarea, select')
+        : null;
+      return !!insideFormControl;
     };
+
 
     document.addEventListener('keydown', (e) => {
       if (input.isCapturing()) return;
 
+      // Don't hijack keyboard input when typing in chat / join fields / settings.
+      if (isTypingContext(e.target)) return;
+
       const b = input.getBindings();
       const code = e.code;
 
-      // Always track held keys for movement/timers, even when UI fields are focused.
-      const alreadyHeld = !!input.getHeldCodes()[code];
-      input.handleKeyDown(code);
-
-      // If the user is typing in any input/textarea/select (chat, join ID, settings fields),
-      // do NOT hijack keys for gameplay and do NOT preventDefault.
-      if (isTypingContext()) return;
-
-      // Only prevent default for keys we actually use for gameplay.
       if (Object.values(b).includes(code)) e.preventDefault();
 
-      if (!this.acceptInput || !this.gameState1) return;
+      if (!this.acceptInput || !this.gameState1) {
+        input.handleKeyDown(code);
+        return;
+      }
+
+      const alreadyHeld = !!input.getHeldCodes()[code];
+      input.handleKeyDown(code);
 
       const isRepeatBlocked =
         (code === b.hold || code === b.hardDrop || code === b.rotateCW || code === b.rotateCCW || code === b.rotate180);
@@ -586,11 +596,7 @@ class GameController {
       input.handleKeyUp(code);
 
       const b = input.getBindings();
-
-      // Always allow soft drop to be released even if the user is typing.
-      if (this.gameState1 && this.acceptInput && code === b.softDrop) {
-        this.gameState1.setSoftDropActive(false);
-      }
+      if (this.gameState1 && code === b.softDrop) this.gameState1.setSoftDropActive(false);
     });
   }
 
