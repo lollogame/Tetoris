@@ -37,6 +37,35 @@ class InputManager {
     return InputManager.instance;
   }
 
+  /* =========================================================
+     Persistence (localStorage)
+  ========================================================= */
+  static STORAGE_KEY = 'tetoris.bindings.v1';
+
+  loadBindingsFromStorage() {
+    try {
+      const raw = localStorage.getItem(InputManager.STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object') return;
+
+      for (const action of Object.keys(this.bindings)) {
+        const v = data[action];
+        if (typeof v === 'string' && v.length > 0) this.bindings[action] = v;
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  saveBindingsToStorage() {
+    try {
+      localStorage.setItem(InputManager.STORAGE_KEY, JSON.stringify(this.bindings));
+    } catch (_) {
+      // ignore
+    }
+  }
+
   getBindings() { return this.bindings; }
   getHeldCodes() { return this.heldCodes; }
 
@@ -85,6 +114,7 @@ class InputManager {
           e.stopPropagation();
 
           this.bindings[action] = e.code;
+          this.saveBindingsToStorage();
           el.value = InputManager.prettyCode(e.code);
 
           document.removeEventListener('keydown', capture, true);
