@@ -1,22 +1,22 @@
 'use strict';
 
 /* =========================================================
-   Settings + localStorage persistence
+   Settings
 ========================================================= */
 class GameSettings {
   static instance = null;
-  static STORAGE_KEY = 'tetoris_settings_v1';
 
   constructor() {
-    // Defaults
     this.arr = 0;
     this.das = 167;
     this.dcd = 0;
     this.sdf = 6;              // number or 'inf'
     this.preventMissdrop = true;
-
-    this._persistenceWired = false;
-  }
+  
+    // Persistence
+    this._storageKey = 'tetoris_settings_v1';
+    this.loadFromStorage();
+}
 
   static getInstance() {
     if (!GameSettings.instance) GameSettings.instance = new GameSettings();
@@ -37,6 +37,55 @@ class GameSettings {
     return Math.min(max, Math.max(min, v));
   }
 
+
+  loadFromStorage() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== 'object') return;
+
+      if (Number.isFinite(s.arr)) this.arr = Math.min(200, Math.max(0, s.arr));
+      if (Number.isFinite(s.das)) this.das = Math.min(500, Math.max(0, s.das));
+      if (Number.isFinite(s.dcd)) this.dcd = Math.min(100, Math.max(0, s.dcd));
+
+      if (s.sdf === 'inf') this.sdf = 'inf';
+      else if (Number.isFinite(s.sdf)) this.sdf = Math.min(999999, Math.max(1, s.sdf));
+
+      if (typeof s.preventMissdrop === 'boolean') this.preventMissdrop = s.preventMissdrop;
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  saveToStorage() {
+    try {
+      localStorage.setItem(this._storageKey, JSON.stringify({
+        arr: this.arr,
+        das: this.das,
+        dcd: this.dcd,
+        sdf: this.sdf,
+        preventMissdrop: this.preventMissdrop,
+      }));
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  applyToUI() {
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = String(v);
+    };
+
+    setVal('arr', this.arr);
+    setVal('das', this.das);
+    setVal('dcd', this.dcd);
+    setVal('sdf', this.sdf === 'inf' ? 'inf' : this.sdf);
+    const pm = document.getElementById('preventMissdrop');
+    if (pm) pm.value = this.preventMissdrop ? 'true' : 'false';
+  }
+
   update() {
     this.arr = this._int('arr', 0, 0, 200);
     this.das = this._int('das', 167, 0, 500);
@@ -54,99 +103,6 @@ class GameSettings {
     const pmEl = document.getElementById('preventMissdrop');
     const rawPM = pmEl ? pmEl.value : 'true';
     this.preventMissdrop = (rawPM === 'true');
-  }
-
-  /* =========================
-     Persistence
-  ========================= */
-  initPersistence() {
-    if (this._persistenceWired) return;
-    this._persistenceWired = true;
-
-    // Load saved values -> push into UI -> sync internal state
-    this.loadFromStorage();
-    this.applyToUI();
-    this.update();
-
-    this.wireAutoSave();
-  }
-
-  loadFromStorage() {
-    try {
-      const raw = localStorage.getItem(GameSettings.STORAGE_KEY);
-      if (!raw) return;
-
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== 'object') return;
-
-      if (Number.isFinite(Number(data.arr))) this.arr = Math.max(0, Math.min(200, parseInt(data.arr, 10)));
-      if (Number.isFinite(Number(data.das))) this.das = Math.max(0, Math.min(500, parseInt(data.das, 10)));
-      if (Number.isFinite(Number(data.dcd))) this.dcd = Math.max(0, Math.min(100, parseInt(data.dcd, 10)));
-
-      if (data.sdf === 'inf') this.sdf = 'inf';
-      else if (Number.isFinite(Number(data.sdf))) this.sdf = Math.max(1, Number(data.sdf));
-
-      if (typeof data.preventMissdrop === 'boolean') this.preventMissdrop = data.preventMissdrop;
-      else if (typeof data.preventMissdrop === 'string') this.preventMissdrop = (data.preventMissdrop === 'true');
-    } catch (err) {
-      console.warn('Failed to load settings', err);
-    }
-  }
-
-  saveToStorage() {
-    try {
-      const payload = {
-        arr: this.arr,
-        das: this.das,
-        dcd: this.dcd,
-        sdf: this.sdf,
-        preventMissdrop: this.preventMissdrop,
-      };
-      localStorage.setItem(GameSettings.STORAGE_KEY, JSON.stringify(payload));
-    } catch (err) {
-      console.warn('Failed to save settings', err);
-    }
-  }
-
-  applyToUI() {
-    const arrEl = document.getElementById('arr');
-    const dasEl = document.getElementById('das');
-    const dcdEl = document.getElementById('dcd');
-    const sdfEl = document.getElementById('sdf');
-    const pmEl  = document.getElementById('preventMissdrop');
-
-    if (arrEl) arrEl.value = String(this.arr);
-    if (dasEl) dasEl.value = String(this.das);
-    if (dcdEl) dcdEl.value = String(this.dcd);
-    if (sdfEl) sdfEl.value = String(this.sdf);
-    if (pmEl)  pmEl.value  = this.preventMissdrop ? 'true' : 'false';
-  }
-
-  wireAutoSave() {
-    const idsInput = ['arr', 'das', 'dcd'];
-    for (const id of idsInput) {
-      const el = document.getElementById(id);
-      if (!el) continue;
-      el.addEventListener('input', () => {
-        this.update();
-        this.saveToStorage();
-      });
-    }
-
-    const sdfEl = document.getElementById('sdf');
-    if (sdfEl) {
-      sdfEl.addEventListener('change', () => {
-        this.update();
-        this.saveToStorage();
-      });
-    }
-
-    const pmEl = document.getElementById('preventMissdrop');
-    if (pmEl) {
-      pmEl.addEventListener('change', () => {
-        this.update();
-        this.saveToStorage();
-      });
-    }
+    this.saveToStorage();
   }
 }
