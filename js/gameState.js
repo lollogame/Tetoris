@@ -1,101 +1,99 @@
 'use strict';
 
+
 /* =========================================================
-   Audio (tiny built-in synth, no external files)
-   - Autoplays only after a user gesture (browser policy)
+   Tiny SFX (WebAudio, no external files)
+   - Plays only after a user gesture (browser policy). We lazily init.
 ========================================================= */
-class AudioManager {
-  static _instance = null;
+class SFX {
+  static ctx = null;
+  static master = null;
 
-  static getInstance() {
-    if (!AudioManager._instance) AudioManager._instance = new AudioManager();
-    return AudioManager._instance;
-  }
-
-  constructor() {
-    this.enabled = true;
-    this.volume = 0.18; // master volume (0..1)
-    this._ctx = null;
-    this._master = null;
-  }
-
-  _ensureContext() {
-    if (!this.enabled) return null;
-
-    if (!this._ctx) {
+  static ensure() {
+    try {
+      if (SFX.ctx) return true;
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return null;
-
-      this._ctx = new Ctx();
-      this._master = this._ctx.createGain();
-      this._master.gain.value = this.volume;
-      this._master.connect(this._ctx.destination);
+      if (!Ctx) return false;
+      SFX.ctx = new Ctx();
+      SFX.master = SFX.ctx.createGain();
+      SFX.master.gain.value = 0.12; // global volume
+      SFX.master.connect(SFX.ctx.destination);
+      return true;
+    } catch {
+      return false;
     }
-
-    // Some browsers start suspended until a gesture happens
-    if (this._ctx.state === 'suspended') {
-      // resume() may still fail if not called from a gesture; that's fine.
-      this._ctx.resume().catch(() => {});
-    }
-
-    return this._ctx;
   }
 
-  _beep(freq, durMs, type = 'sine', gain = 1) {
-    const ctx = this._ensureContext();
-    if (!ctx || ctx.state !== 'running') return;
+  static beep(freq = 440, durMs = 40, type = 'square', gain = 0.6) {
+    if (!SFX.ensure()) return;
+    const ctx = SFX.ctx;
+
+    // If still suspended, resume on first interaction attempt
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
 
     const t0 = ctx.currentTime;
     const dur = Math.max(0.01, durMs / 1000);
 
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, t0);
-
-    // Tiny envelope to avoid clicks
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.linearRampToValueAtTime(this.volume * gain, t0 + 0.005);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
-    osc.connect(g);
-    g.connect(this._master);
+    o.connect(g);
+    g.connect(SFX.master);
 
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.01);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
   }
 
-  play(eventName, arg = 0) {
-    if (!this.enabled) return;
+  static noise(durMs = 60, gain = 0.25) {
+    if (!SFX.ensure()) return;
+    const ctx = SFX.ctx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-    switch (eventName) {
-      case 'rotate':
-        this._beep(740, 28, 'triangle', 0.6);
-        break;
-      case 'hold':
-        this._beep(520, 55, 'sine', 0.6);
-        break;
-      case 'hardDrop':
-        this._beep(260, 45, 'square', 0.45);
-        break;
-      case 'lock':
-        this._beep(190, 35, 'square', 0.35);
-        break;
-      case 'clear': {
-        // arg = lines (1..4)
-        const base = 420 + (Math.max(1, Math.min(4, arg)) - 1) * 120;
-        this._beep(base, 70, 'sawtooth', 0.7);
-        break;
+    const dur = Math.max(0.01, durMs / 1000);
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+
+    const src = ctx.createBufferSource();
+    const g = ctx.createGain();
+    src.buffer = buffer;
+
+    const t0 = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    src.connect(g);
+    g.connect(SFX.master);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  }
+
+  static play(name, arg = 0) {
+    // Keep these short/subtle; you can tune later.
+    switch (name) {
+      case 'rotate':    return SFX.beep(620, 22, 'square', 0.25);
+      case 'hold':      return SFX.beep(520, 35, 'triangle', 0.25);
+      case 'harddrop':  return SFX.beep(220, 45, 'square', 0.35);
+      case 'lock':      return SFX.beep(180, 28, 'square', 0.22);
+      case 'line': {
+        // arg = lines cleared
+        const n = Math.max(1, Math.min(4, Number(arg) || 1));
+        const freq = [0, 520, 600, 700, 840][n];
+        return SFX.beep(freq, 70, 'triangle', 0.30);
       }
-      case 'garbageIn':
-        this._beep(320, 70, 'sine', 0.5);
-        break;
-      case 'garbageApply':
-        this._beep(120, 90, 'square', 0.6);
-        break;
-      default:
-        break;
+      case 'garbage_in':    return SFX.noise(50, 0.18);
+      case 'garbage_apply': return SFX.noise(70, 0.22);
+      default: return;
     }
   }
 }
@@ -294,7 +292,6 @@ class GameState {
         this.currentY -= dy;
         this.currentRotation = newR;
         this.lastActionWasRotation = true;
-        if (this.playerId === 1) AudioManager.getInstance().play('rotate');
 
         if (this.spawnGrace) this.spawnGraceUsed = true;
 
@@ -302,6 +299,7 @@ class GameState {
           this.lockDelayTimer = 0;
           this.lockResetCount++;
         }
+        SFX.play('rotate');
         return true;
       }
     }
@@ -350,8 +348,9 @@ class GameState {
   }
 
   const locked = this.lockPiece();
-  if (this.playerId === 1) AudioManager.getInstance().play('hardDrop');
   if (!locked) return false;
+
+  SFX.play('harddrop');
 
   if (settings.preventMissdrop) {
     this.hardDropCooldown = this.hardDropCooldownFrames;
@@ -395,7 +394,7 @@ class GameState {
       this.board[by][bx] = this.currentPiece;
     }
 
-    if (this.playerId === 1) AudioManager.getInstance().play('lock');
+    SFX.play('lock');
 
     if (this.playerId === 1) {
       InputManager.getInstance().consumeRotationInputs();
@@ -453,7 +452,9 @@ class GameState {
     if (attack >= totalPending) {
       attack -= totalPending;
       this.pendingGarbage = [];
-      ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
+      SFX.play('garbage_apply');
+
+    ChatManager.addMessage(`Canceled ${totalPending} garbage lines!`, 'System');
     } else {
       let remaining = attack;
       this.pendingGarbage = this.pendingGarbage.filter(g => {
@@ -527,12 +528,8 @@ class GameState {
 
     const linesCleared = clearedRows.length;
 
-    if (linesCleared > 0 && this.renderer) {
-      this.renderer.flashClear(linesCleared);
-      if (this.playerId === 1) AudioManager.getInstance().play('clear', linesCleared);
-    }
-
     if (linesCleared > 0) {
+      SFX.play('line', linesCleared);
       for (let i = clearedRows.length - 1; i >= 0; i--) {
         this.board.splice(clearedRows[i], 1);
       }
@@ -576,24 +573,15 @@ class GameState {
     const safe = Math.max(0, Math.min(10, Number(lines) || 0));
     if (safe === 0) return;
 
-    if (this.playerId === 1) {
-      AudioManager.getInstance().play('garbageIn');
-      if (this.renderer) this.renderer.flashGarbageIn();
-    }
-
     const hole = this.getNextGarbageHole(safe);
     this.pendingGarbage.push({ lines: safe, hole });
+    SFX.play('garbage_in');
   }
 
   applyGarbage() {
     if (this.pendingGarbage.length === 0) return;
 
     let remainingCap = GARBAGE_APPLY_CAP;
-
-    if (this.playerId === 1) {
-      AudioManager.getInstance().play('garbageApply');
-      if (this.renderer) this.renderer.flashGarbageApply();
-    }
 
     while (this.pendingGarbage.length > 0 && remainingCap > 0) {
       const g = this.pendingGarbage[0];
@@ -638,7 +626,7 @@ this.afterSpawnInput();
     }
 
     this.canHold = false;
-    if (this.playerId === 1) AudioManager.getInstance().play('hold');
+    SFX.play('hold');
     return true;
   }
 
