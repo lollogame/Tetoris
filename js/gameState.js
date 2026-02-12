@@ -1,6 +1,106 @@
 'use strict';
 
 /* =========================================================
+   Audio (tiny built-in synth, no external files)
+   - Autoplays only after a user gesture (browser policy)
+========================================================= */
+class AudioManager {
+  static _instance = null;
+
+  static getInstance() {
+    if (!AudioManager._instance) AudioManager._instance = new AudioManager();
+    return AudioManager._instance;
+  }
+
+  constructor() {
+    this.enabled = true;
+    this.volume = 0.18; // master volume (0..1)
+    this._ctx = null;
+    this._master = null;
+  }
+
+  _ensureContext() {
+    if (!this.enabled) return null;
+
+    if (!this._ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+
+      this._ctx = new Ctx();
+      this._master = this._ctx.createGain();
+      this._master.gain.value = this.volume;
+      this._master.connect(this._ctx.destination);
+    }
+
+    // Some browsers start suspended until a gesture happens
+    if (this._ctx.state === 'suspended') {
+      // resume() may still fail if not called from a gesture; that's fine.
+      this._ctx.resume().catch(() => {});
+    }
+
+    return this._ctx;
+  }
+
+  _beep(freq, durMs, type = 'sine', gain = 1) {
+    const ctx = this._ensureContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    const t0 = ctx.currentTime;
+    const dur = Math.max(0.01, durMs / 1000);
+
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+
+    // Tiny envelope to avoid clicks
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(this.volume * gain, t0 + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    osc.connect(g);
+    g.connect(this._master);
+
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.01);
+  }
+
+  play(eventName, arg = 0) {
+    if (!this.enabled) return;
+
+    switch (eventName) {
+      case 'rotate':
+        this._beep(740, 28, 'triangle', 0.6);
+        break;
+      case 'hold':
+        this._beep(520, 55, 'sine', 0.6);
+        break;
+      case 'hardDrop':
+        this._beep(260, 45, 'square', 0.45);
+        break;
+      case 'lock':
+        this._beep(190, 35, 'square', 0.35);
+        break;
+      case 'clear': {
+        // arg = lines (1..4)
+        const base = 420 + (Math.max(1, Math.min(4, arg)) - 1) * 120;
+        this._beep(base, 70, 'sawtooth', 0.7);
+        break;
+      }
+      case 'garbageIn':
+        this._beep(320, 70, 'sine', 0.5);
+        break;
+      case 'garbageApply':
+        this._beep(120, 90, 'square', 0.6);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+/* =========================================================
    Game State
 ========================================================= */
 class GameState {
@@ -194,6 +294,7 @@ class GameState {
         this.currentY -= dy;
         this.currentRotation = newR;
         this.lastActionWasRotation = true;
+        if (this.playerId === 1) AudioManager.getInstance().play('rotate');
 
         if (this.spawnGrace) this.spawnGraceUsed = true;
 
@@ -249,6 +350,7 @@ class GameState {
   }
 
   const locked = this.lockPiece();
+  if (this.playerId === 1) AudioManager.getInstance().play('hardDrop');
   if (!locked) return false;
 
   if (settings.preventMissdrop) {
@@ -292,6 +394,8 @@ class GameState {
     for (const [bx, by] of toPlace) {
       this.board[by][bx] = this.currentPiece;
     }
+
+    if (this.playerId === 1) AudioManager.getInstance().play('lock');
 
     if (this.playerId === 1) {
       InputManager.getInstance().consumeRotationInputs();
@@ -423,6 +527,11 @@ class GameState {
 
     const linesCleared = clearedRows.length;
 
+    if (linesCleared > 0 && this.renderer) {
+      this.renderer.flashClear(linesCleared);
+      if (this.playerId === 1) AudioManager.getInstance().play('clear', linesCleared);
+    }
+
     if (linesCleared > 0) {
       for (let i = clearedRows.length - 1; i >= 0; i--) {
         this.board.splice(clearedRows[i], 1);
@@ -467,6 +576,11 @@ class GameState {
     const safe = Math.max(0, Math.min(10, Number(lines) || 0));
     if (safe === 0) return;
 
+    if (this.playerId === 1) {
+      AudioManager.getInstance().play('garbageIn');
+      if (this.renderer) this.renderer.flashGarbageIn();
+    }
+
     const hole = this.getNextGarbageHole(safe);
     this.pendingGarbage.push({ lines: safe, hole });
   }
@@ -475,6 +589,11 @@ class GameState {
     if (this.pendingGarbage.length === 0) return;
 
     let remainingCap = GARBAGE_APPLY_CAP;
+
+    if (this.playerId === 1) {
+      AudioManager.getInstance().play('garbageApply');
+      if (this.renderer) this.renderer.flashGarbageApply();
+    }
 
     while (this.pendingGarbage.length > 0 && remainingCap > 0) {
       const g = this.pendingGarbage[0];
@@ -519,6 +638,7 @@ this.afterSpawnInput();
     }
 
     this.canHold = false;
+    if (this.playerId === 1) AudioManager.getInstance().play('hold');
     return true;
   }
 
