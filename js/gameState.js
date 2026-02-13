@@ -129,8 +129,8 @@ class GameState {
     this.maxLockResets = 15;
     this.lockResetCount = 0;
 
-    this.hardDropCooldown = 0;
-    this.hardDropCooldownFrames = 10;
+    this.hardDropCooldownMs = 0;
+    this.hardDropCooldownDurationMs = 170;
 
     this.dcdTimer = 0;
 
@@ -152,6 +152,7 @@ class GameState {
     this.pendingGarbage = [];
     this.garbageHole = this.rng.nextInt(COLS);
     this.garbageVel = 0; // -1, 0, +1 momentum
+    this.roundId = null;
 
     const canvas = document.getElementById(canvasId);
     const holdCanvas = document.getElementById(holdCanvasId);
@@ -184,7 +185,6 @@ class GameState {
     this.lockResetCount = 0;
     this.isTouchingGround = false;
 
-    this.hardDropCooldown = 0;
     this.lastGravityTime = 0;
     this.lastActionWasRotation = false;
 
@@ -323,42 +323,44 @@ class GameState {
   setSoftDropActive(active) { this.softDropActive = active; }
 
   hardDrop() {
-    const settings = GameSettings.getInstance();
-    if (settings.preventMissdrop && this.hardDropCooldown > 0) return true;
+    return this.hardDropAndSpawn();
+  }
 
+  canHardDropNow() {
+    const settings = GameSettings.getInstance();
+    return !(settings.preventMissdrop && this.hardDropCooldownMs > 0);
+  }
+
+  armHardDropCooldown() {
+    const settings = GameSettings.getInstance();
+    if (settings.preventMissdrop) {
+      this.hardDropCooldownMs = this.hardDropCooldownDurationMs;
+    }
+  }
+
+  performHardDropLock() {
+    if (!this.currentPiece) return false;
     while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
       this.currentY++;
     }
 
-    const ok = this.lockPiece();
-    if (ok && settings.preventMissdrop) {
-      this.hardDropCooldown = this.hardDropCooldownFrames;
-    }
-    return ok;
+    const locked = this.lockPiece();
+    if (!locked) return false;
+
+    SFX.play('harddrop');
+    this.armHardDropCooldown();
+    return true;
   }
 
   hardDropAndSpawn() {
-  const settings = GameSettings.getInstance();
+    if (!this.canHardDropNow()) return true;
 
-  // prevent "double hard drop" / missdrop spam
-  if (settings.preventMissdrop && this.hardDropCooldown > 0) return true;
+    const dropped = this.performHardDropLock();
+    if (!dropped) return false;
 
-  while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
-    this.currentY++;
+    // Spawn next; if blocked, game over
+    return this.spawnPiece();
   }
-
-  const locked = this.lockPiece();
-  if (!locked) return false;
-
-  SFX.play('harddrop');
-
-  if (settings.preventMissdrop) {
-    this.hardDropCooldown = this.hardDropCooldownFrames;
-  }
-
-  // Spawn next; if blocked, game over
-  return this.spawnPiece();
-}
 
 
 
@@ -560,7 +562,7 @@ class GameState {
       attack = this.handleGarbageCanceling(attack);
 
       this.attacksSent += attack;
-      if (attack > 0) NetworkManager.getInstance().sendAttack(attack);
+      if (attack > 0) NetworkManager.getInstance().sendAttack(attack, this.roundId);
     } else {
       this.comboCounter = -1;
       if (this.pendingGarbage.length > 0) this.applyGarbage();
@@ -635,7 +637,9 @@ this.afterSpawnInput();
 
     this.consumeRotationBuffer();
 
-    if (this.hardDropCooldown > 0) this.hardDropCooldown--;
+    if (this.hardDropCooldownMs > 0) {
+      this.hardDropCooldownMs = Math.max(0, this.hardDropCooldownMs - deltaTime);
+    }
     if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
 
     const wasTouching = this.isTouchingGround;
@@ -658,9 +662,6 @@ this.afterSpawnInput();
       if (this.lockDelayTimer >= this.lockDelay || this.lockResetCount >= this.maxLockResets) {
         const ok = this.lockPiece();
         if (!ok) return false;
-
-        const settings = GameSettings.getInstance();
-        if (settings.preventMissdrop) this.hardDropCooldown = this.hardDropCooldownFrames;
 
         const spawned = this.spawnPiece();
 if (!spawned) return false; // TOP OUT
@@ -763,4 +764,9 @@ this.lastGravityTime = 0;
   }
 
   setGameStartTime(t) { this.gameStartTime = t; }
+
+  setRoundId(roundId) {
+    const cleaned = (typeof roundId === 'string') ? roundId.trim() : '';
+    this.roundId = cleaned || null;
+  }
 }
