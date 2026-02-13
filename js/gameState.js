@@ -348,13 +348,10 @@ class GameState {
     if (!locked) return false;
 
     SFX.play('harddrop');
-    this.armHardDropCooldown();
     return true;
   }
 
   hardDropAndSpawn() {
-    if (!this.canHardDropNow()) return true;
-
     const dropped = this.performHardDropLock();
     if (!dropped) return false;
 
