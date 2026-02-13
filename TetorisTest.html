@@ -10,22 +10,30 @@
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
 
     :root {
-      --bg-dark: #0a0e27;
-      --bg-grid: #151b3d;
-      --border-glow: #00ffff;
+      --bg-dark: #1a0a12;
+      --bg-grid: #3d1829;
+      --border-glow: #ff3b6b;
       --text-primary: #ffffff;
-      --text-secondary: #8b9dc3;
-      --accent-cyan: #00ffff;
-      --accent-pink: #ff00ff;
-      --accent-yellow: #ffff00;
-      --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.5);
+      --text-secondary: #ffd7e2;
+      --accent-red: #ff3b6b;
+      --accent-pink: #ff77a8;
+      --accent-light: #ffd7e2;
+      --accent-darkred: #7a0f2b;
+      --shadow-glow: 0 0 20px #7a0f2b80;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Orbitron', monospace;
-      background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
+      background: linear-gradient(135deg, #1a0a12 0%, #3d1829 50%, #5a2a3d 100%);
+      
+      background-image: url('https://imgs.search.brave.com/dFUNIDdRtQLK3oRst4J_XLnGrmxGUbDm2Mj2cfHr-II/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9wcmV2/aWV3LnJlZGQuaXQv/aW0tdGhpbmtpbmct/b2YtZ2V0dGluZy1h/LXRldG8tcGZwLXNl/bmQtbWUteW91ci1i/ZXN0LXRldG8tdjAt/djd4MXF4YXdoMHhl/MS5qcGVnP3dpZHRo/PTEyODQmZm9ybWF0/PXBqcGcmYXV0bz13/ZWJwJnM9YzU5NWVm/MDQ4NjUxMTVkM2U5/YmJiM2JiOWQ5ODNm/ZmEwZjg5NDAzZA');
+      
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      background-size: 100% 100%;
+      
       color: var(--text-primary);
       min-height: 100vh;
       overflow-x: hidden;
@@ -37,8 +45,10 @@
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background:
-        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
-        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 0, 255, 0.03) 2px, rgba(255, 0, 255, 0.03) 4px);
+        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 59, 107, 0.08) 2px, rgba(255, 59, 107, 0.08) 4px),
+        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 119, 168, 0.06) 2px, rgba(255, 119, 168, 0.06) 4px),
+        radial-gradient(ellipse at 20% 50%, rgba(255, 59, 107, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 50%, rgba(255, 119, 168, 0.1) 0%, transparent 50%);
       pointer-events: none;
       animation: scanlines 8s linear infinite;
     }
@@ -62,21 +72,21 @@
       font-size: 2rem;
       margin-bottom: 18px;
       text-transform: uppercase;
-      background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
+      background: linear-gradient(45deg, #ff3b6b, #ff77a8, #ffd7e2);
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
-      filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
+      filter: drop-shadow(0 0 10px rgba(255, 59, 107, 0.6));
       animation: glow-pulse 2s ease-in-out infinite;
     }
 
     @keyframes glow-pulse {
-      0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5)); }
-      50% { filter: drop-shadow(0 0 20px rgba(255, 0, 255, 0.8)); }
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(255, 59, 107, 0.6)); }
+      50% { filter: drop-shadow(0 0 20px rgba(255, 119, 168, 0.8)); }
     }
 
     .controls-panel {
-      background: rgba(21, 27, 61, 0.8);
+      background: rgba(61, 24, 41, 0.8);
       border: 2px solid var(--border-glow);
       border-radius: 10px;
       padding: 20px;
@@ -100,8 +110,8 @@
     }
 
     .control-item input, .control-item select {
-      background: rgba(10, 14, 39, 0.9);
-      border: 1px solid var(--accent-cyan);
+      background: rgba(26, 10, 18, 0.9);
+      border: 1px solid var(--accent-red);
       color: var(--text-primary);
       padding: 8px;
       border-radius: 5px;
@@ -111,13 +121,13 @@
 
     .control-item input:focus, .control-item select:focus {
       outline: none;
-      box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+      box-shadow: 0 0 10px rgba(255, 59, 107, 0.6);
     }
 
     button {
-      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+      background: linear-gradient(135deg, var(--accent-red), var(--accent-pink));
       border: none;
-      color: var(--bg-dark);
+      color: #1a0a12;
       padding: 12px 24px;
       font-family: 'Press Start 2P', cursive;
       font-size: 0.7rem;
@@ -125,12 +135,12 @@
       cursor: pointer;
       text-transform: uppercase;
       transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
+      box-shadow: 0 4px 15px rgba(255, 59, 107, 0.4);
     }
 
     button:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
+      box-shadow: 0 6px 20px rgba(255, 119, 168, 0.6);
     }
     button:active { transform: translateY(0); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -148,16 +158,16 @@
     .player-header {
       font-family: 'Press Start 2P', cursive;
       font-size: 1rem;
-      color: var(--accent-cyan);
-      text-shadow: 0 0 10px var(--accent-cyan);
+      color: var(--accent-red);
+      text-shadow: 0 0 10px var(--accent-red);
     }
 
     .game-wrapper { display: flex; gap: 20px; align-items: flex-start; }
     .side-panel { display: flex; flex-direction: column; gap: 15px; }
 
     .info-box {
-      background: rgba(21, 27, 61, 0.9);
-      border: 2px solid var(--accent-cyan);
+      background: rgba(61, 24, 41, 0.9);
+      border: 2px solid var(--accent-red);
       border-radius: 8px;
       padding: 15px;
       min-width: 150px;
@@ -168,26 +178,26 @@
       font-family: 'Press Start 2P', cursive;
       font-size: 0.6rem;
       margin-bottom: 10px;
-      color: var(--accent-yellow);
+      color: var(--accent-pink);
       text-align: center;
     }
 
     .stat { display: flex; justify-content: space-between; margin: 5px 0; font-size: 0.9rem; }
     .stat-label { color: var(--text-secondary); font-size: 0.75rem; }
-    .stat-value { color: var(--accent-cyan); font-weight: bold; }
+    .stat-value { color: var(--accent-red); font-weight: bold; }
 
     .canvas-container {
       position: relative;
       border: 3px solid var(--border-glow);
       border-radius: 5px;
-      box-shadow: var(--shadow-glow), inset 0 0 20px rgba(0, 255, 255, 0.1);
-      background: rgba(10, 14, 39, 0.95);
+      box-shadow: var(--shadow-glow), inset 0 0 20px rgba(255, 59, 107, 0.15);
+      background: rgba(26, 10, 18, 0.95);
     }
 
     canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
 
     .mini-canvas-container {
-      background: rgba(10, 14, 39, 0.9);
+      background: rgba(26, 10, 18, 0.9);
       border: 2px solid var(--accent-pink);
       border-radius: 5px;
       padding: 10px;
@@ -198,7 +208,7 @@
     }
 
     .chat-container {
-      background: rgba(21, 27, 61, 0.9);
+      background: rgba(61, 24, 41, 0.9);
       border: 2px solid var(--border-glow);
       border-radius: 10px;
       padding: 15px;
@@ -209,8 +219,8 @@
     .chat-messages {
       height: 150px;
       overflow-y: auto;
-      background: rgba(10, 14, 39, 0.8);
-      border: 1px solid var(--accent-cyan);
+      background: rgba(26, 10, 18, 0.8);
+      border: 1px solid var(--accent-red);
       border-radius: 5px;
       padding: 10px;
       margin-bottom: 10px;
@@ -227,8 +237,8 @@
     .chat-input-container { display: flex; gap: 10px; }
     .chat-input {
       flex: 1;
-      background: rgba(10, 14, 39, 0.9);
-      border: 1px solid var(--accent-cyan);
+      background: rgba(26, 10, 18, 0.9);
+      border: 1px solid var(--accent-red);
       color: var(--text-primary);
       padding: 10px;
       border-radius: 5px;
@@ -245,8 +255,8 @@
     }
 
     .connection-panel input {
-      background: rgba(10, 14, 39, 0.9);
-      border: 1px solid var(--accent-cyan);
+      background: rgba(26, 10, 18, 0.9);
+      border: 1px solid var(--accent-red);
       color: var(--text-primary);
       padding: 10px;
       border-radius: 5px;
@@ -259,13 +269,13 @@
       margin-top: 12px;
       font-family: 'Press Start 2P', cursive;
       font-size: 0.8rem;
-      color: var(--accent-yellow);
-      text-shadow: 0 0 10px var(--accent-yellow);
+      color: var(--accent-pink);
+      text-shadow: 0 0 10px var(--accent-pink);
     }
 
     #myPeerId {
-      background: rgba(21, 27, 61, 0.9);
-      border: 2px solid var(--accent-cyan);
+      background: rgba(61, 24, 41, 0.9);
+      border: 2px solid var(--accent-red);
       padding: 15px;
       border-radius: 10px;
       text-align: center;
@@ -282,12 +292,12 @@
     #myPeerId .peer-id-value {
       font-family: 'Press Start 2P', cursive;
       font-size: 0.9rem;
-      color: var(--accent-cyan);
+      color: var(--accent-red);
       word-break: break-all;
       user-select: all;
       cursor: pointer;
       padding: 10px;
-      background: rgba(10, 14, 39, 0.8);
+      background: rgba(26, 10, 18, 0.8);
       border-radius: 5px;
       border: 1px solid var(--accent-pink);
     }
@@ -304,8 +314,6 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
-
-      /* keep topbar clickable above canvas/overlays */
       position: relative;
       z-index: 30001;
     }
@@ -325,7 +333,7 @@
     .modal {
       position: fixed;
       inset: 0;
-      background: rgba(5, 8, 24, 0.78);
+      background: rgba(26, 10, 18, 0.78);
       backdrop-filter: blur(5px);
       z-index: 10000;
       display: flex;
@@ -338,7 +346,7 @@
       width: min(1100px, 96vw);
       max-height: 90vh;
       overflow: auto;
-      background: rgba(21, 27, 61, 0.95);
+      background: rgba(61, 24, 41, 0.95);
       border: 2px solid var(--border-glow);
       border-radius: 12px;
       box-shadow: var(--shadow-glow);
@@ -356,12 +364,11 @@
     .modal-header h2 {
       font-family: 'Press Start 2P', cursive;
       font-size: 0.85rem;
-      color: var(--accent-yellow);
+      color: var(--accent-light);
     }
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
-    /* If hidden, MUST NOT intercept clicks */
     #settingsModal.hidden,
     #countdownOverlay.hidden,
     #mainMenu.hidden {
@@ -375,7 +382,7 @@
       position: fixed;
       inset: 0;
       z-index: 25000;
-      background: rgba(5, 8, 24, 0.78);
+      background: rgba(26, 10, 18, 0.78);
       backdrop-filter: blur(5px);
       display: flex;
       align-items: center;
@@ -387,7 +394,7 @@
       width: min(920px, 96vw);
       max-height: 90vh;
       overflow: auto;
-      background: rgba(21, 27, 61, 0.95);
+      background: rgba(61, 24, 41, 0.95);
       border: 2px solid var(--border-glow);
       border-radius: 12px;
       box-shadow: var(--shadow-glow);
@@ -405,7 +412,7 @@
     .menu-header h2 {
       font-family: 'Press Start 2P', cursive;
       font-size: 0.85rem;
-      color: var(--accent-yellow);
+      color: var(--accent-light);
     }
 
     .mode-grid {
@@ -416,24 +423,24 @@
     }
 
     .mode-card {
-      border: 2px solid rgba(0, 255, 255, 0.45);
+      border: 2px solid rgba(255, 59, 107, 0.45);
       border-radius: 12px;
       padding: 14px;
-      background: rgba(10, 14, 39, 0.7);
-      box-shadow: 0 0 18px rgba(0, 255, 255, 0.18);
+      background: rgba(26, 10, 18, 0.7);
+      box-shadow: 0 0 18px rgba(255, 59, 107, 0.18);
       cursor: pointer;
       transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
       user-select: none;
     }
 
-    .mode-card:hover { transform: translateY(-2px); box-shadow: 0 0 22px rgba(255, 0, 255, 0.25); }
-    .mode-card.selected { border-color: var(--accent-pink); box-shadow: 0 0 26px rgba(255, 0, 255, 0.35); }
+    .mode-card:hover { transform: translateY(-2px); box-shadow: 0 0 22px rgba(255, 119, 168, 0.25); }
+    .mode-card.selected { border-color: var(--accent-pink); box-shadow: 0 0 26px rgba(255, 119, 168, 0.35); }
     .mode-card.disabled { opacity: 0.45; cursor: not-allowed; }
 
     .mode-title {
       font-family: 'Press Start 2P', cursive;
       font-size: 0.75rem;
-      color: var(--accent-cyan);
+      color: var(--accent-red);
       margin-bottom: 8px;
     }
 
@@ -452,7 +459,7 @@
     }
 
     /* =========================
-       NEW: Match Scoreboard
+       Match Scoreboard
     ========================= */
     .scoreboard {
       display: flex;
@@ -463,8 +470,8 @@
       padding: 12px 14px;
       margin: 10px auto 16px;
       width: min(900px, 96vw);
-      background: rgba(21, 27, 61, 0.75);
-      border: 2px solid rgba(0, 255, 255, 0.55);
+      background: rgba(61, 24, 41, 0.75);
+      border: 2px solid rgba(255, 59, 107, 0.55);
       border-radius: 12px;
       box-shadow: var(--shadow-glow);
       text-align: center;
@@ -473,8 +480,8 @@
     .score-pill {
       padding: 8px 12px;
       border-radius: 999px;
-      border: 1px solid rgba(255, 0, 255, 0.45);
-      background: rgba(10, 14, 39, 0.75);
+      border: 1px solid rgba(255, 119, 168, 0.45);
+      background: rgba(26, 10, 18, 0.75);
       font-family: 'Press Start 2P', cursive;
       font-size: 0.65rem;
       color: var(--text-primary);
@@ -482,12 +489,12 @@
     }
 
     .score-pill strong {
-      color: var(--accent-cyan);
-      text-shadow: 0 0 10px rgba(0,255,255,0.35);
+      color: var(--accent-red);
+      text-shadow: 0 0 10px rgba(255, 59, 107, 0.35);
     }
 
     /* =========================
-       NEW: Countdown Overlay
+       Countdown Overlay
     ========================= */
     .countdown-overlay {
       position: fixed;
@@ -496,7 +503,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
+      background: radial-gradient(circle at center, rgba(26, 10, 18, 0.35), rgba(61, 24, 41, 0.85));
       backdrop-filter: blur(3px);
       pointer-events: none;
     }
@@ -505,8 +512,8 @@
       text-align: center;
       padding: 24px 26px;
       border-radius: 16px;
-      border: 2px solid rgba(0, 255, 255, 0.65);
-      background: rgba(21, 27, 61, 0.82);
+      border: 2px solid rgba(255, 59, 107, 0.65);
+      background: rgba(61, 24, 41, 0.82);
       box-shadow: var(--shadow-glow);
       width: min(520px, 92vw);
     }
@@ -515,8 +522,8 @@
       font-family: 'Press Start 2P', cursive;
       font-size: 3.2rem;
       line-height: 1.1;
-      color: var(--accent-yellow);
-      text-shadow: 0 0 18px rgba(255,255,0,0.35);
+      color: var(--accent-light);
+      text-shadow: 0 0 18px rgba(255, 119, 168, 0.35);
       margin-bottom: 10px;
     }
 
@@ -525,46 +532,45 @@
       color: var(--text-secondary);
     }
 
-  
-        /* =========================
-           Result / KO Overlay
-        ========================= */
-        .result-overlay{
-            position: fixed;
-            inset: 0;
-            z-index: 20005;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: rgba(5, 8, 24, 0.35);
-            backdrop-filter: blur(3px);
-            pointer-events: none;
-        }
+    /* =========================
+       Result / KO Overlay
+    ========================= */
+    .result-overlay{
+        position: fixed;
+        inset: 0;
+        z-index: 20005;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: rgba(26, 10, 18, 0.35);
+        backdrop-filter: blur(3px);
+        pointer-events: none;
+    }
 
-        .result-card{
-            text-align: center;
-            padding: 22px 24px;
-            border: 2px solid var(--accent-pink);
-            border-radius: 12px;
-            background: rgba(10, 14, 39, 0.95);
-            box-shadow: var(--shadow-glow);
-            width: min(520px, 92vw);
-        }
+    .result-card{
+        text-align: center;
+        padding: 22px 24px;
+        border: 2px solid var(--accent-pink);
+        border-radius: 12px;
+        background: rgba(26, 10, 18, 0.95);
+        box-shadow: var(--shadow-glow);
+        width: min(520px, 92vw);
+    }
 
-        .result-big{
-            font-family: 'Press Start 2P', cursive;
-            font-size: 1.9rem;
-            color: var(--accent-yellow);
-            text-shadow: 0 0 12px rgba(255,255,0,0.35);
-            margin-bottom: 10px;
-            line-height: 1.2;
-        }
+    .result-big{
+        font-family: 'Press Start 2P', cursive;
+        font-size: 1.9rem;
+        color: var(--accent-light);
+        text-shadow: 0 0 12px rgba(255, 119, 168, 0.35);
+        margin-bottom: 10px;
+        line-height: 1.2;
+    }
 
-        .result-sub{
-            font-size: 0.95rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
+    .result-sub{
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+        line-height: 1.4;
+    }
 
 </style>
 </head>
