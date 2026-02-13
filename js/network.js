@@ -18,6 +18,13 @@ class NetworkManager {
     // Internal: retry if preferred ID is already taken
     this._initAttempt = 0;
     this._initOpts = null;
+
+    // Lightweight RTT probe (ping/pong)
+    this.pingIntervalMs = 2500;
+    this.pingTimeoutMs = 10000;
+    this._pingTimer = null;
+    this._nextPingId = 1;
+    this._pendingPings = new Map();
   }
 
   static getInstance() {
@@ -47,6 +54,7 @@ class NetworkManager {
       // tear down previous peer cleanly
       try { if (this.conn && this.conn.open) this.conn.close(); } catch (_) {}
       this.conn = null;
+      this.stopPingLoop();
 
       try {
         if (this.peer && !this.peer.destroyed) this.peer.destroy();
@@ -113,6 +121,7 @@ class NetworkManager {
         this.setupConnectionHandlers();
 
         conn.on('open', () => {
+          this.startPingLoop();
           if (typeof ChatManager !== 'undefined') {
             ChatManager.addMessage('Opponent connected!', 'System');
           }
@@ -172,6 +181,7 @@ class NetworkManager {
     });
 
     this.conn.on('error', (err) => {
+      this.stopPingLoop();
       console.error('Connection error:', err);
       ChatManager.addMessage(`Connection error: ${err?.message || err?.type || 'unknown'}`, 'System');
       this.handleInternalMessage({
@@ -184,7 +194,28 @@ class NetworkManager {
   setupConnectionHandlers() {
     if (!this.conn) return;
 
+    this.startPingLoop();
+
     this.conn.on('data', (data) => {
+      if (data?.type === 'netPing') {
+        const pingId = Number(data.id);
+        if (Number.isFinite(pingId) && pingId > 0) {
+          this.send({ type: 'netPong', id: pingId });
+        }
+        return;
+      }
+
+      if (data?.type === 'netPong') {
+        const pongId = Number(data.id);
+        if (!Number.isFinite(pongId) || pongId <= 0) return;
+        const sentAt = this._pendingPings.get(pongId);
+        if (!Number.isFinite(sentAt)) return;
+        this._pendingPings.delete(pongId);
+        const rttMs = Math.max(1, Math.round(performance.now() - sentAt));
+        this.handleInternalMessage({ type: 'netRtt', rttMs });
+        return;
+      }
+
       // Local-only hook (Zen etc)
       if (data?.type === 'attack' && typeof this.localAttackHandler === 'function') {
         this.localAttackHandler(data.lines);
@@ -195,6 +226,7 @@ class NetworkManager {
     });
 
     this.conn.on('close', () => {
+      this.stopPingLoop();
       console.log('Connection closed');
       ChatManager.addMessage('Opponent disconnected.', 'System');
       this.handleInternalMessage({ type: 'peerDisconnected' });
@@ -216,6 +248,37 @@ class NetworkManager {
     if (this.conn && this.conn.open) {
       this.conn.send(message);
     }
+  }
+
+  startPingLoop() {
+    this.stopPingLoop();
+    if (!this.conn || !this.conn.open) return;
+
+    const tick = () => {
+      if (!this.conn || !this.conn.open) return;
+
+      const now = performance.now();
+      for (const [id, sentAt] of this._pendingPings) {
+        if ((now - sentAt) > this.pingTimeoutMs) this._pendingPings.delete(id);
+      }
+
+      const pingId = this._nextPingId++;
+      if (this._nextPingId > 1000000000) this._nextPingId = 1;
+      this._pendingPings.set(pingId, now);
+      this.send({ type: 'netPing', id: pingId });
+
+      this._pingTimer = window.setTimeout(tick, this.pingIntervalMs);
+    };
+
+    this._pingTimer = window.setTimeout(tick, this.pingIntervalMs);
+  }
+
+  stopPingLoop() {
+    if (this._pingTimer != null) {
+      window.clearTimeout(this._pingTimer);
+      this._pingTimer = null;
+    }
+    this._pendingPings.clear();
   }
 
   sendAttack(lines, roundId = null) {
