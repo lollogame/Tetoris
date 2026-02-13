@@ -13,8 +13,13 @@ class GameController {
     this.gameState2 = null; // remote player view (PvP)
 
     // Modes
-    this.mode = 'zen'; // 'zen' | 'pvp_1v1' | 'battle_royale'
+    this.mode = 'zen'; // 'zen' | 'pvp_1v1' | 'battle_royale' | 'bot_practice'
     this.zenScore = 0;
+    this.botController = null;
+    this.botSummary = { wins: 0, losses: 0 };
+
+    // Battle Royale runtime
+    this.br = this._createBattleRoyaleState();
 
     // PvP match state
     this.isHost = false;
@@ -96,6 +101,7 @@ class GameController {
     // PvP UI
     this.createBtn = document.getElementById('createGameBtn');
     this.joinBtn = document.getElementById('joinGameBtn');
+    this.startBrBtn = document.getElementById('startBrBtn');
     this.restartBtn = document.getElementById('restartBtn');
     this.opponentPeerIdInput = document.getElementById('opponentPeerId');
 
@@ -107,6 +113,11 @@ class GameController {
     this.networkStatus = document.getElementById('networkStatus');
 
     this.scoreboard = document.getElementById('scoreboard');
+    this.brLobbyPanel = document.getElementById('brLobbyPanel');
+    this.brLobbyRoom = document.getElementById('brLobbyRoom');
+    this.brLobbyPlayers = document.getElementById('brLobbyPlayers');
+    this.brLobbyAlive = document.getElementById('brLobbyAlive');
+    this.brLobbyList = document.getElementById('brLobbyList');
 
     // Countdown overlay
     this.countdownOverlay = document.getElementById('countdownOverlay');
@@ -130,6 +141,123 @@ class GameController {
     this.connPanel = document.querySelector('.connection-panel');
   }
 
+  _createBattleRoyaleState() {
+    return {
+      active: false,
+      role: null,          // 'host' | 'client'
+      peer: null,
+      hostConn: null,      // client -> host
+      hostConns: new Map(),// host -> clients
+      roomCode: '',
+      localId: '',
+      hostId: '',
+      maxPlayers: 4,
+      started: false,
+      roundSeed: 0,
+      roundId: null,
+      roundStartMs: 0,
+      players: new Map(),  // id -> { id, alive, attackMode, attacksSent, lastAttackerId }
+      remoteStates: new Map(),
+      focusId: null,
+      stateSendIntervalMs: 70,
+    };
+  }
+
+  _closeConnSafe(conn) {
+    if (!conn) return;
+    try { conn.close(); } catch (_) {}
+  }
+
+  _closePeerSafe(peer) {
+    if (!peer) return;
+    try {
+      if (!peer.destroyed) peer.destroy();
+    } catch (_) {}
+  }
+
+  stopBattleRoyaleNetwork() {
+    if (!this.br) this.br = this._createBattleRoyaleState();
+
+    this._closeConnSafe(this.br.hostConn);
+    this.br.hostConn = null;
+    for (const conn of this.br.hostConns.values()) this._closeConnSafe(conn);
+    this.br.hostConns.clear();
+
+    this._closePeerSafe(this.br.peer);
+    this.br.peer = null;
+
+    this.br.active = false;
+    this.br.role = null;
+    this.br.roomCode = '';
+    this.br.localId = '';
+    this.br.hostId = '';
+    this.br.started = false;
+    this.br.roundSeed = 0;
+    this.br.roundId = null;
+    this.br.roundStartMs = 0;
+    this.br.players.clear();
+    this.br.remoteStates.clear();
+    this.br.focusId = null;
+
+    this._setPeerIdDisplay('');
+    this.updateBrLobbyPanel();
+  }
+
+  readBattleRoyaleConfigFromUI() {
+    const maxEl = document.getElementById('brMaxPlayers');
+    const modeEl = document.getElementById('brAttackMode');
+    const maxPlayers = this._clampInt(maxEl ? maxEl.value : 4, 3, 8, 4);
+    const modeRaw = modeEl ? String(modeEl.value || '').trim() : 'random';
+    const attackMode = ['random', 'highest_apm', 'retaliate'].includes(modeRaw) ? modeRaw : 'random';
+    return { maxPlayers, attackMode };
+  }
+
+  readBotConfigFromSettings() {
+    const s = GameSettings.getInstance();
+    return {
+      pps: Number(s.botPps) || 1.6,
+      aggression: Number(s.botAggression) || 65,
+      mistakeChance: Number(s.botMistakeChance) || 8,
+      thinkJitterMs: Number(s.botThinkJitterMs) || 85,
+    };
+  }
+
+  updateBrLobbyPanel() {
+    if (!this.brLobbyPanel) return;
+
+    if (this.mode !== 'battle_royale') {
+      this.brLobbyPanel.classList.add('hidden');
+      return;
+    }
+
+    const players = Array.from(this.br.players.values());
+    const maxPlayers = this.br.maxPlayers || 4;
+    const alive = players.filter((p) => p.alive).length;
+    const roomText = this.br.roomCode || '-';
+
+    if (this.brLobbyRoom) this.brLobbyRoom.innerHTML = `Room: <strong>${roomText}</strong>`;
+    if (this.brLobbyPlayers) this.brLobbyPlayers.innerHTML = `Players: <strong>${players.length}/${maxPlayers}</strong>`;
+    if (this.brLobbyAlive) {
+      const aliveText = this.br.started ? `${alive}/${players.length}` : '-';
+      this.brLobbyAlive.innerHTML = `Alive: <strong>${aliveText}</strong>`;
+    }
+
+    if (this.brLobbyList) {
+      if (players.length === 0) {
+        this.brLobbyList.textContent = '-';
+      } else {
+        const list = players.map((p) => {
+          const self = (p.id === this.br.localId) ? ' (you)' : '';
+          const state = p.alive ? 'alive' : 'out';
+          return `${p.id}${self} [${state}]`;
+        });
+        this.brLobbyList.textContent = list.join(' | ');
+      }
+    }
+
+    this.brLobbyPanel.classList.remove('hidden');
+  }
+
   /* =========================
      Small UI helpers
   ========================= */
@@ -138,6 +266,7 @@ class GameController {
     if (this.createBtn) this.createBtn.disabled = !on;
     if (this.joinBtn) this.joinBtn.disabled = !on;
     if (this.opponentPeerIdInput) this.opponentPeerIdInput.disabled = !on;
+    if (this.startBrBtn && this.mode !== 'battle_royale') this.startBrBtn.classList.add('hidden');
   }
 
   setMatchConfigLocked(locked) {
@@ -273,9 +402,32 @@ class GameController {
   updateNetworkStatus() {
     if (!this.networkStatus) return;
 
-    if (this.mode !== 'pvp_1v1') {
+    if (this.mode !== 'pvp_1v1' && this.mode !== 'battle_royale') {
       this.networkStatus.classList.add('hidden');
       this.networkStatus.textContent = '';
+      return;
+    }
+
+    if (this.mode === 'battle_royale') {
+      const hostConnected = !!(this.br.role === 'host' && this.br.peer && this.br.peer.open);
+      const clientConnected = !!(this.br.role === 'client' && this.br.hostConn && this.br.hostConn.open);
+      const connected = hostConnected || clientConnected;
+      const waiting = (this.phase === 'waiting' || this.phase === 'countdown' || this.phase === 'playing' || this.phase === 'roundOver');
+
+      if (!connected) {
+        if (!waiting) {
+          this.networkStatus.classList.add('hidden');
+          this.networkStatus.textContent = '';
+          return;
+        }
+        this.networkStatus.classList.remove('hidden');
+        this.networkStatus.textContent = 'Network: waiting for BR lobby connection...';
+        return;
+      }
+
+      const syncText = `${this.br.stateSendIntervalMs}ms`;
+      this.networkStatus.classList.remove('hidden');
+      this.networkStatus.textContent = `Network: BR connected | Sync ${syncText}`;
       return;
     }
 
@@ -300,6 +452,17 @@ class GameController {
   }
 
   shouldConfirmLeaveMatch() {
+    if (this.mode === 'bot_practice') {
+      return this.phase === 'playing' || this.phase === 'roundOver';
+    }
+
+    if (this.mode === 'battle_royale') {
+      const hostConnected = !!(this.br.role === 'host' && this.br.peer && this.br.peer.open);
+      const clientConnected = !!(this.br.role === 'client' && this.br.hostConn && this.br.hostConn.open);
+      if (hostConnected || clientConnected) return true;
+      return this.phase === 'countdown' || this.phase === 'playing' || this.phase === 'roundOver' || this.phase === 'matchOver';
+    }
+
     if (this.mode !== 'pvp_1v1') return false;
     const nm = NetworkManager.getInstance();
     const connected = nm.isConnected();
@@ -406,7 +569,7 @@ class GameController {
 
   _readRoundStats(gameState) {
     if (!gameState) {
-      return { pps: 0, apm: 0, vs: 0, misdrops: 0, finesse: 0 };
+      return { pps: 0, apm: 0, vs: 0, finesse: 0 };
     }
 
     const startTime = Number(gameState.gameStartTime) || Date.now();
@@ -421,7 +584,6 @@ class GameController {
       pps,
       apm,
       vs,
-      misdrops: Math.max(0, Number(gameState.misdrops) || 0),
       finesse: Math.max(0, Number(gameState.finesseErrors) || 0),
     };
   }
@@ -430,7 +592,8 @@ class GameController {
     if (!this.roundStatsPanel) return;
 
     const localStats = this._readRoundStats(this.gameState1);
-    const oppStats = (this.mode === 'pvp_1v1') ? this._readRoundStats(this.gameState2) : null;
+    const showOppStats = (this.mode === 'pvp_1v1' || this.mode === 'bot_practice' || this.mode === 'battle_royale');
+    const oppStats = showOppStats ? this._readRoundStats(this.gameState2) : null;
 
     const setText = (id, value) => {
       const el = document.getElementById(id);
@@ -442,13 +605,11 @@ class GameController {
     setText('rsYouPps', localStats.pps.toFixed(2));
     setText('rsYouApm', localStats.apm.toFixed(2));
     setText('rsYouVs', localStats.vs.toFixed(2));
-    setText('rsYouMisdrops', String(localStats.misdrops));
     setText('rsYouFinesse', String(localStats.finesse));
 
     setText('rsOppPps', oppStats ? oppStats.pps.toFixed(2) : '--');
     setText('rsOppApm', oppStats ? oppStats.apm.toFixed(2) : '--');
     setText('rsOppVs', oppStats ? oppStats.vs.toFixed(2) : '--');
-    setText('rsOppMisdrops', oppStats ? String(oppStats.misdrops) : '--');
     setText('rsOppFinesse', oppStats ? String(oppStats.finesse) : '--');
 
     this.roundStatsPanel.classList.remove('hidden');
@@ -574,13 +735,16 @@ class GameController {
   }
 
   setMode(mode) {
-    if (mode === 'battle_royale') {
-      ChatManager.addMessage('Battle Royale is not implemented yet.', 'System');
-      return;
-    }
-
-    if (this.mode === 'pvp_1v1' && mode !== 'pvp_1v1' && this.shouldConfirmLeaveMatch()) {
-      const ok = window.confirm('Leave the current 1v1 match? Current match progress will be lost.');
+    const leavingCurrentMode = (this.mode !== mode);
+    const wasConfirmMode =
+      this.mode === 'pvp_1v1' ||
+      this.mode === 'battle_royale' ||
+      this.mode === 'bot_practice';
+    if (leavingCurrentMode && wasConfirmMode && this.shouldConfirmLeaveMatch()) {
+      const label = this.mode === 'pvp_1v1'
+        ? '1v1 match'
+        : (this.mode === 'battle_royale' ? 'Battle Royale session' : 'bot practice run');
+      const ok = window.confirm(`Leave the current ${label}? Current progress will be lost.`);
       if (!ok) return;
     }
 
@@ -600,24 +764,35 @@ class GameController {
       this.opponentContainer.classList.toggle('hidden', this.mode === 'zen');
     }
 
-    // Connection panel + peer id only in PvP
+    // Connection panel + peer id in online modes
+    const onlineMode = (this.mode === 'pvp_1v1' || this.mode === 'battle_royale');
     if (this.connPanel) {
-      this.connPanel.classList.toggle('hidden', this.mode !== 'pvp_1v1');
+      this.connPanel.classList.toggle('hidden', !onlineMode);
     }
 
     if (this.peerBox) {
-      this.peerBox.classList.toggle('hidden', this.mode !== 'pvp_1v1');
+      this.peerBox.classList.toggle('hidden', !onlineMode);
+    }
+
+    if (this.startBrBtn) {
+      const showStart = this.mode === 'battle_royale' && this.br.role === 'host' && !this.br.started;
+      this.startBrBtn.classList.toggle('hidden', !showStart);
     }
 
     // Scoreboard only PvP
     this.updateScoreboard();
     if (this.mode !== 'pvp_1v1') this.hideRoundStatsPanel();
+    this.updateBrLobbyPanel();
 
     // Set status message
     if (this.mode === 'zen') {
       this.setStatus('Zen mode: press Play in the Menu to start.');
     } else if (this.mode === 'pvp_1v1') {
       this.setStatus('1v1 mode: host or join, then play the match.');
+    } else if (this.mode === 'battle_royale') {
+      this.setStatus('Battle Royale: create or join a room, then wait for host start.');
+    } else if (this.mode === 'bot_practice') {
+      this.setStatus('Bot practice: press Play to start a training run.');
     }
 
     // Hide game area until a mode actually starts
@@ -641,6 +816,8 @@ class GameController {
     this._invalidateRoundFlow();
     this._cancelJoinConnectLoop();
     this.stopLoop();
+    this.stopBattleRoyaleNetwork();
+    this.botController = null;
     this.gameState1 = null;
     this.gameState2 = null;
     this.lastTime = 0;
@@ -690,6 +867,15 @@ class GameController {
       this.updateScoreboard();
       this.applyModeUI();
       this.setStatus('1v1: Create or Join. Host starts automatically when opponent connects.');
+    } else if (this.mode === 'battle_royale') {
+      this.phase = 'waiting';
+      this.acceptInput = false;
+      this.br = this._createBattleRoyaleState();
+      this.updateBrLobbyPanel();
+      this.applyModeUI();
+      this.setStatus('Battle Royale: Create room or Join room. Host starts when ready.');
+    } else if (this.mode === 'bot_practice') {
+      this.startBotPractice();
     }
   }
 
@@ -706,17 +892,6 @@ class GameController {
     this.hideResultOverlay();
     this.hideRoundStatsPanel();
     this.clearCombatFeed();
-
-    // Optional local score hook: +100 per garbage line worth of attack
-    const nm = NetworkManager.getInstance();
-    if (nm && typeof nm.setLocalAttackHandler === 'function') {
-      nm.setLocalAttackHandler((attack) => {
-        const safe = Math.max(0, Number(attack) || 0);
-        this.zenScore += safe * 100;
-        this.setStatus(`Zen mode — Score: ${this.zenScore}`);
-      });
-    }
-
     const seed = Math.floor(Math.random() * 1e9);
 
     if (this.gameArea) this.gameArea.classList.remove('hidden');
@@ -725,6 +900,11 @@ class GameController {
       this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
       this.gameState1.setRoundId(null);
       this.gameState1.setCombatEventHandler((event) => this.handleCombatEvent(1, event));
+      this.gameState1.setAttackHandler((attack) => {
+        const safe = Math.max(0, Number(attack) || 0);
+        this.zenScore += safe * 100;
+        this.setStatus(`Zen mode - Score: ${this.zenScore}`);
+      });
 
       const startTime = Date.now();
       this.gameState1.setGameStartTime(startTime);
@@ -747,7 +927,7 @@ class GameController {
       return;
     }
 
-    this.setStatus(`Zen mode — Score: ${this.zenScore}`);
+    this.setStatus(`Zen mode - Score: ${this.zenScore}`);
     ChatManager.addMessage('Zen started. Good luck!', 'System');
 
     this.gameRunning = true;
@@ -918,6 +1098,11 @@ wireMatchDefaultsAutoSave() {
     // Host
     if (this.createBtn) {
       this.createBtn.addEventListener('click', () => {
+        if (this.mode === 'battle_royale') {
+          this.startBattleRoyaleHost();
+          return;
+        }
+
         if (this.mode !== 'pvp_1v1') return;
 
         this._cancelJoinConnectLoop();
@@ -942,6 +1127,16 @@ wireMatchDefaultsAutoSave() {
     // Join
     if (this.joinBtn) {
       this.joinBtn.addEventListener('click', () => {
+        if (this.mode === 'battle_royale') {
+          const roomCode = (this.opponentPeerIdInput ? this.opponentPeerIdInput.value : '').trim();
+          if (!roomCode) {
+            ChatManager.addMessage('Please enter a room code');
+            return;
+          }
+          this.joinBattleRoyaleRoom(roomCode);
+          return;
+        }
+
         if (this.mode !== 'pvp_1v1') return;
 
         const opponentId = (this.opponentPeerIdInput ? this.opponentPeerIdInput.value : '').trim();
@@ -1008,9 +1203,21 @@ wireMatchDefaultsAutoSave() {
       });
     }
 
+    if (this.startBrBtn) {
+      this.startBrBtn.addEventListener('click', () => {
+        if (this.mode !== 'battle_royale') return;
+        this.startBattleRoyaleMatchAsHost();
+      });
+    }
+
     // Restart
     if (this.restartBtn) {
       this.restartBtn.addEventListener('click', () => {
+        if (this.mode === 'bot_practice') {
+          this.startBotPractice();
+          return;
+        }
+
         if (this.mode !== 'pvp_1v1') return;
 
         this.resetMatchScores();
@@ -1043,6 +1250,8 @@ wireMatchDefaultsAutoSave() {
 
         if (this.mode === 'pvp_1v1' && NetworkManager.getInstance().isConnected()) {
           NetworkManager.getInstance().send({ type: 'chat', message: msg });
+        } else if (this.mode === 'battle_royale') {
+          this.sendBattleRoyaleChat(msg);
         }
 
         ChatManager.addMessage(msg, 'You');
@@ -1056,6 +1265,930 @@ wireMatchDefaultsAutoSave() {
 
     ChatManager.addMessage('Welcome to Tetris Online Battle!');
     ChatManager.addMessage('Open the Menu to pick a mode and press Play.');
+  }
+
+  _buildPeerOptions() {
+    return {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      },
+    };
+  }
+
+  _normalizeBrAttackMode(value) {
+    const raw = String(value || '').trim();
+    if (raw === 'highest_apm' || raw === 'retaliate' || raw === 'random') return raw;
+    return 'random';
+  }
+
+  _sanitizeBrMessageText(value) {
+    const text = (typeof value === 'string') ? value.trim() : '';
+    if (!text) return '';
+    return text.slice(0, 300);
+  }
+
+  _setPeerIdDisplay(peerId) {
+    if (this.peerIdDisplay) this.peerIdDisplay.textContent = peerId || '';
+    if (this.peerBox) this.peerBox.classList.toggle('hidden', !peerId);
+  }
+
+  _makeBrPlayer(id, attackMode = 'random') {
+    return {
+      id: String(id || ''),
+      alive: true,
+      attackMode: this._normalizeBrAttackMode(attackMode),
+      attacksSent: 0,
+      apm: 0,
+      pps: 0,
+      lastAttackerId: null,
+    };
+  }
+
+  _serializeBrPlayers() {
+    const out = [];
+    for (const p of this.br.players.values()) {
+      out.push({
+        id: p.id,
+        alive: !!p.alive,
+        attackMode: this._normalizeBrAttackMode(p.attackMode),
+        attacksSent: Math.max(0, Number(p.attacksSent) || 0),
+        apm: Math.max(0, Number(p.apm) || 0),
+        pps: Math.max(0, Number(p.pps) || 0),
+        lastAttackerId: (typeof p.lastAttackerId === 'string' && p.lastAttackerId) ? p.lastAttackerId : null,
+      });
+    }
+    return out;
+  }
+
+  _applyBrPlayersSnapshot(players) {
+    if (!Array.isArray(players)) return;
+    const nextPlayers = new Map();
+    for (const raw of players) {
+      if (!raw || typeof raw !== 'object') continue;
+      const id = (typeof raw.id === 'string') ? raw.id.trim() : '';
+      if (!id) continue;
+      const p = this._makeBrPlayer(id, raw.attackMode);
+      p.alive = raw.alive !== false;
+      p.attacksSent = Math.max(0, Number(raw.attacksSent) || 0);
+      p.apm = Math.max(0, Number(raw.apm) || 0);
+      p.pps = Math.max(0, Number(raw.pps) || 0);
+      p.lastAttackerId = (typeof raw.lastAttackerId === 'string' && raw.lastAttackerId) ? raw.lastAttackerId : null;
+      nextPlayers.set(id, p);
+    }
+    this.br.players = nextPlayers;
+  }
+
+  _pickBrFocus(preferredId = null) {
+    const remoteIds = Array.from(this.br.players.keys()).filter((id) => id !== this.br.localId);
+    if (remoteIds.length === 0) {
+      this.br.focusId = null;
+      return null;
+    }
+
+    if (preferredId && remoteIds.includes(preferredId)) {
+      this.br.focusId = preferredId;
+      return preferredId;
+    }
+
+    if (this.br.focusId && remoteIds.includes(this.br.focusId)) {
+      return this.br.focusId;
+    }
+
+    const aliveRemote = remoteIds.find((id) => !!this.br.players.get(id)?.alive);
+    this.br.focusId = aliveRemote || remoteIds[0];
+    return this.br.focusId;
+  }
+
+  _refreshBrFocusBoard(preferredId = null) {
+    if (this.mode !== 'battle_royale' || !this.gameState2) return;
+    const focusId = this._pickBrFocus(preferredId);
+    if (!focusId) return;
+    const state = this.br.remoteStates.get(focusId);
+    if (!state) return;
+    this.gameState2.setState(state);
+  }
+
+  _brBroadcast(message, exceptPlayerId = null) {
+    if (this.br.role !== 'host') return;
+    for (const [playerId, conn] of this.br.hostConns.entries()) {
+      if (!conn || !conn.open) continue;
+      if (exceptPlayerId && playerId === exceptPlayerId) continue;
+      try { conn.send(message); } catch (_) {}
+    }
+  }
+
+  _brBroadcastLobby() {
+    if (this.br.role !== 'host') return;
+    const payload = {
+      type: 'brLobby',
+      roomCode: this.br.roomCode,
+      maxPlayers: this.br.maxPlayers,
+      started: !!this.br.started,
+      roundId: this.br.roundId,
+      players: this._serializeBrPlayers(),
+    };
+    this._brBroadcast(payload);
+    this.updateBrLobbyPanel();
+    if (this.startBrBtn) {
+      const showStart = this.mode === 'battle_royale' && this.br.role === 'host' && !this.br.started;
+      this.startBrBtn.classList.toggle('hidden', !showStart);
+    }
+    this.updateNetworkStatus();
+  }
+
+  _updateBrPerfFromState(playerId, state) {
+    if (!state || typeof state !== 'object') return;
+    const player = this.br.players.get(playerId);
+    if (!player) return;
+    const startMs = Number(this.br.roundStartMs) || Date.now();
+    const elapsedSec = Math.max(0.001, (Date.now() - startMs) / 1000);
+    const attacksSent = Math.max(0, Number(state.attacksSent) || 0);
+    const piecesPlaced = Math.max(0, Number(state.piecesPlaced) || 0);
+    player.attacksSent = attacksSent;
+    player.apm = (attacksSent * 60) / elapsedSec;
+    player.pps = piecesPlaced / elapsedSec;
+  }
+
+  _pickBrAttackTarget(attackerId) {
+    const attacker = this.br.players.get(attackerId);
+    if (!attacker) return null;
+
+    const candidates = Array.from(this.br.players.values()).filter((p) => p.alive && p.id !== attackerId);
+    if (candidates.length === 0) return null;
+
+    const mode = this._normalizeBrAttackMode(attacker.attackMode);
+    if (mode === 'retaliate' && attacker.lastAttackerId) {
+      const retaliateTarget = candidates.find((p) => p.id === attacker.lastAttackerId);
+      if (retaliateTarget) return retaliateTarget.id;
+    }
+
+    if (mode === 'highest_apm') {
+      let best = candidates[0];
+      for (const c of candidates) {
+        if ((Number(c.apm) || 0) > (Number(best.apm) || 0)) best = c;
+      }
+      return best.id;
+    }
+
+    return candidates[Math.floor(Math.random() * candidates.length)].id;
+  }
+
+  _routeBrAttack(attackerId, lines) {
+    if (this.br.role !== 'host') return;
+    if (!this.br.started || !this.br.roundId) return;
+
+    const safeLines = this._clampInt(lines, 0, 10, 0);
+    if (safeLines <= 0) return;
+
+    const attacker = this.br.players.get(attackerId);
+    if (!attacker || !attacker.alive) return;
+
+    const targetId = this._pickBrAttackTarget(attackerId);
+    if (!targetId) return;
+
+    attacker.attacksSent = Math.max(0, Number(attacker.attacksSent) || 0) + safeLines;
+
+    const target = this.br.players.get(targetId);
+    if (!target || !target.alive) return;
+    target.lastAttackerId = attackerId;
+
+    if (targetId === this.br.localId) {
+      if (this.gameState1 && (this.phase === 'playing' || this.phase === 'roundOver')) {
+        this.gameState1.receiveAttack(safeLines);
+      }
+      return;
+    }
+
+    const conn = this.br.hostConns.get(targetId);
+    if (!conn || !conn.open) return;
+
+    try {
+      conn.send({
+        type: 'brAttackIncoming',
+        fromId: attackerId,
+        lines: safeLines,
+        roundId: this.br.roundId,
+      });
+    } catch (_) {}
+  }
+
+  _markBrPlayerEliminated(playerId) {
+    const player = this.br.players.get(playerId);
+    if (!player || !player.alive) return;
+
+    player.alive = false;
+    if (playerId === this.br.localId) {
+      this.acceptInput = false;
+      if (this.phase === 'playing') this.phase = 'roundOver';
+    }
+
+    this.br.remoteStates.delete(playerId);
+    if (this.br.focusId === playerId) this._pickBrFocus();
+    this.updateBrLobbyPanel();
+    this._refreshBrFocusBoard();
+
+    if (this.br.role === 'host') {
+      this._brBroadcastLobby();
+      this._checkBrWinCondition();
+    }
+  }
+
+  _checkBrWinCondition() {
+    if (this.br.role !== 'host' || !this.br.started) return;
+    const alivePlayers = Array.from(this.br.players.values()).filter((p) => p.alive);
+    if (alivePlayers.length > 1) return;
+    const winnerId = alivePlayers[0] ? alivePlayers[0].id : null;
+    this._finishBrMatch(winnerId, this.br.roundId);
+  }
+
+  _finishBrMatch(winnerId, roundId) {
+    if (this.mode !== 'battle_royale') return;
+    if (roundId && this.br.roundId && roundId !== this.br.roundId) return;
+
+    this._invalidateRoundFlow();
+    this.stopLoop();
+    this.br.started = false;
+    this.acceptInput = false;
+    this.phase = 'matchOver';
+
+    const localWon = !!(winnerId && winnerId === this.br.localId);
+    const title = localWon ? 'VICTORY' : 'MATCH OVER';
+    const subtitle = winnerId
+      ? (localWon ? 'You won the Battle Royale.' : `${winnerId} won the Battle Royale.`)
+      : 'No winner.';
+
+    this.setStatus(localWon ? 'Battle Royale complete: you won.' : 'Battle Royale complete.');
+    this.showResultOverlay(title, subtitle, { persistent: true });
+    this.showRoundStatsPanel('BATTLE ROYALE STATS', { persistent: true });
+
+    if (this.br.role === 'host') {
+      this._brBroadcast({
+        type: 'brMatchOver',
+        winnerId: winnerId || null,
+        roundId: this.br.roundId,
+      });
+      this._brBroadcastLobby();
+    } else {
+      this.updateBrLobbyPanel();
+      this.updateNetworkStatus();
+    }
+  }
+
+  async startBattleRoyaleRound(seed, roundId, startedAt = Date.now()) {
+    if (this.mode !== 'battle_royale') return;
+    const flowToken = this._invalidateRoundFlow();
+
+    this.br.started = true;
+    this.br.roundSeed = this._clampInt(seed, 0, 1000000000, Math.floor(Math.random() * 1e9));
+    this.br.roundId = roundId || `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+    this.br.roundStartMs = Math.max(0, Number(startedAt) || Date.now());
+    this.roundId = this.br.roundId;
+
+    this.phase = 'countdown';
+    this.acceptInput = false;
+    this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
+
+    if (this.gameArea) this.gameArea.classList.remove('hidden');
+    if (this.restartBtn) this.restartBtn.classList.add('hidden');
+
+    GameSettings.getInstance().update();
+
+    try {
+      this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, this.br.roundSeed);
+      this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, this.br.roundSeed);
+      this.gameState1.setRoundId(this.br.roundId);
+      this.gameState2.setRoundId(this.br.roundId);
+      this.gameState1.setCombatEventHandler((event) => this.handleCombatEvent(1, event));
+      this.gameState2.setCombatEventHandler((event) => this.handleCombatEvent(2, event));
+
+      this.gameState1.setAttackHandler((attack, emittedRoundId) => {
+        const safe = Math.max(0, Math.min(10, Number(attack) || 0));
+        if (safe <= 0) return;
+        if (this.br.role === 'host') {
+          this._routeBrAttack(this.br.localId, safe);
+        } else if (this.br.hostConn && this.br.hostConn.open) {
+          try {
+            this.br.hostConn.send({
+              type: 'brAttack',
+              lines: safe,
+              roundId: emittedRoundId || this.br.roundId,
+            });
+          } catch (_) {}
+        }
+      });
+
+      this.gameState1.setGameStartTime(this.br.roundStartMs);
+      this.gameState2.setGameStartTime(this.br.roundStartMs);
+
+      InputManager.getInstance().reset();
+
+      const okLocal = this.gameState1.spawnPiece();
+      this.gameState2.spawnPiece();
+      if (!okLocal) {
+        this.handleGameOver();
+        return;
+      }
+
+      this.lastTime = 0;
+      this.lastStateSendTime = 0;
+      this.gameState1.draw();
+      this.gameState2.draw();
+    } catch (err) {
+      console.error('BR round failed to start:', err);
+      this.setStatus(`BR round failed to start: ${err?.message || err}`);
+      this.phase = 'waiting';
+      this.acceptInput = false;
+      return;
+    }
+
+    this._pickBrFocus();
+    this._refreshBrFocusBoard();
+
+    if (!this.gameRunning) {
+      this.gameRunning = true;
+      this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+    }
+
+    const didCountdown = await this.showCountdown(3, 'Battle Royale', flowToken);
+    if (!didCountdown) return;
+    if (flowToken !== this._roundFlowToken) return;
+    if (this.mode !== 'battle_royale' || this.phase !== 'countdown') return;
+
+    this.phase = 'playing';
+    const localPlayer = this.br.players.get(this.br.localId);
+    this.acceptInput = !!(localPlayer ? localPlayer.alive : true);
+    this.setStatus(this.acceptInput ? 'Battle Royale in progress.' : 'You are out. Spectating.');
+    this.updateBrLobbyPanel();
+    this.updateNetworkStatus();
+  }
+
+  startBattleRoyaleMatchAsHost() {
+    if (this.mode !== 'battle_royale') return;
+    if (this.br.role !== 'host') return;
+    if (!this.br.peer || !this.br.peer.open) {
+      this.setStatus('Cannot start BR: host peer is not ready.');
+      return;
+    }
+    if (this.br.started) return;
+
+    const cfg = this.readBattleRoyaleConfigFromUI();
+    this.br.maxPlayers = cfg.maxPlayers;
+
+    const playersCount = this.br.players.size;
+    if (playersCount < 2) {
+      this.setStatus('Need at least 2 players to start Battle Royale.');
+      return;
+    }
+
+    const localPlayer = this.br.players.get(this.br.localId) || this._makeBrPlayer(this.br.localId, cfg.attackMode);
+    localPlayer.attackMode = this._normalizeBrAttackMode(cfg.attackMode);
+    this.br.players.set(this.br.localId, localPlayer);
+
+    for (const p of this.br.players.values()) {
+      p.alive = true;
+      p.attacksSent = 0;
+      p.apm = 0;
+      p.pps = 0;
+      p.lastAttackerId = null;
+    }
+
+    this.br.remoteStates.clear();
+    const seed = Math.floor(Math.random() * 1e9);
+    const roundId = `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+    const startedAt = Date.now();
+    this.br.started = true;
+    this.br.roundSeed = seed;
+    this.br.roundId = roundId;
+    this.br.roundStartMs = startedAt;
+
+    this._brBroadcast({
+      type: 'brStart',
+      seed,
+      roundId,
+      startedAt,
+    });
+    this._brBroadcastLobby();
+    this.startBattleRoyaleRound(seed, roundId, startedAt);
+  }
+
+  startBattleRoyaleHost() {
+    if (this.mode !== 'battle_royale') return;
+
+    this.stopBattleRoyaleNetwork();
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
+
+    const cfg = this.readBattleRoyaleConfigFromUI();
+    this.br = this._createBattleRoyaleState();
+    this.br.active = true;
+    this.br.role = 'host';
+    this.br.maxPlayers = cfg.maxPlayers;
+
+    this.phase = 'waiting';
+    this.acceptInput = false;
+    this.setLobbyControlsEnabled(false);
+
+    const roomCode = NetworkManager.getInstance().generateRoomCode(6);
+    const peer = new Peer(roomCode, this._buildPeerOptions());
+    this.br.peer = peer;
+
+    this.setStatus('Creating Battle Royale room...');
+    this.updateNetworkStatus();
+
+    peer.on('open', (id) => {
+      this.br.localId = id;
+      this.br.hostId = id;
+      this.br.roomCode = id;
+      this._setPeerIdDisplay(id);
+
+      const localPlayer = this._makeBrPlayer(id, cfg.attackMode);
+      this.br.players.set(id, localPlayer);
+      this.updateBrLobbyPanel();
+      this.applyModeUI();
+
+      ChatManager.addMessage(`BR room code ready: ${id}`, 'System');
+      ChatManager.addMessage('Share the room code with players.', 'System');
+      this.setStatus('BR room ready. Waiting for players...');
+      this.updateNetworkStatus();
+    });
+
+    peer.on('connection', (conn) => this._attachBrHostConnection(conn));
+
+    peer.on('error', (err) => {
+      console.error('BR host peer error:', err);
+      this.setStatus(`BR host error: ${err?.message || err?.type || 'unknown'}`);
+      ChatManager.addMessage(`BR host error: ${err?.message || err?.type || 'unknown'}`, 'System');
+      this.stopBattleRoyaleNetwork();
+      this.setLobbyControlsEnabled(true);
+      this.updateNetworkStatus();
+    });
+  }
+
+  _attachBrHostConnection(conn) {
+    if (!conn) return;
+    const peerId = String(conn.peer || '').trim();
+
+    conn.on('data', (msg) => this._handleBrHostMessage(conn, msg));
+    conn.on('close', () => this._handleBrClientDisconnected(peerId));
+    conn.on('error', (err) => {
+      console.error('BR client connection error:', err);
+      this._handleBrClientDisconnected(peerId);
+    });
+  }
+
+  _handleBrHostMessage(conn, rawMsg) {
+    if (this.mode !== 'battle_royale' || this.br.role !== 'host') return;
+    if (!rawMsg || typeof rawMsg !== 'object') return;
+
+    const type = (typeof rawMsg.type === 'string') ? rawMsg.type : '';
+    const peerId = String(conn?.peer || '').trim();
+    if (!peerId) return;
+
+    switch (type) {
+      case 'brJoin': {
+        if (this.br.started) {
+          try { conn.send({ type: 'brJoinDenied', reason: 'match_started' }); } catch (_) {}
+          this._closeConnSafe(conn);
+          return;
+        }
+        if (this.br.players.size >= this.br.maxPlayers) {
+          try { conn.send({ type: 'brJoinDenied', reason: 'lobby_full' }); } catch (_) {}
+          this._closeConnSafe(conn);
+          return;
+        }
+
+        const attackMode = this._normalizeBrAttackMode(rawMsg.attackMode);
+        this.br.hostConns.set(peerId, conn);
+        this.br.players.set(peerId, this._makeBrPlayer(peerId, attackMode));
+
+        try {
+          conn.send({
+            type: 'brWelcome',
+            hostId: this.br.hostId,
+            localId: peerId,
+            roomCode: this.br.roomCode,
+            maxPlayers: this.br.maxPlayers,
+            started: this.br.started,
+            roundId: this.br.roundId,
+            players: this._serializeBrPlayers(),
+          });
+        } catch (_) {}
+
+        ChatManager.addMessage(`${peerId} joined BR lobby`, 'System');
+        this._brBroadcastLobby();
+        this.updateNetworkStatus();
+        break;
+      }
+
+      case 'brChat': {
+        const message = this._sanitizeBrMessageText(rawMsg.message);
+        if (!message) break;
+        ChatManager.addMessage(message, peerId);
+        this._brBroadcast({ type: 'brChat', fromId: peerId, message }, peerId);
+        break;
+      }
+
+      case 'brState': {
+        if (!this.br.started || !this.br.roundId) break;
+        const msgRoundId = (typeof rawMsg.roundId === 'string') ? rawMsg.roundId : '';
+        if (msgRoundId !== this.br.roundId) break;
+        if (!rawMsg.state || typeof rawMsg.state !== 'object') break;
+
+        this.br.remoteStates.set(peerId, rawMsg.state);
+        this._updateBrPerfFromState(peerId, rawMsg.state);
+        this._refreshBrFocusBoard();
+
+        this._brBroadcast({
+          type: 'brState',
+          playerId: peerId,
+          roundId: this.br.roundId,
+          state: rawMsg.state,
+        }, peerId);
+        break;
+      }
+
+      case 'brAttack': {
+        if (!this.br.started || !this.br.roundId) break;
+        const msgRoundId = (typeof rawMsg.roundId === 'string') ? rawMsg.roundId : '';
+        if (msgRoundId !== this.br.roundId) break;
+        this._routeBrAttack(peerId, rawMsg.lines);
+        break;
+      }
+
+      case 'brEliminated': {
+        if (!this.br.started || !this.br.roundId) break;
+        const msgRoundId = (typeof rawMsg.roundId === 'string') ? rawMsg.roundId : '';
+        if (msgRoundId !== this.br.roundId) break;
+        this._markBrPlayerEliminated(peerId);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  _handleBrClientDisconnected(playerId) {
+    if (!playerId || this.br.role !== 'host') return;
+
+    this.br.hostConns.delete(playerId);
+    const removed = this.br.players.delete(playerId);
+    this.br.remoteStates.delete(playerId);
+    if (this.br.focusId === playerId) this._pickBrFocus();
+
+    if (removed) {
+      ChatManager.addMessage(`${playerId} left BR lobby`, 'System');
+      this._brBroadcastLobby();
+      if (this.br.started) this._checkBrWinCondition();
+    }
+
+    this.updateBrLobbyPanel();
+    this._refreshBrFocusBoard();
+    this.updateNetworkStatus();
+  }
+
+  joinBattleRoyaleRoom(roomCodeRaw) {
+    if (this.mode !== 'battle_royale') return;
+
+    const roomCode = String(roomCodeRaw || '').trim().toUpperCase();
+    if (!roomCode) {
+      this.setStatus('Please enter a BR room code.');
+      return;
+    }
+
+    this.stopBattleRoyaleNetwork();
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
+
+    this.br = this._createBattleRoyaleState();
+    this.br.active = true;
+    this.br.role = 'client';
+    this.br.hostId = roomCode;
+    this.br.roomCode = roomCode;
+    this.phase = 'waiting';
+    this.acceptInput = false;
+    this.setLobbyControlsEnabled(false);
+
+    const peer = new Peer(this._buildPeerOptions());
+    this.br.peer = peer;
+    this.setStatus('Connecting to BR room...');
+    this.updateBrLobbyPanel();
+    this.updateNetworkStatus();
+
+    peer.on('open', (id) => {
+      this.br.localId = id;
+      this._setPeerIdDisplay(id);
+
+      const conn = peer.connect(roomCode);
+      this.br.hostConn = conn;
+      this._attachBrClientConnection(conn);
+    });
+
+    peer.on('error', (err) => {
+      console.error('BR join peer error:', err);
+      this.setStatus(`BR join error: ${err?.message || err?.type || 'unknown'}`);
+      ChatManager.addMessage(`BR join error: ${err?.message || err?.type || 'unknown'}`, 'System');
+      this.stopBattleRoyaleNetwork();
+      this.setLobbyControlsEnabled(true);
+      this.updateNetworkStatus();
+    });
+  }
+
+  _attachBrClientConnection(conn) {
+    if (!conn) return;
+
+    conn.on('open', () => {
+      const cfg = this.readBattleRoyaleConfigFromUI();
+      try {
+        conn.send({
+          type: 'brJoin',
+          attackMode: this._normalizeBrAttackMode(cfg.attackMode),
+        });
+      } catch (_) {}
+      this.setStatus('Connected to BR host. Waiting for lobby sync...');
+      this.updateNetworkStatus();
+    });
+
+    conn.on('data', (msg) => this._handleBrClientMessage(msg));
+
+    conn.on('close', () => {
+      ChatManager.addMessage('Host disconnected. BR lobby closed.', 'System');
+      this.setStatus('Host disconnected. BR session closed.');
+      this.acceptInput = false;
+      this.phase = 'waiting';
+      this.stopLoop();
+      this.stopBattleRoyaleNetwork();
+      this.setLobbyControlsEnabled(true);
+      if (this.gameArea) this.gameArea.classList.add('hidden');
+      this.updateNetworkStatus();
+    });
+
+    conn.on('error', (err) => {
+      console.error('BR host connection error:', err);
+      ChatManager.addMessage(`BR connection error: ${err?.message || err?.type || 'unknown'}`, 'System');
+      this.setStatus(`BR connection error: ${err?.message || err?.type || 'unknown'}`);
+      this.stopBattleRoyaleNetwork();
+      this.setLobbyControlsEnabled(true);
+      this.updateNetworkStatus();
+    });
+  }
+
+  _handleBrClientMessage(rawMsg) {
+    if (this.mode !== 'battle_royale' || this.br.role !== 'client') return;
+    if (!rawMsg || typeof rawMsg !== 'object') return;
+
+    const type = (typeof rawMsg.type === 'string') ? rawMsg.type : '';
+    switch (type) {
+      case 'brJoinDenied': {
+        const reason = String(rawMsg.reason || 'rejected');
+        const text = reason === 'lobby_full'
+          ? 'Join failed: BR lobby is full.'
+          : (reason === 'match_started' ? 'Join failed: BR match already started.' : 'Join failed.');
+        this.setStatus(text);
+        ChatManager.addMessage(text, 'System');
+        this.stopBattleRoyaleNetwork();
+        this.setLobbyControlsEnabled(true);
+        break;
+      }
+
+      case 'brWelcome': {
+        this.br.hostId = (typeof rawMsg.hostId === 'string') ? rawMsg.hostId : this.br.hostId;
+        this.br.roomCode = (typeof rawMsg.roomCode === 'string') ? rawMsg.roomCode : this.br.roomCode;
+        this.br.maxPlayers = this._clampInt(rawMsg.maxPlayers, 3, 8, this.br.maxPlayers);
+        this.br.started = rawMsg.started === true;
+        this.br.roundId = (typeof rawMsg.roundId === 'string') ? rawMsg.roundId : null;
+        this._applyBrPlayersSnapshot(rawMsg.players);
+        if (!this.br.players.has(this.br.localId)) {
+          const cfg = this.readBattleRoyaleConfigFromUI();
+          this.br.players.set(this.br.localId, this._makeBrPlayer(this.br.localId, cfg.attackMode));
+        }
+        this.updateBrLobbyPanel();
+        this.applyModeUI();
+        this.setStatus('Joined BR lobby. Waiting for host start.');
+        this.updateNetworkStatus();
+        break;
+      }
+
+      case 'brLobby': {
+        this.br.roomCode = (typeof rawMsg.roomCode === 'string') ? rawMsg.roomCode : this.br.roomCode;
+        this.br.maxPlayers = this._clampInt(rawMsg.maxPlayers, 3, 8, this.br.maxPlayers);
+        this.br.started = rawMsg.started === true;
+        this.br.roundId = (typeof rawMsg.roundId === 'string') ? rawMsg.roundId : this.br.roundId;
+        this._applyBrPlayersSnapshot(rawMsg.players);
+
+        const localPlayer = this.br.players.get(this.br.localId);
+        if (this.phase === 'playing' && localPlayer && !localPlayer.alive) {
+          this.acceptInput = false;
+          this.phase = 'roundOver';
+          this.setStatus('You are out. Spectating until match end.');
+        }
+
+        this.updateBrLobbyPanel();
+        this._refreshBrFocusBoard();
+        this.updateNetworkStatus();
+        break;
+      }
+
+      case 'brChat': {
+        const text = this._sanitizeBrMessageText(rawMsg.message);
+        if (!text) break;
+        const fromId = (typeof rawMsg.fromId === 'string') ? rawMsg.fromId : 'Player';
+        if (fromId !== this.br.localId) ChatManager.addMessage(text, fromId);
+        break;
+      }
+
+      case 'brStart': {
+        const seed = this._clampInt(rawMsg.seed, 0, 1000000000, Math.floor(Math.random() * 1e9));
+        const roundId = (typeof rawMsg.roundId === 'string' && rawMsg.roundId.trim())
+          ? rawMsg.roundId.trim()
+          : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+        const startedAt = Math.max(0, Number(rawMsg.startedAt) || Date.now());
+        this.startBattleRoyaleRound(seed, roundId, startedAt);
+        break;
+      }
+
+      case 'brState': {
+        if (!this.br.roundId) break;
+        if (rawMsg.roundId !== this.br.roundId) break;
+        const playerId = (typeof rawMsg.playerId === 'string') ? rawMsg.playerId : '';
+        if (!playerId || playerId === this.br.localId) break;
+        if (!rawMsg.state || typeof rawMsg.state !== 'object') break;
+        this.br.remoteStates.set(playerId, rawMsg.state);
+        this._updateBrPerfFromState(playerId, rawMsg.state);
+        this._refreshBrFocusBoard();
+        break;
+      }
+
+      case 'brAttackIncoming': {
+        if (!this.br.roundId) break;
+        if (rawMsg.roundId !== this.br.roundId) break;
+        const lines = this._clampInt(rawMsg.lines, 0, 10, 0);
+        if (lines <= 0) break;
+        if (this.gameState1) this.gameState1.receiveAttack(lines);
+
+        const fromId = (typeof rawMsg.fromId === 'string') ? rawMsg.fromId : null;
+        if (fromId) {
+          const localPlayer = this.br.players.get(this.br.localId);
+          if (localPlayer) localPlayer.lastAttackerId = fromId;
+        }
+        break;
+      }
+
+      case 'brMatchOver': {
+        const winnerId = (typeof rawMsg.winnerId === 'string' && rawMsg.winnerId) ? rawMsg.winnerId : null;
+        const roundId = (typeof rawMsg.roundId === 'string' && rawMsg.roundId) ? rawMsg.roundId : this.br.roundId;
+        this._finishBrMatch(winnerId, roundId);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  sendBattleRoyaleChat(message) {
+    if (this.mode !== 'battle_royale' || !this.br.active) return false;
+    const text = this._sanitizeBrMessageText(message);
+    if (!text) return false;
+
+    if (this.br.role === 'host') {
+      this._brBroadcast({ type: 'brChat', fromId: this.br.localId, message: text });
+      return true;
+    }
+
+    if (this.br.role === 'client' && this.br.hostConn && this.br.hostConn.open) {
+      try {
+        this.br.hostConn.send({ type: 'brChat', message: text });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  _handleBrLocalTopOut() {
+    if (this.mode !== 'battle_royale') return;
+    const localPlayer = this.br.players.get(this.br.localId);
+    if (localPlayer && !localPlayer.alive) return;
+
+    this.acceptInput = false;
+    this.phase = 'roundOver';
+    this.showResultOverlay('OUT', 'You are eliminated. Spectating...', { durationMs: 1800 });
+    this.setStatus('You are out. Spectating until match end.');
+
+    if (this.br.role === 'host') {
+      this._markBrPlayerEliminated(this.br.localId);
+    } else {
+      if (localPlayer) localPlayer.alive = false;
+      this.updateBrLobbyPanel();
+      if (this.br.hostConn && this.br.hostConn.open) {
+        try {
+          this.br.hostConn.send({ type: 'brEliminated', roundId: this.br.roundId });
+        } catch (_) {}
+      }
+    }
+  }
+
+  startBotPractice() {
+    if (this.mode !== 'bot_practice') return;
+
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
+
+    this.phase = 'playing';
+    this.roundId = `bot-${Date.now()}`;
+    this.acceptInput = true;
+    this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
+
+    if (this.gameArea) this.gameArea.classList.remove('hidden');
+    if (this.restartBtn) this.restartBtn.classList.remove('hidden');
+
+    GameSettings.getInstance().update();
+    const botCfg = this.readBotConfigFromSettings();
+    const seedLocal = Math.floor(Math.random() * 1e9);
+    const seedBot = Math.floor(Math.random() * 1e9);
+
+    try {
+      this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seedLocal);
+      this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seedBot);
+      this.gameState1.setRoundId(this.roundId);
+      this.gameState2.setRoundId(this.roundId);
+      this.gameState1.setCombatEventHandler((event) => this.handleCombatEvent(1, event));
+      this.gameState2.setCombatEventHandler((event) => this.handleCombatEvent(2, event));
+
+      this.gameState1.setAttackHandler((attack) => {
+        const safe = Math.max(0, Math.min(10, Number(attack) || 0));
+        if (safe > 0 && this.gameState2) this.gameState2.receiveAttack(safe);
+      });
+      this.gameState2.setAttackHandler((attack) => {
+        const safe = Math.max(0, Math.min(10, Number(attack) || 0));
+        if (safe > 0 && this.gameState1) this.gameState1.receiveAttack(safe);
+      });
+
+      const startTime = Date.now();
+      this.gameState1.setGameStartTime(startTime);
+      this.gameState2.setGameStartTime(startTime);
+
+      InputManager.getInstance().reset();
+
+      const okLocal = this.gameState1.spawnPiece();
+      const okBot = this.gameState2.spawnPiece();
+      if (!okLocal || !okBot) {
+        this._finishBotPractice(false, 'Round failed to start.');
+        return;
+      }
+
+      this.botController = new TetrisBot(this.gameState2, botCfg);
+      this.lastTime = 0;
+      this.lastStateSendTime = 0;
+      this.gameState1.draw();
+      this.gameState2.draw();
+    } catch (err) {
+      console.error('Bot practice failed to start:', err);
+      this.setStatus(`Bot practice failed: ${err?.message || err}`);
+      this.acceptInput = false;
+      this.phase = 'idle';
+      return;
+    }
+
+    this.setStatus('Bot practice in progress.');
+    ChatManager.addMessage('Bot practice started.', 'System');
+
+    if (!this.gameRunning) {
+      this.gameRunning = true;
+      this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+    }
+
+    this.applyModeUI();
+    this.updateNetworkStatus();
+  }
+
+  _finishBotPractice(localWon, reason = '') {
+    if (this.mode !== 'bot_practice') return;
+    if (this.phase === 'matchOver') return;
+
+    this.acceptInput = false;
+    this.phase = 'matchOver';
+    this.stopLoop();
+
+    if (localWon) this.botSummary.wins += 1;
+    else this.botSummary.losses += 1;
+
+    const title = localWon ? 'VICTORY' : 'DEFEAT';
+    const subtitle = reason || (localWon ? 'Bot topped out.' : 'You topped out.');
+    this.setStatus(localWon ? 'Bot practice: win.' : 'Bot practice: loss.');
+    this.showResultOverlay(title, subtitle, { persistent: true });
+    this.showRoundStatsPanel('BOT PRACTICE STATS', { persistent: true });
+    if (this.restartBtn) this.restartBtn.classList.remove('hidden');
   }
 
   /* =========================
@@ -1095,6 +2228,13 @@ wireMatchDefaultsAutoSave() {
           this.startZen();
           return true;
         }
+        if (this.mode === 'bot_practice') {
+          const canRestart = this.phase === 'playing' || this.phase === 'roundOver' || this.phase === 'matchOver';
+          if (canRestart) {
+            this.startBotPractice();
+            return true;
+          }
+        }
         const canRematch =
           this.mode === 'pvp_1v1' &&
           (this.phase === 'waiting' || this.phase === 'roundOver' || this.phase === 'matchOver');
@@ -1110,6 +2250,10 @@ wireMatchDefaultsAutoSave() {
             this.restartBtn.click();
             return true;
           }
+        }
+        if (this.mode === 'bot_practice' && (this.phase === 'roundOver' || this.phase === 'matchOver')) {
+          this.startBotPractice();
+          return true;
         }
       }
 
@@ -1250,7 +2394,7 @@ wireMatchDefaultsAutoSave() {
       let settled = false;
       const isFlowValid = () => (
         flowToken === this._roundFlowToken &&
-        this.mode === 'pvp_1v1' &&
+        (this.mode === 'pvp_1v1' || this.mode === 'battle_royale' || this.mode === 'bot_practice') &&
         this.phase === 'countdown'
       );
       const finish = (ok) => {
@@ -1780,6 +2924,16 @@ wireMatchDefaultsAutoSave() {
       return;
     }
 
+    if (this.mode === 'bot_practice') {
+      this._finishBotPractice(false, 'You topped out.');
+      return;
+    }
+
+    if (this.mode === 'battle_royale') {
+      this._handleBrLocalTopOut();
+      return;
+    }
+
     // PvP round loss
     this._invalidateRoundFlow();
     this.phase = 'roundOver';
@@ -1831,60 +2985,122 @@ wireMatchDefaultsAutoSave() {
     this.lastTime = timestamp;
 
     try {
-      if (this.gameState1) {
-        const input = InputManager.getInstance();
+      const input = InputManager.getInstance();
 
-        if (this.mode === 'zen') {
+      if (this.mode === 'zen') {
+        if (this.gameState1) {
           if (this.zenPaused) {
             this.lastTime = 0;
             this.gameState1.draw();
           } else {
-            if (this.acceptInput) {
-              input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
-            }
-
+            if (this.acceptInput) input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
             const ok = this.gameState1.update(deltaTime);
             if (!ok) {
               this.handleGameOver();
               return;
             }
-
             this.gameState1.draw();
           }
-        } else {
-          // PvP: only update during playing
-          if (this.phase === 'playing') {
-            if (this.acceptInput) {
-              input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
-            }
+        }
+      } else if (this.mode === 'pvp_1v1') {
+        if (this.gameState1 && this.phase === 'playing') {
+          if (this.acceptInput) input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+          const ok = this.gameState1.update(deltaTime);
+          if (!ok) {
+            this.handleGameOver();
+            return;
+          }
+        }
 
-            const ok = this.gameState1.update(deltaTime);
-            if (!ok) {
+        const inRound = (this.phase === 'playing' || this.phase === 'countdown');
+        if (
+          this.gameState1 &&
+          inRound &&
+          this.roundId &&
+          NetworkManager.getInstance().isConnected() &&
+          (timestamp - this.lastStateSendTime) > this.stateSendIntervalMs
+        ) {
+          NetworkManager.getInstance().send({
+            type: 'gameState',
+            roundId: this.roundId,
+            state: this.gameState1.getState(),
+          });
+          this.lastStateSendTime = timestamp;
+        }
+
+        if (this.gameState1) this.gameState1.draw();
+        if (this.gameState2) this.gameState2.draw();
+      } else if (this.mode === 'bot_practice') {
+        if (this.phase === 'playing') {
+          if (this.gameState1 && this.acceptInput) input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+
+          if (this.gameState1) {
+            const okLocal = this.gameState1.update(deltaTime);
+            if (!okLocal) {
               this.handleGameOver();
+              return;
             }
           }
 
-          // Send state (during countdown + playing)
-          const inRound = (this.phase === 'playing' || this.phase === 'countdown');
-          if (
-            inRound &&
-            this.roundId &&
-            NetworkManager.getInstance().isConnected() &&
-            (timestamp - this.lastStateSendTime) > this.stateSendIntervalMs
-          ) {
-            NetworkManager.getInstance().send({
-              type: 'gameState',
-              roundId: this.roundId,
-              state: this.gameState1.getState(),
+          if (this.botController) {
+            const okBot = this.botController.update(deltaTime);
+            if (!okBot) {
+              this._finishBotPractice(true, 'Bot topped out.');
+              return;
+            }
+          }
+        }
+
+        if (this.gameState1) this.gameState1.draw();
+        if (this.gameState2) this.gameState2.draw();
+      } else if (this.mode === 'battle_royale') {
+        const localPlayer = this.br.players.get(this.br.localId);
+        const localAlive = localPlayer ? !!localPlayer.alive : true;
+
+        if (this.phase === 'playing' && this.gameState1 && localAlive) {
+          if (this.acceptInput) input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+          const okLocal = this.gameState1.update(deltaTime);
+          if (!okLocal) {
+            this.handleGameOver();
+            return;
+          }
+        }
+
+        if (this.gameState1) this.gameState1.draw();
+        this._refreshBrFocusBoard();
+        if (this.gameState2) this.gameState2.draw();
+
+        const shouldSendState = (
+          this.gameState1 &&
+          this.br.started &&
+          this.br.roundId &&
+          (this.phase === 'playing' || this.phase === 'countdown' || this.phase === 'roundOver')
+        );
+        if (shouldSendState && (timestamp - this.lastStateSendTime) > this.br.stateSendIntervalMs) {
+          const state = this.gameState1.getState();
+          this._updateBrPerfFromState(this.br.localId, state);
+
+          if (this.br.role === 'host') {
+            this.br.remoteStates.set(this.br.localId, state);
+            this._brBroadcast({
+              type: 'brState',
+              playerId: this.br.localId,
+              roundId: this.br.roundId,
+              state,
             });
-            this.lastStateSendTime = timestamp;
+          } else if (this.br.role === 'client' && this.br.hostConn && this.br.hostConn.open) {
+            try {
+              this.br.hostConn.send({
+                type: 'brState',
+                roundId: this.br.roundId,
+                state,
+              });
+            } catch (_) {}
           }
 
-          this.gameState1.draw();
+          this.lastStateSendTime = timestamp;
         }
       }
-
-      if (this.gameState2 && this.mode === 'pvp_1v1') this.gameState2.draw();
     } catch (err) {
       console.error('gameLoop error:', err);
     }
@@ -1892,5 +3108,7 @@ wireMatchDefaultsAutoSave() {
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
   }
 }
+
+
 
 
