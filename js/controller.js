@@ -95,6 +95,7 @@ class GameController {
 
     this.gameArea = document.getElementById('gameArea');
     this.gameStatus = document.getElementById('gameStatus');
+    this.networkStatus = document.getElementById('networkStatus');
 
     this.scoreboard = document.getElementById('scoreboard');
 
@@ -220,6 +221,7 @@ class GameController {
     if (safe <= 0) return;
     this.networkRttMs = safe;
     this.stateSendIntervalMs = this._computeAdaptiveStateSendInterval(safe);
+    this.updateNetworkStatus();
   }
 
   handlePeerDisconnected() {
@@ -244,10 +246,40 @@ class GameController {
     this.setMatchConfigLocked(false);
     this.setStatus('Opponent disconnected. Create or join a new match.');
     this.updateScoreboard();
+    this.updateNetworkStatus();
   }
 
   setStatus(text) {
     if (this.gameStatus) this.gameStatus.textContent = text;
+  }
+
+  updateNetworkStatus() {
+    if (!this.networkStatus) return;
+
+    if (this.mode !== 'pvp_1v1') {
+      this.networkStatus.classList.add('hidden');
+      this.networkStatus.textContent = '';
+      return;
+    }
+
+    const connected = NetworkManager.getInstance().isConnected();
+    const waiting = (this.phase === 'waiting' || this.phase === 'countdown' || this.phase === 'playing');
+
+    if (!connected) {
+      if (!waiting) {
+        this.networkStatus.classList.add('hidden');
+        this.networkStatus.textContent = '';
+        return;
+      }
+      this.networkStatus.classList.remove('hidden');
+      this.networkStatus.textContent = 'Network: waiting for connection...';
+      return;
+    }
+
+    const rttText = Number.isFinite(this.networkRttMs) ? `${this.networkRttMs}ms` : '--';
+    const syncText = `${this.stateSendIntervalMs}ms`;
+    this.networkStatus.classList.remove('hidden');
+    this.networkStatus.textContent = `Network: RTT ${rttText} | Sync ${syncText}`;
   }
 
   showScoreboard(show) {
@@ -410,6 +442,7 @@ class GameController {
     }
 
     this._updateZenPauseState();
+    this.updateNetworkStatus();
   }
 
   stopLoop() {
@@ -449,6 +482,7 @@ class GameController {
     if (nm && typeof nm.setLocalAttackHandler === 'function') nm.setLocalAttackHandler(null);
 
     this.updateScoreboard();
+    this.updateNetworkStatus();
   }
 
   startSelectedMode() {
@@ -534,6 +568,7 @@ class GameController {
 
     this.applyModeUI();
     this._updateZenPauseState();
+    this.updateNetworkStatus();
   }
 
   /* =========================
@@ -650,10 +685,44 @@ wireMatchDefaultsAutoSave() {
   ========================= */
   setupUI() {
     // Copy peer ID
-    window.copyPeerId = () => {
+    const fallbackCopyText = (text) => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (_) {
+        ok = false;
+      }
+      document.body.removeChild(ta);
+      return ok;
+    };
+
+    window.copyPeerId = async () => {
       const id = this.peerIdDisplay ? this.peerIdDisplay.textContent : '';
       if (!id) return;
-      navigator.clipboard.writeText(id).then(() => ChatManager.addMessage('Copied to clipboard!'));
+
+      let copied = false;
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(id);
+          copied = true;
+        }
+      } catch (_) {
+        copied = false;
+      }
+
+      if (!copied) copied = fallbackCopyText(id);
+
+      if (copied) ChatManager.addMessage('Copied to clipboard!');
+      else ChatManager.addMessage('Unable to copy automatically. Select the ID and copy manually.', 'System');
     };
 
     // Host
@@ -670,11 +739,13 @@ wireMatchDefaultsAutoSave() {
 
         NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'host' });
         this.setStatus('Waiting for opponent to join...');
+        this.updateNetworkStatus();
 
         this.setLobbyControlsEnabled(false);
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), false);
         this.updateScoreboard();
+        this.updateNetworkStatus();
       });
     }
 
@@ -743,6 +814,7 @@ wireMatchDefaultsAutoSave() {
         startJoinAttempt(1);
 
         this.updateScoreboard();
+        this.updateNetworkStatus();
       });
     }
 
@@ -1105,6 +1177,7 @@ wireMatchDefaultsAutoSave() {
     this.acceptInput = true;
     this.setStatus('Game in progress!');
     this.updateScoreboard();
+    this.updateNetworkStatus();
   }
 
   startNextRoundAsHost(resetRoundCounter = false) {
@@ -1293,6 +1366,7 @@ wireMatchDefaultsAutoSave() {
         this.hostSetScoresAndBroadcast();
 
         this.setStatus('Opponent connected! Starting match…');
+        this.updateNetworkStatus();
         this.startNextRoundAsHost(true);
         break;
       }
@@ -1300,6 +1374,7 @@ wireMatchDefaultsAutoSave() {
       case 'joinedLobby':
         this._cancelJoinConnectLoop();
         this.setStatus('Connected! Waiting for host…');
+        this.updateNetworkStatus();
         break;
 
       case 'peerDisconnected':
@@ -1317,6 +1392,7 @@ wireMatchDefaultsAutoSave() {
         this.stateSendIntervalMs = STATE_SEND_INTERVAL;
         this.networkRttMs = null;
         this.setStatus(`Network error: ${msg.message || 'unknown'}`);
+        this.updateNetworkStatus();
         break;
 
       case 'matchConfig': {
@@ -1329,6 +1405,7 @@ wireMatchDefaultsAutoSave() {
         this.phase = 'waiting';
         this.updateScoreboard();
         this.setStatus('Match configured. Waiting for round start…');
+        this.updateNetworkStatus();
         break;
       }
 
@@ -1338,6 +1415,7 @@ wireMatchDefaultsAutoSave() {
         this.match.clientScore = msg.clientScore;
         this.match.round = msg.round;
         this.updateScoreboard();
+        this.updateNetworkStatus();
         break;
       }
 
@@ -1351,6 +1429,7 @@ wireMatchDefaultsAutoSave() {
         this.applyMatchConfig(cfg, !this.isHost);
         this.resetMatchScores();
         this.updateScoreboard();
+        this.updateNetworkStatus();
 
         this.hideResultOverlay();
 
@@ -1369,6 +1448,7 @@ wireMatchDefaultsAutoSave() {
 
         this.roundId = msg.roundId;
         this.startRound(msg.seed, msg.round, msg.roundId);
+        this.updateNetworkStatus();
         break;
       }
 
@@ -1394,12 +1474,14 @@ wireMatchDefaultsAutoSave() {
             this.setStatus(`MATCH OVER — ${winner} WINS!`);
             ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
             this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+            this.updateNetworkStatus();
           } else {
             this.setStatus('Next round starting…');
             this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
           }
         } else {
           this.setStatus('Round win! Waiting for next round…');
+          this.updateNetworkStatus();
         }
         break;
       }
@@ -1418,6 +1500,7 @@ wireMatchDefaultsAutoSave() {
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+        this.updateNetworkStatus();
         break;
       }
 
@@ -1452,6 +1535,7 @@ wireMatchDefaultsAutoSave() {
       this.setStatus(`Zen over — Final score: ${this.zenScore}`);
       ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
       this.showResultOverlay('GAME OVER', `Final score: ${this.zenScore}`, { persistent: true });
+      this.updateNetworkStatus();
       return;
     }
 
@@ -1477,12 +1561,14 @@ wireMatchDefaultsAutoSave() {
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+        this.updateNetworkStatus();
       } else {
         this.setStatus('Next round starting…');
         this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
       }
     } else {
       this.setStatus('Round lost. Waiting for next round…');
+      this.updateNetworkStatus();
     }
   }
 
