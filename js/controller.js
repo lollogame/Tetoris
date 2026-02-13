@@ -36,6 +36,18 @@ class GameController {
 
     // Input gating
     this.acceptInput = false;
+    this.zenPaused = false;
+
+    // Guards for stale async flows (countdown / delayed round starts)
+    this._roundFlowToken = 0;
+    this._roundFlowTimers = new Set();
+
+    // Join connect waiter (bounded retries)
+    this._joinAttemptToken = 0;
+    this._joinWaitTimer = null;
+    this.joinPeerOpenTimeoutMs = 5000;
+    this.joinPeerOpenPollMs = 60;
+    this.joinPeerOpenRetryBudget = 3;
 
     // UI
     this.cacheUI();
@@ -118,8 +130,85 @@ class GameController {
     if (cd) cd.disabled = on;
   }
 
+  _setRoundFlowTimeout(callback, delayMs) {
+    const safeDelay = Math.max(0, Number(delayMs) || 0);
+    const id = window.setTimeout(() => {
+      this._roundFlowTimers.delete(id);
+      callback();
+    }, safeDelay);
+    this._roundFlowTimers.add(id);
+    return id;
+  }
+
+  _clearRoundFlowTimeouts() {
+    for (const id of this._roundFlowTimers) {
+      window.clearTimeout(id);
+    }
+    this._roundFlowTimers.clear();
+  }
+
+  _invalidateRoundFlow() {
+    this._roundFlowToken += 1;
+    this._clearRoundFlowTimeouts();
+    return this._roundFlowToken;
+  }
+
+  _clearJoinWaitTimer() {
+    if (this._joinWaitTimer == null) return;
+    window.clearTimeout(this._joinWaitTimer);
+    this._joinWaitTimer = null;
+  }
+
+  _cancelJoinConnectLoop() {
+    this._joinAttemptToken += 1;
+    this._clearJoinWaitTimer();
+  }
+
+  _scheduleJoinPeerWait(callback, delayMs) {
+    this._clearJoinWaitTimer();
+    const safeDelay = Math.max(0, Number(delayMs) || 0);
+    this._joinWaitTimer = window.setTimeout(() => {
+      this._joinWaitTimer = null;
+      callback();
+    }, safeDelay);
+  }
+
+  _isMenuVisible() {
+    return !!(this.elMenu && !this.elMenu.classList.contains('hidden'));
+  }
+
+  _isSettingsVisible() {
+    return !!(this.settingsModal && !this.settingsModal.classList.contains('hidden'));
+  }
+
+  _updateZenPauseState() {
+    if (this.mode !== 'zen' || !this.gameRunning) {
+      this.zenPaused = false;
+      return;
+    }
+
+    const shouldPause = this._isMenuVisible() || this._isSettingsVisible();
+    if (shouldPause) {
+      if (!this.zenPaused) this.setStatus(`Zen paused - Score: ${this.zenScore}`);
+      this.zenPaused = true;
+      this.acceptInput = false;
+      this.lastTime = 0;
+      return;
+    }
+
+    if (this.zenPaused) {
+      this.zenPaused = false;
+      this.acceptInput = true;
+      this.lastTime = 0;
+      this.setStatus(`Zen mode - Score: ${this.zenScore}`);
+    }
+  }
+
   handlePeerDisconnected() {
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
     this.acceptInput = false;
+    this.zenPaused = false;
     this.stopLoop();
 
     this.gameState1 = null;
@@ -189,21 +278,25 @@ class GameController {
       this.elMenu.classList.add('hidden');
       // restore input only if actually in a playable state
       if (this.mode === 'zen') {
-        this.acceptInput = this.gameRunning;
+        this.acceptInput = this.gameRunning && !this._isSettingsVisible();
       } else {
         this.acceptInput = (this.phase === 'playing');
       }
     }
+
+    this._updateZenPauseState();
   }
 
   openSettings() {
     if (!this.settingsModal) return;
     this.settingsModal.classList.remove('hidden');
+    this._updateZenPauseState();
   }
 
   closeSettings() {
     if (!this.settingsModal) return;
     this.settingsModal.classList.add('hidden');
+    this._updateZenPauseState();
   }
 
   /* =========================
@@ -295,15 +388,20 @@ class GameController {
       const shouldShow = (this.mode === 'zen') ? this.gameRunning : (this.phase !== 'idle');
       this.gameArea.classList.toggle('hidden', !shouldShow);
     }
+
+    this._updateZenPauseState();
   }
 
   stopLoop() {
     this.gameRunning = false;
+    this.zenPaused = false;
     if (this.animationFrameId != null) cancelAnimationFrame(this.animationFrameId);
     this.animationFrameId = null;
   }
 
   resetForNewMode() {
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
     this.stopLoop();
     this.gameState1 = null;
     this.gameState2 = null;
@@ -314,6 +412,7 @@ class GameController {
     this.phase = 'idle';
     this.roundId = null;
     this.acceptInput = false;
+    this.zenPaused = false;
 
     this.hideResultOverlay();
 
@@ -352,10 +451,14 @@ class GameController {
   }
 
   startZen() {
+    this._invalidateRoundFlow();
+    this._cancelJoinConnectLoop();
     this.zenScore = 0;
     this.isHost = false;
     this.phase = 'playing';
     this.acceptInput = true;
+    this.zenPaused = false;
+    this.roundId = null;
 
     this.hideResultOverlay();
 
@@ -375,6 +478,7 @@ class GameController {
 
     try {
       this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
+      this.gameState1.setRoundId(null);
 
       const startTime = Date.now();
       this.gameState1.setGameStartTime(startTime);
@@ -406,6 +510,7 @@ class GameController {
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 
     this.applyModeUI();
+    this._updateZenPauseState();
   }
 
   /* =========================
@@ -533,6 +638,9 @@ wireMatchDefaultsAutoSave() {
       this.createBtn.addEventListener('click', () => {
         if (this.mode !== 'pvp_1v1') return;
 
+        this._cancelJoinConnectLoop();
+        this._invalidateRoundFlow();
+
         this.isHost = true;
         this.phase = 'waiting';
         this.acceptInput = false;
@@ -566,18 +674,50 @@ wireMatchDefaultsAutoSave() {
         this.applyMatchConfig(this.readMatchConfigFromUI(), true);
         this.setLobbyControlsEnabled(false);
 
-        const nm = NetworkManager.getInstance();
-        nm.initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'client' });
+        this._cancelJoinConnectLoop();
+        this._invalidateRoundFlow();
+        const joinToken = this._joinAttemptToken;
 
-        const connectWhenReady = () => {
-          // PeerJS is more reliable if we wait for the underlying peer to be open
-          if (nm.peer && nm.peer.open) {
-            nm.connect(normalizedId);
-          } else {
-            setTimeout(connectWhenReady, 60);
-          }
+        const nm = NetworkManager.getInstance();
+        const startJoinAttempt = (attemptNo) => {
+          if (joinToken !== this._joinAttemptToken) return;
+
+          nm.initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'client' });
+          this.setStatus(`Preparing local peer... (${attemptNo}/${this.joinPeerOpenRetryBudget})`);
+          const startedAt = performance.now();
+
+          const waitForPeerOpen = () => {
+            if (joinToken !== this._joinAttemptToken) return;
+            if (this.mode !== 'pvp_1v1' || this.phase === 'idle') return;
+
+            if (nm.peer && nm.peer.open) {
+              this._clearJoinWaitTimer();
+              nm.connect(normalizedId);
+              return;
+            }
+
+            const elapsedMs = performance.now() - startedAt;
+            if (elapsedMs >= this.joinPeerOpenTimeoutMs) {
+              if (attemptNo >= this.joinPeerOpenRetryBudget) {
+                this.setLobbyControlsEnabled(true);
+                this.setMatchConfigLocked(false);
+                this.acceptInput = false;
+                this.phase = 'waiting';
+                this.setStatus('Join failed: local peer setup timed out.');
+                ChatManager.addMessage('Join failed: timeout while preparing local connection.', 'System');
+                return;
+              }
+              startJoinAttempt(attemptNo + 1);
+              return;
+            }
+
+            this._scheduleJoinPeerWait(waitForPeerOpen, this.joinPeerOpenPollMs);
+          };
+
+          waitForPeerOpen();
         };
-        connectWhenReady();
+
+        startJoinAttempt(1);
 
         this.updateScoreboard();
       });
@@ -595,6 +735,7 @@ wireMatchDefaultsAutoSave() {
             type: 'matchReset',
             targetWins: this.match.targetWins,
             countdownSeconds: this.match.countdownSeconds,
+            roundId: this.roundId,
           });
         }
 
@@ -751,6 +892,7 @@ wireMatchDefaultsAutoSave() {
       hostScore: this.match.hostScore,
       clientScore: this.match.clientScore,
       round: this.match.round,
+      roundId: this.roundId,
     });
   }
 
@@ -768,12 +910,12 @@ wireMatchDefaultsAutoSave() {
     return localWon ? 'YOU' : 'OPPONENT';
   }
 
-  showCountdown(seconds, subtitle = 'Get ready…') {
+  showCountdown(seconds, subtitle = 'Get ready...', flowToken = this._roundFlowToken) {
     const overlay = this.countdownOverlay;
     const textEl = document.getElementById('countdownText');
     const subEl = document.getElementById('countdownSub');
 
-    if (!overlay || !textEl || !subEl) return Promise.resolve();
+    if (!overlay || !textEl || !subEl) return Promise.resolve(false);
 
     this.hideResultOverlay();
 
@@ -785,25 +927,46 @@ wireMatchDefaultsAutoSave() {
     this.updateScoreboard();
 
     return new Promise((resolve) => {
+      let settled = false;
+      const isFlowValid = () => (
+        flowToken === this._roundFlowToken &&
+        this.mode === 'pvp_1v1' &&
+        this.phase === 'countdown'
+      );
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        overlay.classList.add('hidden');
+        resolve(ok);
+      };
+
       let t = Math.max(1, Number(seconds) || 3);
       textEl.textContent = String(t);
 
       const tick = () => {
+        if (!isFlowValid()) {
+          finish(false);
+          return;
+        }
+
         t -= 1;
         if (t > 0) {
           textEl.textContent = String(t);
-          setTimeout(tick, 900);
+          this._setRoundFlowTimeout(tick, 900);
         } else {
           textEl.textContent = 'GO!';
           subEl.textContent = 'Fight!';
-          setTimeout(() => {
-            overlay.classList.add('hidden');
-            resolve();
+          this._setRoundFlowTimeout(() => {
+            if (!isFlowValid()) {
+              finish(false);
+              return;
+            }
+            finish(true);
           }, 550);
         }
       };
 
-      setTimeout(tick, 900);
+      this._setRoundFlowTimeout(tick, 900);
     });
   }
 
@@ -846,6 +1009,8 @@ wireMatchDefaultsAutoSave() {
 
   async startRound(seed, roundNumber, roundId) {
     if (this.mode !== 'pvp_1v1') return;
+    this._cancelJoinConnectLoop();
+    const flowToken = this._invalidateRoundFlow();
 
     this.roundId = roundId || this.roundId || `${Date.now()}-local`;
 
@@ -865,6 +1030,8 @@ wireMatchDefaultsAutoSave() {
     try {
       this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
       this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
+      this.gameState1.setRoundId(this.roundId);
+      this.gameState2.setRoundId(this.roundId);
 
       const startTime = Date.now();
       this.gameState1.setGameStartTime(startTime);
@@ -906,7 +1073,10 @@ wireMatchDefaultsAutoSave() {
       this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
     }
 
-    await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`);
+    const didCountdown = await this.showCountdown(this.match.countdownSeconds, `Round ${this.match.round}`, flowToken);
+    if (!didCountdown) return;
+    if (flowToken !== this._roundFlowToken) return;
+    if (this.mode !== 'pvp_1v1' || this.phase !== 'countdown') return;
 
     this.phase = 'playing';
     this.acceptInput = true;
@@ -936,10 +1106,128 @@ wireMatchDefaultsAutoSave() {
     this.startRound(seed, nextRound, roundId);
   }
 
+  _clampInt(value, min, max, fallback = min) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.trunc(n);
+    return Math.max(min, Math.min(max, i));
+  }
+
+  _normalizeRoundId(value) {
+    if (typeof value !== 'string') return null;
+    const cleaned = value.trim();
+    if (!cleaned) return null;
+    return cleaned.slice(0, 128);
+  }
+
+  _isStaleRoundPacket(roundId) {
+    return !!(roundId && this.roundId && roundId !== this.roundId);
+  }
+
+  _sanitizeIncomingMessage(rawMsg) {
+    if (!rawMsg || typeof rawMsg !== 'object') return null;
+    const type = (typeof rawMsg.type === 'string') ? rawMsg.type : '';
+    if (!type) return null;
+
+    switch (type) {
+      case 'chat': {
+        const message = (typeof rawMsg.message === 'string') ? rawMsg.message.trim() : '';
+        if (!message) return null;
+        return { type, message: message.slice(0, 300) };
+      }
+
+      case 'attack': {
+        const lines = this._clampInt(rawMsg.lines, 0, 10, 0);
+        if (lines <= 0) return null;
+        return { type, lines, roundId: this._normalizeRoundId(rawMsg.roundId) };
+      }
+
+      case 'peerConnected':
+      case 'joinedLobby':
+      case 'peerDisconnected':
+        return { type };
+
+      case 'networkError': {
+        const message = (typeof rawMsg.message === 'string') ? rawMsg.message.trim() : '';
+        return { type, message: (message || 'unknown').slice(0, 300) };
+      }
+
+      case 'matchConfig': {
+        return {
+          type,
+          targetWins: this._clampInt(rawMsg.targetWins, 0, 99, 3),
+          countdownSeconds: this._clampInt(rawMsg.countdownSeconds, 2, 5, 3),
+          roundId: this._normalizeRoundId(rawMsg.roundId),
+        };
+      }
+
+      case 'scoreUpdate': {
+        return {
+          type,
+          hostScore: this._clampInt(rawMsg.hostScore, 0, 999, 0),
+          clientScore: this._clampInt(rawMsg.clientScore, 0, 999, 0),
+          round: this._clampInt(rawMsg.round, 0, 999, 0),
+          roundId: this._normalizeRoundId(rawMsg.roundId),
+        };
+      }
+
+      case 'matchReset': {
+        return {
+          type,
+          targetWins: this._clampInt(rawMsg.targetWins, 0, 99, this.match.targetWins),
+          countdownSeconds: this._clampInt(rawMsg.countdownSeconds, 2, 5, this.match.countdownSeconds),
+          roundId: this._normalizeRoundId(rawMsg.roundId),
+        };
+      }
+
+      case 'startRound': {
+        const roundId = this._normalizeRoundId(rawMsg.roundId);
+        if (!roundId) return null;
+        return {
+          type,
+          seed: this._clampInt(rawMsg.seed, 0, 1000000000, Math.floor(Math.random() * 1e9)),
+          round: this._clampInt(rawMsg.round, 1, 999, (this.match.round || 0) + 1),
+          roundId,
+        };
+      }
+
+      case 'gameOver': {
+        const roundId = this._normalizeRoundId(rawMsg.roundId);
+        if (!roundId) return null;
+        return { type, roundId };
+      }
+
+      case 'matchOver': {
+        const roundId = this._normalizeRoundId(rawMsg.roundId);
+        if (!roundId) return null;
+        if (rawMsg.winner !== 'HOST' && rawMsg.winner !== 'CLIENT') return null;
+        return { type, winner: rawMsg.winner, roundId };
+      }
+
+      case 'gameState': {
+        const roundId = this._normalizeRoundId(rawMsg.roundId);
+        if (!roundId) return null;
+        if (!rawMsg.state || typeof rawMsg.state !== 'object') return null;
+        return {
+          type,
+          roundId,
+          init: rawMsg.init === true,
+          state: rawMsg.state,
+        };
+      }
+
+      default:
+        return null;
+    }
+  }
+
   /* =========================
      Network handler (PvP)
   ========================= */
-  handleNetworkMessage(msg) {
+  handleNetworkMessage(rawMsg) {
+    const msg = this._sanitizeIncomingMessage(rawMsg);
+    if (!msg) return;
+
     if (msg.type === 'chat') {
       ChatManager.addMessage(msg.message, 'Opponent');
       return;
@@ -949,10 +1237,12 @@ wireMatchDefaultsAutoSave() {
 
     switch (msg.type) {
       case 'attack':
+        if (this._isStaleRoundPacket(msg.roundId)) break;
         if (this.gameState1) this.gameState1.receiveAttack(msg.lines);
         break;
 
       case 'peerConnected': {
+        this._cancelJoinConnectLoop();
         if (!this.isHost) break;
 
         const cfg = this.readMatchConfigFromUI();
@@ -962,6 +1252,7 @@ wireMatchDefaultsAutoSave() {
           type: 'matchConfig',
           targetWins: cfg.targetWins,
           countdownSeconds: cfg.countdownSeconds,
+          roundId: this.roundId,
         });
 
         this.resetMatchScores();
@@ -973,6 +1264,7 @@ wireMatchDefaultsAutoSave() {
       }
 
       case 'joinedLobby':
+        this._cancelJoinConnectLoop();
         this.setStatus('Connected! Waiting for host…');
         break;
 
@@ -982,6 +1274,8 @@ wireMatchDefaultsAutoSave() {
         break;
 
       case 'networkError':
+        this._invalidateRoundFlow();
+        this._cancelJoinConnectLoop();
         this.setLobbyControlsEnabled(true);
         this.setMatchConfigLocked(false);
         this.acceptInput = false;
@@ -990,9 +1284,10 @@ wireMatchDefaultsAutoSave() {
         break;
 
       case 'matchConfig': {
+        if (this._isStaleRoundPacket(msg.roundId)) break;
         const cfg = {
-          targetWins: Number(msg.targetWins) || 0,
-          countdownSeconds: Number(msg.countdownSeconds) || 3,
+          targetWins: msg.targetWins,
+          countdownSeconds: msg.countdownSeconds,
         };
         this.applyMatchConfig(cfg, true);
         this.phase = 'waiting';
@@ -1002,17 +1297,20 @@ wireMatchDefaultsAutoSave() {
       }
 
       case 'scoreUpdate': {
-        if (typeof msg.hostScore === 'number') this.match.hostScore = msg.hostScore;
-        if (typeof msg.clientScore === 'number') this.match.clientScore = msg.clientScore;
-        if (typeof msg.round === 'number') this.match.round = msg.round;
+        if (this._isStaleRoundPacket(msg.roundId)) break;
+        this.match.hostScore = msg.hostScore;
+        this.match.clientScore = msg.clientScore;
+        this.match.round = msg.round;
         this.updateScoreboard();
         break;
       }
 
       case 'matchReset': {
+        if (this._isStaleRoundPacket(msg.roundId)) break;
+        this._invalidateRoundFlow();
         const cfg = {
-          targetWins: Number(msg.targetWins) || this.match.targetWins,
-          countdownSeconds: Number(msg.countdownSeconds) || this.match.countdownSeconds,
+          targetWins: msg.targetWins,
+          countdownSeconds: msg.countdownSeconds,
         };
         this.applyMatchConfig(cfg, !this.isHost);
         this.resetMatchScores();
@@ -1030,17 +1328,16 @@ wireMatchDefaultsAutoSave() {
       }
 
       case 'startRound': {
-        const seed = Number(msg.seed) || Math.floor(Math.random() * 1e9);
-        const round = Number(msg.round) || ((this.match.round || 0) + 1);
+        if (this.phase === 'playing' || this.phase === 'countdown') break;
 
-        const roundId = msg.roundId || `${Date.now()}-recv`;
-        this.roundId = roundId;
-
-        this.startRound(seed, round, roundId);
+        this.roundId = msg.roundId;
+        this.startRound(msg.seed, msg.round, msg.roundId);
         break;
       }
 
       case 'gameOver': {
+        if (this._isStaleRoundPacket(msg.roundId)) break;
+        this._invalidateRoundFlow();
         this.acceptInput = false;
         this.phase = 'roundOver';
 
@@ -1055,14 +1352,14 @@ wireMatchDefaultsAutoSave() {
 
           if (this.isMatchOver()) {
             const winner = this.getMatchWinnerLabelForLocal();
-            NetworkManager.getInstance().send({ type: 'matchOver', winner: 'HOST' });
+            NetworkManager.getInstance().send({ type: 'matchOver', winner: 'HOST', roundId: this.roundId });
             this.phase = 'matchOver';
             this.setStatus(`MATCH OVER — ${winner} WINS!`);
             ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
             this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
           } else {
             this.setStatus('Next round starting…');
-            setTimeout(() => this.startNextRoundAsHost(false), 1400);
+            this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
           }
         } else {
           this.setStatus('Round win! Waiting for next round…');
@@ -1071,6 +1368,8 @@ wireMatchDefaultsAutoSave() {
       }
 
       case 'matchOver': {
+        if (this._isStaleRoundPacket(msg.roundId)) break;
+        this._invalidateRoundFlow();
         this.acceptInput = false;
         this.phase = 'matchOver';
         this.updateScoreboard();
@@ -1120,13 +1419,14 @@ wireMatchDefaultsAutoSave() {
     }
 
     // PvP round loss
+    this._invalidateRoundFlow();
     this.phase = 'roundOver';
     this.setStatus('You lost the round.');
     ChatManager.addMessage('You topped out! Round lost.', 'System');
 
     this.showResultOverlay('ROUND LOST', 'You topped out!', { durationMs: 1400 });
 
-    NetworkManager.getInstance().send({ type: 'gameOver' });
+    NetworkManager.getInstance().send({ type: 'gameOver', roundId: this.roundId });
 
     if (this.isHost) {
       this.match.clientScore += 1;
@@ -1135,14 +1435,14 @@ wireMatchDefaultsAutoSave() {
 
       if (this.isMatchOver()) {
         const winner = this.getMatchWinnerLabelForLocal();
-        NetworkManager.getInstance().send({ type: 'matchOver', winner: 'CLIENT' });
+        NetworkManager.getInstance().send({ type: 'matchOver', winner: 'CLIENT', roundId: this.roundId });
         this.phase = 'matchOver';
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
       } else {
         this.setStatus('Next round starting…');
-        setTimeout(() => this.startNextRoundAsHost(false), 1400);
+        this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
       }
     } else {
       this.setStatus('Round lost. Waiting for next round…');
@@ -1169,18 +1469,22 @@ wireMatchDefaultsAutoSave() {
         const input = InputManager.getInstance();
 
         if (this.mode === 'zen') {
-          // Zen: always update
-          if (this.acceptInput) {
-            input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
-          }
+          if (this.zenPaused) {
+            this.lastTime = 0;
+            this.gameState1.draw();
+          } else {
+            if (this.acceptInput) {
+              input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
+            }
 
-          const ok = this.gameState1.update(deltaTime);
-          if (!ok) {
-            this.handleGameOver();
-            return;
-          }
+            const ok = this.gameState1.update(deltaTime);
+            if (!ok) {
+              this.handleGameOver();
+              return;
+            }
 
-          this.gameState1.draw();
+            this.gameState1.draw();
+          }
         } else {
           // PvP: only update during playing
           if (this.phase === 'playing') {
@@ -1222,3 +1526,5 @@ wireMatchDefaultsAutoSave() {
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
   }
 }
+
+
