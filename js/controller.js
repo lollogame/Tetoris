@@ -33,6 +33,8 @@ class GameController {
     this.lastTime = 0;
     this.lastStateSendTime = 0;
     this.animationFrameId = null;
+    this.stateSendIntervalMs = STATE_SEND_INTERVAL;
+    this.networkRttMs = null;
 
     // Input gating
     this.acceptInput = false;
@@ -204,12 +206,30 @@ class GameController {
     }
   }
 
+  _computeAdaptiveStateSendInterval(rttMs) {
+    const safe = this._clampInt(rttMs, 0, 5000, 0);
+    if (safe <= 0) return STATE_SEND_INTERVAL;
+    if (safe < 120) return STATE_SEND_INTERVAL;
+    if (safe < 220) return 65;
+    if (safe < 350) return 80;
+    return 100;
+  }
+
+  _setNetworkRtt(rttMs) {
+    const safe = this._clampInt(rttMs, 1, 5000, 0);
+    if (safe <= 0) return;
+    this.networkRttMs = safe;
+    this.stateSendIntervalMs = this._computeAdaptiveStateSendInterval(safe);
+  }
+
   handlePeerDisconnected() {
     this._invalidateRoundFlow();
     this._cancelJoinConnectLoop();
     this.acceptInput = false;
     this.zenPaused = false;
     this.stopLoop();
+    this.stateSendIntervalMs = STATE_SEND_INTERVAL;
+    this.networkRttMs = null;
 
     this.gameState1 = null;
     this.gameState2 = null;
@@ -407,6 +427,8 @@ class GameController {
     this.gameState2 = null;
     this.lastTime = 0;
     this.lastStateSendTime = 0;
+    this.stateSendIntervalMs = STATE_SEND_INTERVAL;
+    this.networkRttMs = null;
 
     // PvP state reset (but keep match settings)
     this.phase = 'idle';
@@ -507,6 +529,7 @@ class GameController {
     this.gameRunning = true;
     this.lastTime = 0;
     this.lastStateSendTime = 0;
+    this.stateSendIntervalMs = STATE_SEND_INTERVAL;
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 
     this.applyModeUI();
@@ -1152,6 +1175,12 @@ wireMatchDefaultsAutoSave() {
         return { type, message: (message || 'unknown').slice(0, 300) };
       }
 
+      case 'netRtt': {
+        const rttMs = this._clampInt(rawMsg.rttMs, 1, 5000, 0);
+        if (rttMs <= 0) return null;
+        return { type, rttMs };
+      }
+
       case 'matchConfig': {
         return {
           type,
@@ -1233,6 +1262,11 @@ wireMatchDefaultsAutoSave() {
       return;
     }
 
+    if (msg.type === 'netRtt') {
+      this._setNetworkRtt(msg.rttMs);
+      return;
+    }
+
     if (this.mode !== 'pvp_1v1') return;
 
     switch (msg.type) {
@@ -1280,6 +1314,8 @@ wireMatchDefaultsAutoSave() {
         this.setMatchConfigLocked(false);
         this.acceptInput = false;
         this.phase = 'waiting';
+        this.stateSendIntervalMs = STATE_SEND_INTERVAL;
+        this.networkRttMs = null;
         this.setStatus(`Network error: ${msg.message || 'unknown'}`);
         break;
 
@@ -1329,6 +1365,7 @@ wireMatchDefaultsAutoSave() {
 
       case 'startRound': {
         if (this.phase === 'playing' || this.phase === 'countdown') break;
+        if (msg.round < this.match.round) break;
 
         this.roundId = msg.roundId;
         this.startRound(msg.seed, msg.round, msg.roundId);
@@ -1504,7 +1541,7 @@ wireMatchDefaultsAutoSave() {
             inRound &&
             this.roundId &&
             NetworkManager.getInstance().isConnected() &&
-            (timestamp - this.lastStateSendTime) > STATE_SEND_INTERVAL
+            (timestamp - this.lastStateSendTime) > this.stateSendIntervalMs
           ) {
             NetworkManager.getInstance().send({
               type: 'gameState',
