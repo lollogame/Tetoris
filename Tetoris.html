@@ -99,6 +99,13 @@
       text-transform: uppercase;
     }
 
+    .value-chip {
+      color: var(--accent-cyan);
+      font-size: 0.72rem;
+      margin-left: 6px;
+      text-transform: none;
+    }
+
     .control-item input, .control-item select {
       background: rgba(10, 14, 39, 0.9);
       border: 1px solid var(--accent-cyan);
@@ -112,6 +119,13 @@
     .control-item input:focus, .control-item select:focus {
       outline: none;
       box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    .control-item input[type="range"] {
+      padding: 0;
+      height: 28px;
+      background: transparent;
+      border: none;
     }
 
     button {
@@ -176,15 +190,100 @@
     .stat-label { color: var(--text-secondary); font-size: 0.75rem; }
     .stat-value { color: var(--accent-cyan); font-weight: bold; }
 
+    .incoming-meter {
+      width: 100%;
+      height: 8px;
+      margin-top: 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 255, 255, 0.35);
+      background: rgba(10, 14, 39, 0.75);
+      overflow: hidden;
+    }
+
+    .incoming-meter-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #00ffff 0%, #ff00ff 60%, #ff4d4d 100%);
+      transition: width 120ms linear;
+    }
+
+    .incoming-queue {
+      margin-top: 6px;
+      font-size: 0.66rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.2px;
+      min-height: 0.9rem;
+    }
+
     .canvas-container {
       position: relative;
       border: 3px solid var(--border-glow);
       border-radius: 5px;
       box-shadow: var(--shadow-glow), inset 0 0 20px rgba(0, 255, 255, 0.1);
       background: rgba(10, 14, 39, 0.95);
+      overflow: hidden;
     }
 
     canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+    .combat-feed {
+      position: absolute;
+      top: 10px;
+      right: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-end;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .combat-text {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.5rem;
+      padding: 4px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 255, 255, 0.45);
+      background: rgba(10, 14, 39, 0.85);
+      color: var(--accent-cyan);
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.45);
+      animation: combat-rise 1.3s ease-out forwards;
+      letter-spacing: 0.4px;
+    }
+
+    .combat-text.attack { color: var(--accent-yellow); border-color: rgba(255, 255, 0, 0.55); }
+    .combat-text.incoming { color: #ff7070; border-color: rgba(255, 112, 112, 0.65); }
+    .combat-text.combo { color: #ffb2ff; border-color: rgba(255, 0, 255, 0.6); }
+    .combat-text.b2b { color: #86e6ff; border-color: rgba(134, 230, 255, 0.6); }
+    .combat-text.spin { color: #d79bff; border-color: rgba(215, 155, 255, 0.65); }
+    .combat-text.allclear { color: #ffffff; border-color: rgba(255, 255, 255, 0.75); }
+
+    @keyframes combat-rise {
+      0% { opacity: 0; transform: translateY(8px) scale(0.92); }
+      15% { opacity: 1; transform: translateY(0) scale(1); }
+      80% { opacity: 1; transform: translateY(-1px) scale(1); }
+      100% { opacity: 0; transform: translateY(-8px) scale(0.96); }
+    }
+
+    .canvas-container.shake-light { animation: shake-light 150ms linear 1; }
+    .canvas-container.shake-heavy { animation: shake-heavy 180ms linear 1; }
+
+    @keyframes shake-light {
+      0% { transform: translate(0, 0); }
+      25% { transform: translate(-1px, 1px); }
+      50% { transform: translate(1px, -1px); }
+      75% { transform: translate(-1px, 0); }
+      100% { transform: translate(0, 0); }
+    }
+
+    @keyframes shake-heavy {
+      0% { transform: translate(0, 0); }
+      20% { transform: translate(-2px, 1px); }
+      40% { transform: translate(2px, -2px); }
+      60% { transform: translate(-2px, -1px); }
+      80% { transform: translate(2px, 1px); }
+      100% { transform: translate(0, 0); }
+    }
 
     .mini-canvas-container {
       background: rgba(10, 14, 39, 0.9);
@@ -494,6 +593,65 @@
       text-shadow: 0 0 10px rgba(0,255,255,0.35);
     }
 
+    .round-stats-panel {
+      width: min(900px, 96vw);
+      margin: -6px auto 16px;
+      padding: 14px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 0, 255, 0.45);
+      background: rgba(10, 14, 39, 0.82);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .round-stats-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.68rem;
+      color: var(--accent-yellow);
+      text-align: center;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .round-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      align-items: center;
+      font-size: 0.76rem;
+    }
+
+    .round-stats-grid .head {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.58rem;
+      color: var(--accent-cyan);
+      text-align: center;
+      padding-bottom: 4px;
+    }
+
+    .round-stats-grid .metric {
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      padding: 4px 0;
+    }
+
+    .round-stats-grid .value {
+      text-align: center;
+      color: var(--text-primary);
+      font-weight: 700;
+      border-radius: 6px;
+      padding: 4px 6px;
+      background: rgba(21, 27, 61, 0.62);
+      border: 1px solid rgba(0, 255, 255, 0.22);
+    }
+
+    .shortcut-hint {
+      margin-top: 8px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.66rem;
+      letter-spacing: 0.2px;
+    }
+
     /* =========================
        NEW: Countdown Overlay
     ========================= */
@@ -629,6 +787,36 @@
       <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> — <strong>0</strong> OPP</div>
     </div>
 
+    <div id="roundStatsPanel" class="round-stats-panel hidden">
+      <div id="roundStatsTitle" class="round-stats-title">ROUND STATS</div>
+      <div class="round-stats-grid">
+        <div></div>
+        <div class="head">YOU</div>
+        <div class="head">OPP</div>
+
+        <div class="metric">PPS</div>
+        <div class="value" id="rsYouPps">0.00</div>
+        <div class="value" id="rsOppPps">0.00</div>
+
+        <div class="metric">APM</div>
+        <div class="value" id="rsYouApm">0.00</div>
+        <div class="value" id="rsOppApm">0.00</div>
+
+        <div class="metric">VS</div>
+        <div class="value" id="rsYouVs">0.00</div>
+        <div class="value" id="rsOppVs">0.00</div>
+
+        <div class="metric">MISDROPS</div>
+        <div class="value" id="rsYouMisdrops">0</div>
+        <div class="value" id="rsOppMisdrops">0</div>
+
+        <div class="metric">FINESSE ERR</div>
+        <div class="value" id="rsYouFinesse">0</div>
+        <div class="value" id="rsOppFinesse">0</div>
+      </div>
+      <div class="shortcut-hint">Shortcuts: R = restart, N or Enter = rematch</div>
+    </div>
+
     <!-- Countdown overlay -->
     <div id="countdownOverlay" class="countdown-overlay hidden">
       <div class="countdown-card">
@@ -714,10 +902,32 @@
                 <option value="false">Off</option>
               </select>
             </div>
+            <div class="control-item">
+              <label>Master Volume <span class="value-chip" id="volumeMasterValue">100%</span></label>
+              <input type="range" id="volumeMaster" min="0" max="100" value="100">
+            </div>
+            <div class="control-item">
+              <label>SFX Volume <span class="value-chip" id="volumeSfxValue">100%</span></label>
+              <input type="range" id="volumeSfx" min="0" max="100" value="100">
+            </div>
+            <div class="control-item">
+              <label>Music Volume <span class="value-chip" id="volumeMusicValue">70%</span></label>
+              <input type="range" id="volumeMusic" min="0" max="100" value="70">
+            </div>
+            <div class="control-item">
+              <label>Screen Shake</label>
+              <select id="screenShake">
+                <option value="true" selected>On</option>
+                <option value="false">Off</option>
+              </select>
+            </div>
           </div>
 
           <div style="text-align:center;margin-top:15px;color:var(--text-secondary);font-size:0.75rem;">
             Click on any key binding to change it
+          </div>
+          <div style="text-align:center;margin-top:6px;color:var(--text-secondary);font-size:0.7rem;">
+            Shortcuts: <strong style="color:var(--accent-cyan);">R</strong> restart, <strong style="color:var(--accent-cyan);">N</strong> or <strong style="color:var(--accent-cyan);">Enter</strong> rematch
           </div>
           <div style="text-align:center;margin-top:10px;">
             <button id="resetKeybindsBtn" type="button" style="font-size:0.6rem;padding:8px 14px;">Reset Keybinds</button>
@@ -757,9 +967,15 @@
               <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm1">0.00</span></div>
               <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b1">0</span></div>
               <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo1">0</span></div>
+              <div class="stat"><span class="stat-label">Incoming:</span><span class="stat-value" id="incoming1">0</span></div>
+              <div class="incoming-meter"><div class="incoming-meter-fill" id="incomingMeterFill1"></div></div>
+              <div class="incoming-queue" id="incomingQueue1">Queue: -</div>
             </div>
           </div>
-          <div class="canvas-container"><canvas id="gameCanvas1" width="320" height="640"></canvas></div>
+          <div id="boardWrap1" class="canvas-container">
+            <canvas id="gameCanvas1" width="320" height="640"></canvas>
+            <div class="combat-feed" id="combatFeed1"></div>
+          </div>
           <div class="side-panel">
             <div class="info-box">
               <h3>NEXT</h3>
@@ -783,9 +999,15 @@
               <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm2">0.00</span></div>
               <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b2">0</span></div>
               <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo2">0</span></div>
+              <div class="stat"><span class="stat-label">Incoming:</span><span class="stat-value" id="incoming2">0</span></div>
+              <div class="incoming-meter"><div class="incoming-meter-fill" id="incomingMeterFill2"></div></div>
+              <div class="incoming-queue" id="incomingQueue2">Queue: -</div>
             </div>
           </div>
-          <div class="canvas-container"><canvas id="gameCanvas2" width="320" height="640"></canvas></div>
+          <div id="boardWrap2" class="canvas-container">
+            <canvas id="gameCanvas2" width="320" height="640"></canvas>
+            <div class="combat-feed" id="combatFeed2"></div>
+          </div>
           <div class="side-panel">
             <div class="info-box">
               <h3>NEXT</h3>
