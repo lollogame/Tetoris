@@ -10,7 +10,7 @@ class InputManager {
     this.heldCodes = {};
     this.lastPressedAt = {};
 
-    this.bindings = {
+    this.defaultBindings = {
       left:      'ArrowLeft',
       right:     'ArrowRight',
       softDrop:  'ArrowDown',
@@ -20,6 +20,7 @@ class InputManager {
       rotate180: 'KeyX',
       hold:      'ShiftLeft'
     };
+    this.bindings = { ...this.defaultBindings };
 
     this.bindingCaptureActive = false;
 
@@ -34,6 +35,7 @@ class InputManager {
     // Persistence
     this._storageKey = 'tetoris_keybinds_v1';
     this.loadBindingsFromStorage();
+    this.sanitizeBindings();
 }
 
   static getInstance() {
@@ -63,6 +65,16 @@ class InputManager {
     rotate180: 'keyRotate180',
     hold: 'keyHold'
   };
+  static actionToLabel = {
+    left: 'Move Left',
+    right: 'Move Right',
+    softDrop: 'Soft Drop',
+    hardDrop: 'Hard Drop',
+    rotateCW: 'Rotate CW',
+    rotateCCW: 'Rotate CCW',
+    rotate180: 'Rotate 180',
+    hold: 'Hold Piece'
+  };
 
   static prettyCode(code) {
     if (code === 'Space') return 'Space';
@@ -72,13 +84,47 @@ class InputManager {
     return code;
   }
 
-  setupKeyBindings() {
+  sanitizeBindings() {
+    const seen = new Set();
+    for (const action of Object.keys(this.defaultBindings)) {
+      let code = this.bindings[action];
+      if (typeof code !== 'string' || !code) code = this.defaultBindings[action];
+      if (seen.has(code)) code = this.defaultBindings[action];
+      this.bindings[action] = code;
+      seen.add(code);
+    }
+  }
+
+  refreshBindingsUI() {
     for (const action of Object.keys(this.bindings)) {
       const inputId = InputManager.actionToInputId[action];
       const el = document.getElementById(inputId);
       if (!el) continue;
-
       el.value = InputManager.prettyCode(this.bindings[action]);
+    }
+  }
+
+  getActionByCode(code, excludeAction = null) {
+    for (const action of Object.keys(this.bindings)) {
+      if (action === excludeAction) continue;
+      if (this.bindings[action] === code) return action;
+    }
+    return null;
+  }
+
+  resetBindingsToDefault() {
+    this.bindings = { ...this.defaultBindings };
+    this.saveBindingsToStorage();
+    this.refreshBindingsUI();
+  }
+
+  setupKeyBindings() {
+    this.refreshBindingsUI();
+
+    for (const action of Object.keys(this.bindings)) {
+      const inputId = InputManager.actionToInputId[action];
+      const el = document.getElementById(inputId);
+      if (!el) continue;
 
       el.addEventListener('click', () => {
         this.setCapturing(true);
@@ -88,8 +134,27 @@ class InputManager {
           e.preventDefault();
           e.stopPropagation();
 
+          if (e.code === 'Escape') {
+            el.value = InputManager.prettyCode(this.bindings[action]);
+            document.removeEventListener('keydown', capture, true);
+            this.setCapturing(false);
+            return;
+          }
+
+          const conflictAction = this.getActionByCode(e.code, action);
+          if (conflictAction) {
+            const conflictLabel = InputManager.actionToLabel[conflictAction] || conflictAction;
+            if (typeof ChatManager !== 'undefined') {
+              ChatManager.addMessage(`'${InputManager.prettyCode(e.code)}' is already bound to ${conflictLabel}.`, 'System');
+            }
+            el.value = InputManager.prettyCode(this.bindings[action]);
+            document.removeEventListener('keydown', capture, true);
+            this.setCapturing(false);
+            return;
+          }
+
           this.bindings[action] = e.code;
-          el.value = InputManager.prettyCode(e.code);
+          this.refreshBindingsUI();
           this.saveBindingsToStorage();
 
           document.removeEventListener('keydown', capture, true);
@@ -97,6 +162,16 @@ class InputManager {
         };
 
         document.addEventListener('keydown', capture, true);
+      });
+    }
+
+    const resetBtn = document.getElementById('resetKeybindsBtn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        this.resetBindingsToDefault();
+        if (typeof ChatManager !== 'undefined') {
+          ChatManager.addMessage('Keybinds reset to defaults.', 'System');
+        }
       });
     }
   }
