@@ -218,7 +218,7 @@ class NetworkManager {
     }
   }
 
-  sendAttack(lines) {
+  sendAttack(lines, roundId = null) {
     // clamp
     const safe = Math.max(0, Math.min(10, Number(lines) || 0));
     if (safe === 0) return;
@@ -229,7 +229,11 @@ class NetworkManager {
       return;
     }
 
-    this.send({ type: 'attack', lines: safe });
+    const payload = { type: 'attack', lines: safe };
+    if (typeof roundId === 'string' && roundId.trim()) {
+      payload.roundId = roundId.trim();
+    }
+    this.send(payload);
   }
 
   setLocalAttackHandler(handler) {
