@@ -593,6 +593,37 @@
       text-shadow: 0 0 10px rgba(0,255,255,0.35);
     }
 
+    .br-lobby-panel {
+      width: min(900px, 96vw);
+      margin: -6px auto 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 2px solid rgba(0, 255, 255, 0.45);
+      background: rgba(10, 14, 39, 0.78);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .br-lobby-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.62rem;
+      color: var(--accent-cyan);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .br-lobby-line {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin: 4px 0;
+      line-height: 1.35;
+    }
+
+    .br-lobby-line strong {
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
     .round-stats-panel {
       width: min(900px, 96vw);
       margin: -6px auto 16px;
@@ -767,9 +798,14 @@
             <div class="mode-desc">Online versus (PeerJS)</div>
           </div>
 
-          <div class="mode-card disabled" data-mode="battle_royale" aria-disabled="true" title="Coming soon">
+          <div class="mode-card" data-mode="battle_royale">
             <div class="mode-title">👑 Battle Royale</div>
-            <div class="mode-desc">Coming soon</div>
+            <div class="mode-desc">Online free-for-all with multiple players</div>
+          </div>
+
+          <div class="mode-card" data-mode="bot_practice">
+            <div class="mode-title">Bot Practice</div>
+            <div class="mode-desc">Train versus a customizable AI bot</div>
           </div>
         </div>
 
@@ -785,6 +821,14 @@
       <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
       <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
       <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> — <strong>0</strong> OPP</div>
+    </div>
+
+    <div id="brLobbyPanel" class="br-lobby-panel hidden">
+      <div class="br-lobby-title">BATTLE ROYALE LOBBY</div>
+      <div class="br-lobby-line" id="brLobbyRoom">Room: <strong>-</strong></div>
+      <div class="br-lobby-line" id="brLobbyPlayers">Players: <strong>1/4</strong></div>
+      <div class="br-lobby-line" id="brLobbyAlive">Alive: <strong>-</strong></div>
+      <div class="br-lobby-line" id="brLobbyList">-</div>
     </div>
 
     <div id="roundStatsPanel" class="round-stats-panel hidden">
@@ -805,10 +849,6 @@
         <div class="metric">VS</div>
         <div class="value" id="rsYouVs">0.00</div>
         <div class="value" id="rsOppVs">0.00</div>
-
-        <div class="metric">MISDROPS</div>
-        <div class="value" id="rsYouMisdrops">0</div>
-        <div class="value" id="rsOppMisdrops">0</div>
 
         <div class="metric">FINESSE ERR</div>
         <div class="value" id="rsYouFinesse">0</div>
@@ -863,6 +903,25 @@
                 <option value="5">5s</option>
               </select>
             </div>
+            <div class="control-item">
+              <label>BR Max Players</label>
+              <select id="brMaxPlayers">
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </div>
+            <div class="control-item">
+              <label>BR Attack Mode</label>
+              <select id="brAttackMode">
+                <option value="random" selected>Random Target</option>
+                <option value="highest_apm">Highest APM</option>
+                <option value="retaliate">Retaliate</option>
+              </select>
+            </div>
           </div>
           <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
             Host decides match settings. Joiners will be locked to the host’s config.
@@ -896,13 +955,6 @@
               </select>
             </div>
             <div class="control-item">
-              <label>Prevent Missdrop</label>
-              <select id="preventMissdrop">
-                <option value="true" selected>On</option>
-                <option value="false">Off</option>
-              </select>
-            </div>
-            <div class="control-item">
               <label>Master Volume <span class="value-chip" id="volumeMasterValue">100%</span></label>
               <input type="range" id="volumeMaster" min="0" max="100" value="100">
             </div>
@@ -920,6 +972,22 @@
                 <option value="true" selected>On</option>
                 <option value="false">Off</option>
               </select>
+            </div>
+            <div class="control-item">
+              <label>Bot PPS</label>
+              <input type="number" id="botPps" value="1.6" min="0.4" max="6" step="0.1">
+            </div>
+            <div class="control-item">
+              <label>Bot Aggression</label>
+              <input type="range" id="botAggression" min="0" max="100" value="65">
+            </div>
+            <div class="control-item">
+              <label>Bot Mistake %</label>
+              <input type="range" id="botMistakeChance" min="0" max="40" value="8">
+            </div>
+            <div class="control-item">
+              <label>Bot Think Jitter (ms)</label>
+              <input type="number" id="botThinkJitterMs" value="85" min="0" max="400" step="5">
             </div>
           </div>
 
@@ -946,6 +1014,7 @@
       <button id="createGameBtn">Create Game</button>
       <input type="text" id="opponentPeerId" placeholder="Enter room code (or Peer ID) to join">
       <button id="joinGameBtn">Join Game</button>
+      <button id="startBrBtn" class="hidden">Start BR</button>
       <button id="restartBtn" class="hidden">Restart Game</button>
     </div>
 
@@ -1037,6 +1106,7 @@
   <script src="js/network.js"></script>
   <script src="js/input.js"></script>
   <script src="js/gameState.js"></script>
+  <script src="js/bot.js"></script>
   <script src="js/controller.js"></script>
   <script>
     if (new URLSearchParams(window.location.search).has('debugHeartbeat')) {
