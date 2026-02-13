@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tetoris Online</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
+
+    :root {
+      --bg-dark: #0a0e27;
+      --bg-grid: #151b3d;
+      --border-glow: #00ffff;
+      --text-primary: #ffffff;
+      --text-secondary: #8b9dc3;
+      --accent-cyan: #00ffff;
+      --accent-pink: #ff00ff;
+      --accent-yellow: #ffff00;
+      --shadow-glow: 0 0 20px rgba(0, 255, 255, 0.5);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Orbitron', monospace;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
+        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 0, 255, 0.03) 2px, rgba(255, 0, 255, 0.03) 4px);
+      pointer-events: none;
+      animation: scanlines 8s linear infinite;
+    }
+
+    @keyframes scanlines {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(4px); }
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    h1 {
+      font-family: 'Press Start 2P', cursive;
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 18px;
+      text-transform: uppercase;
+      background: linear-gradient(45deg, var(--accent-cyan), var(--accent-pink), var(--accent-yellow));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
+      animation: glow-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes glow-pulse {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5)); }
+      50% { filter: drop-shadow(0 0 20px rgba(255, 0, 255, 0.8)); }
+    }
+
+    .controls-panel {
+      background: rgba(21, 27, 61, 0.8);
+      border: 2px solid var(--border-glow);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .control-item { display: flex; flex-direction: column; gap: 5px; }
+
+    .control-item label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .control-item input, .control-item select {
+      background: rgba(10, 14, 39, 0.9);
+      border: 1px solid var(--accent-cyan);
+      color: var(--text-primary);
+      padding: 8px;
+      border-radius: 5px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.9rem;
+    }
+
+    .control-item input:focus, .control-item select:focus {
+      outline: none;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    button {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+      border: none;
+      color: var(--bg-dark);
+      padding: 12px 24px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.7rem;
+      border-radius: 5px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 0, 255, 0.5);
+    }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .game-area {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    .player-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+
+    .player-header {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 1rem;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 10px var(--accent-cyan);
+    }
+
+    .game-wrapper { display: flex; gap: 20px; align-items: flex-start; }
+    .side-panel { display: flex; flex-direction: column; gap: 15px; }
+
+    .info-box {
+      background: rgba(21, 27, 61, 0.9);
+      border: 2px solid var(--accent-cyan);
+      border-radius: 8px;
+      padding: 15px;
+      min-width: 150px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .info-box h3 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.6rem;
+      margin-bottom: 10px;
+      color: var(--accent-yellow);
+      text-align: center;
+    }
+
+    .stat { display: flex; justify-content: space-between; margin: 5px 0; font-size: 0.9rem; }
+    .stat-label { color: var(--text-secondary); font-size: 0.75rem; }
+    .stat-value { color: var(--accent-cyan); font-weight: bold; }
+
+    .canvas-container {
+      position: relative;
+      border: 3px solid var(--border-glow);
+      border-radius: 5px;
+      box-shadow: var(--shadow-glow), inset 0 0 20px rgba(0, 255, 255, 0.1);
+      background: rgba(10, 14, 39, 0.95);
+    }
+
+    canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+    .mini-canvas-container {
+      background: rgba(10, 14, 39, 0.9);
+      border: 2px solid var(--accent-pink);
+      border-radius: 5px;
+      padding: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100px;
+    }
+
+    .chat-container {
+      background: rgba(21, 27, 61, 0.9);
+      border: 2px solid var(--border-glow);
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 20px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .chat-messages {
+      height: 150px;
+      overflow-y: auto;
+      background: rgba(10, 14, 39, 0.8);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 5px;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+    }
+
+    .chat-message {
+      margin: 5px 0;
+      padding: 5px;
+      border-left: 2px solid var(--accent-pink);
+      padding-left: 8px;
+    }
+
+    .chat-input-container { display: flex; gap: 10px; }
+    .chat-input {
+      flex: 1;
+      background: rgba(10, 14, 39, 0.9);
+      border: 1px solid var(--accent-cyan);
+      color: var(--text-primary);
+      padding: 10px;
+      border-radius: 5px;
+      font-family: 'Orbitron', monospace;
+    }
+
+    .connection-panel {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .connection-panel input {
+      background: rgba(10, 14, 39, 0.9);
+      border: 1px solid var(--accent-cyan);
+      color: var(--text-primary);
+      padding: 10px;
+      border-radius: 5px;
+      font-family: 'Orbitron', monospace;
+      width: 300px;
+    }
+
+    #gameStatus {
+      text-align: center;
+      margin-top: 12px;
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.8rem;
+      color: var(--accent-yellow);
+      text-shadow: 0 0 10px var(--accent-yellow);
+    }
+
+    #myPeerId {
+      background: rgba(21, 27, 61, 0.9);
+      border: 2px solid var(--accent-cyan);
+      padding: 15px;
+      border-radius: 10px;
+      text-align: center;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    #myPeerId .peer-id-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    #myPeerId .peer-id-value {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.9rem;
+      color: var(--accent-cyan);
+      word-break: break-all;
+      user-select: all;
+      cursor: pointer;
+      padding: 10px;
+      background: rgba(10, 14, 39, 0.8);
+      border-radius: 5px;
+      border: 1px solid var(--accent-pink);
+    }
+
+    .hidden { display: none !important; }
+    .copy-btn { margin-top: 10px; font-size: 0.6rem; padding: 8px 16px; }
+
+    /* =========================
+       Topbar + Settings Modal
+    ========================= */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+
+      /* keep topbar clickable above canvas/overlays */
+      position: relative;
+      z-index: 30001;
+    }
+
+    #openMenuBtn, #openSettingsBtn {
+      position: relative;
+      z-index: 30002;
+      pointer-events: auto;
+    }
+
+    .topbar .topbar-left, .topbar .topbar-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 24, 0.78);
+      backdrop-filter: blur(5px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-content {
+      width: min(1100px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: rgba(21, 27, 61, 0.95);
+      border: 2px solid var(--border-glow);
+      border-radius: 12px;
+      box-shadow: var(--shadow-glow);
+      padding: 16px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .modal-header h2 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.85rem;
+      color: var(--accent-yellow);
+    }
+
+    .modal-close { font-size: 0.6rem; padding: 10px 14px; }
+
+    /* If hidden, MUST NOT intercept clicks */
+    #settingsModal.hidden,
+    #countdownOverlay.hidden,
+    #mainMenu.hidden {
+      pointer-events: none !important;
+    }
+
+    /* =========================
+       Main Menu (Mode Select)
+    ========================= */
+    .menu-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 25000;
+      background: rgba(5, 8, 24, 0.78);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .menu-card {
+      width: min(920px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: rgba(21, 27, 61, 0.95);
+      border: 2px solid var(--border-glow);
+      border-radius: 12px;
+      box-shadow: var(--shadow-glow);
+      padding: 16px;
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .menu-header h2 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.85rem;
+      color: var(--accent-yellow);
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .mode-card {
+      border: 2px solid rgba(0, 255, 255, 0.45);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(10, 14, 39, 0.7);
+      box-shadow: 0 0 18px rgba(0, 255, 255, 0.18);
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      user-select: none;
+    }
+
+    .mode-card:hover { transform: translateY(-2px); box-shadow: 0 0 22px rgba(255, 0, 255, 0.25); }
+    .mode-card.selected { border-color: var(--accent-pink); box-shadow: 0 0 26px rgba(255, 0, 255, 0.35); }
+    .mode-card.disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .mode-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      margin-bottom: 8px;
+    }
+
+    .mode-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    .menu-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 6px;
+    }
+
+    /* =========================
+       NEW: Match Scoreboard
+    ========================= */
+    .scoreboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px 16px;
+      padding: 12px 14px;
+      margin: 10px auto 16px;
+      width: min(900px, 96vw);
+      background: rgba(21, 27, 61, 0.75);
+      border: 2px solid rgba(0, 255, 255, 0.55);
+      border-radius: 12px;
+      box-shadow: var(--shadow-glow);
+      text-align: center;
+    }
+
+    .score-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 0, 255, 0.45);
+      background: rgba(10, 14, 39, 0.75);
+      font-family: 'Press Start 2P', cursive;
+      font-size: 0.65rem;
+      color: var(--text-primary);
+      letter-spacing: 0.5px;
+    }
+
+    .score-pill strong {
+      color: var(--accent-cyan);
+      text-shadow: 0 0 10px rgba(0,255,255,0.35);
+    }
+
+    /* =========================
+       NEW: Countdown Overlay
+    ========================= */
+    .countdown-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, rgba(10, 14, 39, 0.35), rgba(5, 8, 24, 0.85));
+      backdrop-filter: blur(3px);
+      pointer-events: none;
+    }
+
+    .countdown-card {
+      text-align: center;
+      padding: 24px 26px;
+      border-radius: 16px;
+      border: 2px solid rgba(0, 255, 255, 0.65);
+      background: rgba(21, 27, 61, 0.82);
+      box-shadow: var(--shadow-glow);
+      width: min(520px, 92vw);
+    }
+
+    .countdown-big {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 3.2rem;
+      line-height: 1.1;
+      color: var(--accent-yellow);
+      text-shadow: 0 0 18px rgba(255,255,0,0.35);
+      margin-bottom: 10px;
+    }
+
+    .countdown-sub {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+  
+        /* =========================
+           Result / KO Overlay
+        ========================= */
+        .result-overlay{
+            position: fixed;
+            inset: 0;
+            z-index: 20005;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(5, 8, 24, 0.35);
+            backdrop-filter: blur(3px);
+            pointer-events: none;
+        }
+
+        .result-card{
+            text-align: center;
+            padding: 22px 24px;
+            border: 2px solid var(--accent-pink);
+            border-radius: 12px;
+            background: rgba(10, 14, 39, 0.95);
+            box-shadow: var(--shadow-glow);
+            width: min(520px, 92vw);
+        }
+
+        .result-big{
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.9rem;
+            color: var(--accent-yellow);
+            text-shadow: 0 0 12px rgba(255,255,0,0.35);
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .result-sub{
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>⬛ TETORIS⬛</h1>
+
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="openMenuBtn">☰ Menu</button>
+      </div>
+      <div class="topbar-right">
+        <button id="openSettingsBtn">⚙ Settings</button>
+      </div>
+    </div>
+
+    <!-- Main Menu (Mode Select) -->
+    <div id="mainMenu" class="menu-overlay hidden">
+      <div class="menu-card">
+        <div class="menu-header">
+          <h2>Main Menu</h2>
+          <button id="menuCloseBtn" class="modal-close">Close</button>
+        </div>
+
+        <div class="mode-grid">
+          <div class="mode-card selected" data-mode="zen">
+            <div class="mode-title">🧘 Zen</div>
+            <div class="mode-desc">Single player practice</div>
+          </div>
+
+          <div class="mode-card" data-mode="pvp_1v1">
+            <div class="mode-title">⚔ 1v1</div>
+            <div class="mode-desc">Online versus (PeerJS)</div>
+          </div>
+
+          <div class="mode-card disabled" data-mode="battle_royale" aria-disabled="true" title="Coming soon">
+            <div class="mode-title">👑 Battle Royale</div>
+            <div class="mode-desc">Coming soon</div>
+          </div>
+        </div>
+
+        <div class="menu-actions">
+          <button id="menuPlayBtn">▶ Play</button>
+          <button id="menuSettingsBtn">⚙ Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW: Match scoreboard -->
+    <div id="scoreboard" class="scoreboard hidden">
+      <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
+      <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
+      <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> — <strong>0</strong> OPP</div>
+    </div>
+
+    <!-- Countdown overlay -->
+    <div id="countdownOverlay" class="countdown-overlay hidden">
+      <div class="countdown-card">
+        <div class="countdown-big" id="countdownText">3</div>
+        <div class="countdown-sub" id="countdownSub">Get ready…</div>
+      </div>
+    </div>
+    <!-- Result / KO overlay -->
+    <div id="resultOverlay" class="result-overlay hidden">
+      <div class="result-card">
+        <div class="result-big" id="resultText">ROUND OVER</div>
+        <div class="result-sub" id="resultSub">…</div>
+      </div>
+    </div>
+
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Game Settings</h2>
+          <button class="modal-close" id="closeSettingsBtn">Close</button>
+        </div>
+
+        <!-- NEW: Match format selector -->
+        <div class="controls-panel">
+          <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Match</h2>
+          <div class="controls-grid">
+            <div class="control-item">
+              <label>Match Format</label>
+              <select id="matchFormat">
+                <option value="3" selected>FT3 (first to 3)</option>
+                <option value="5">FT5 (first to 5)</option>
+                <option value="7">FT7 (first to 7)</option>
+                <option value="0">Infinite</option>
+              </select>
+            </div>
+            <div class="control-item">
+              <label>Countdown</label>
+              <select id="countdownSeconds">
+                <option value="2">2s</option>
+                <option value="3" selected>3s</option>
+                <option value="4">4s</option>
+                <option value="5">5s</option>
+              </select>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
+            Host decides match settings. Joiners will be locked to the host’s config.
+          </div>
+        </div>
+
+        <!-- Your existing controls -->
+        <div class="controls-panel">
+          <h2 style="font-family:'Press Start 2P',cursive;font-size:1rem;margin-bottom:15px;text-align:center;">Controls</h2>
+          <div class="controls-grid">
+            <div class="control-item"><label>Move Left</label><input type="text" id="keyLeft" value="ArrowLeft" readonly></div>
+            <div class="control-item"><label>Move Right</label><input type="text" id="keyRight" value="ArrowRight" readonly></div>
+            <div class="control-item"><label>Soft Drop</label><input type="text" id="keySoftDrop" value="ArrowDown" readonly></div>
+            <div class="control-item"><label>Hard Drop</label><input type="text" id="keyHardDrop" value="Space" readonly></div>
+            <div class="control-item"><label>Rotate CW</label><input type="text" id="keyRotateCW" value="ArrowUp" readonly></div>
+            <div class="control-item"><label>Rotate CCW</label><input type="text" id="keyRotateCCW" value="z" readonly></div>
+            <div class="control-item"><label>Rotate 180</label><input type="text" id="keyRotate180" value="x" readonly></div>
+            <div class="control-item"><label>Hold Piece</label><input type="text" id="keyHold" value="LShift" readonly></div>
+            <div class="control-item"><label>ARR (ms)</label><input type="number" id="arr" value="0" min="0" max="200"></div>
+            <div class="control-item"><label>DAS (ms)</label><input type="number" id="das" value="167" min="0" max="500"></div>
+            <div class="control-item"><label>DCD (ms)</label><input type="number" id="dcd" value="0" min="0" max="100"></div>
+            <div class="control-item">
+              <label>SDF (multiplier)</label>
+              <select id="sdf">
+                <option value="1">1x</option>
+                <option value="2">2x</option>
+                <option value="6" selected>6x</option>
+                <option value="10">10x</option>
+                <option value="20">20x</option>
+                <option value="inf">Infinite</option>
+              </select>
+            </div>
+            <div class="control-item">
+              <label>Prevent Missdrop</label>
+              <select id="preventMissdrop">
+                <option value="true" selected>On</option>
+                <option value="false">Off</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-top:15px;color:var(--text-secondary);font-size:0.75rem;">
+            Click on any key binding to change it
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="myPeerId" class="hidden">
+      <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
+      <div class="peer-id-value" id="peerIdDisplay" onclick="window.copyPeerId()">Connecting...</div>
+      <button class="copy-btn" onclick="window.copyPeerId()">📋 Copy ID</button>
+    </div>
+
+    <div class="connection-panel">
+      <button id="createGameBtn">Create Game</button>
+      <input type="text" id="opponentPeerId" placeholder="Enter room code (or Peer ID) to join">
+      <button id="joinGameBtn">Join Game</button>
+      <button id="restartBtn" class="hidden">Restart Game</button>
+    </div>
+
+    <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
+
+    <div class="game-area hidden" id="gameArea">
+      <div class="player-container">
+        <div class="player-header">🎮 YOU</div>
+        <div class="game-wrapper">
+          <div class="side-panel">
+            <div class="info-box">
+              <h3>HOLD</h3>
+              <div class="mini-canvas-container"><canvas id="holdCanvas1" width="80" height="80"></canvas></div>
+            </div>
+            <div class="info-box">
+              <h3>STATS</h3>
+              <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps1">0.00</span></div>
+              <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm1">0.00</span></div>
+              <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b1">0</span></div>
+              <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo1">0</span></div>
+            </div>
+          </div>
+          <div class="canvas-container"><canvas id="gameCanvas1" width="320" height="640"></canvas></div>
+          <div class="side-panel">
+            <div class="info-box">
+              <h3>NEXT</h3>
+              <div class="mini-canvas-container"><canvas id="queueCanvas1" width="80" height="480"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="player-container">
+        <div class="player-header">🎮 OPPONENT</div>
+        <div class="game-wrapper">
+          <div class="side-panel">
+            <div class="info-box">
+              <h3>HOLD</h3>
+              <div class="mini-canvas-container"><canvas id="holdCanvas2" width="80" height="80"></canvas></div>
+            </div>
+            <div class="info-box">
+              <h3>STATS</h3>
+              <div class="stat"><span class="stat-label">PPS:</span><span class="stat-value" id="pps2">0.00</span></div>
+              <div class="stat"><span class="stat-label">APM:</span><span class="stat-value" id="apm2">0.00</span></div>
+              <div class="stat"><span class="stat-label">B2B:</span><span class="stat-value" id="b2b2">0</span></div>
+              <div class="stat"><span class="stat-label">Combo:</span><span class="stat-value" id="combo2">0</span></div>
+            </div>
+          </div>
+          <div class="canvas-container"><canvas id="gameCanvas2" width="320" height="640"></canvas></div>
+          <div class="side-panel">
+            <div class="info-box">
+              <h3>NEXT</h3>
+              <div class="mini-canvas-container"><canvas id="queueCanvas2" width="80" height="480"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-container">
+      <h3 style="font-family:'Press Start 2P',cursive;font-size:0.8rem;margin-bottom:10px;text-align:center;color:var(--accent-yellow);">💬 CHAT</h3>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-container">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
+        <button id="sendChatBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Your split JS -->
+  <script src="constants.js"></script>
+  <script src="rng.js"></script>
+  <script src="renderer.js"></script>
+  <script src="settings.js"></script>
+  <script src="chat.js"></script>
+  <script src="network.js"></script>
+  <script src="input.js"></script>
+  <script src="gameState.js"></script>
+  <script src="controller.js"></script>
+  <script>
+    if (new URLSearchParams(window.location.search).has('debugHeartbeat')) {
+      const script = document.createElement('script');
+      script.src = 'debugHeartbeat.js';
+      document.body.appendChild(script);
+    }
+  </script>
+  <script src="main.js"></script>
+</body>
+</html>
