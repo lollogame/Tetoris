@@ -263,6 +263,14 @@
       text-shadow: 0 0 10px var(--accent-yellow);
     }
 
+    #networkStatus {
+      text-align: center;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      text-shadow: 0 0 6px rgba(0, 255, 255, 0.15);
+    }
+
     #myPeerId {
       background: rgba(21, 27, 61, 0.9);
       border: 2px solid var(--accent-cyan);
@@ -711,6 +719,9 @@
           <div style="text-align:center;margin-top:15px;color:var(--text-secondary);font-size:0.75rem;">
             Click on any key binding to change it
           </div>
+          <div style="text-align:center;margin-top:10px;">
+            <button id="resetKeybindsBtn" type="button" style="font-size:0.6rem;padding:8px 14px;">Reset Keybinds</button>
+          </div>
         </div>
       </div>
     </div>
@@ -729,6 +740,7 @@
     </div>
 
     <div id="gameStatus">Click "Create Game" to host or enter a Peer ID to join</div>
+    <div id="networkStatus" class="hidden"></div>
 
     <div class="game-area hidden" id="gameArea">
       <div class="player-container">
