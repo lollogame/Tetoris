@@ -763,6 +763,21 @@
             line-height: 1.4;
         }
 
+        .result-close-btn{
+            margin-top: 14px;
+            padding: 8px 14px;
+            border: 1px solid var(--accent-cyan);
+            border-radius: 8px;
+            background: rgba(0, 255, 255, 0.12);
+            color: var(--text-primary);
+            font-family: 'Orbitron', monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .result-close-btn:hover{
+            background: rgba(0, 255, 255, 0.22);
+        }
+
 </style>
 </head>
 
@@ -869,6 +884,7 @@
       <div class="result-card">
         <div class="result-big" id="resultText">ROUND OVER</div>
         <div class="result-sub" id="resultSub">…</div>
+        <button id="resultCloseBtn" class="result-close-btn" type="button">Close</button>
       </div>
     </div>
 
