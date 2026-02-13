@@ -8,6 +8,29 @@
 class SFX {
   static ctx = null;
   static master = null;
+  static BASE_GAIN = 0.12;
+  static masterVolume = 1;
+  static sfxVolume = 1;
+  static musicVolume = 0.7;
+
+  static applyMasterGain() {
+    if (!SFX.master) return;
+    const gain = SFX.BASE_GAIN * SFX.masterVolume * SFX.sfxVolume;
+    SFX.master.gain.value = Math.max(0, Math.min(1, gain));
+  }
+
+  static setVolumes(masterPct = 100, sfxPct = 100, musicPct = 70) {
+    const toUnit = (pct, fallback) => {
+      const n = Number(pct);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(0, Math.min(1, n / 100));
+    };
+
+    SFX.masterVolume = toUnit(masterPct, 1);
+    SFX.sfxVolume = toUnit(sfxPct, 1);
+    SFX.musicVolume = toUnit(musicPct, 0.7);
+    SFX.applyMasterGain();
+  }
 
   static ensure() {
     try {
@@ -16,7 +39,7 @@ class SFX {
       if (!Ctx) return false;
       SFX.ctx = new Ctx();
       SFX.master = SFX.ctx.createGain();
-      SFX.master.gain.value = 0.12; // global volume
+      SFX.applyMasterGain();
       SFX.master.connect(SFX.ctx.destination);
       return true;
     } catch {
@@ -136,6 +159,10 @@ class GameState {
 
     this.piecesPlaced = 0;
     this.attacksSent = 0;
+    this.linesClearedTotal = 0;
+    this.misdrops = 0;
+    this.finesseErrors = 0;
+    this.pieceInputCount = 0;
     this.b2bCounter = 0;
     this.comboCounter = -1;
     this.lastClearWasB2B = false;
@@ -153,6 +180,7 @@ class GameState {
     this.garbageHole = this.rng.nextInt(COLS);
     this.garbageVel = 0; // -1, 0, +1 momentum
     this.roundId = null;
+    this.onCombatEvent = null;
 
     const canvas = document.getElementById(canvasId);
     const holdCanvas = document.getElementById(holdCanvasId);
@@ -192,6 +220,7 @@ class GameState {
     this.spawnGraceUsed = false;
 
     this.pieceSpawnTime = performance.now();
+    this.pieceInputCount = 0;
   }
 
   spawnPiece() {
@@ -292,6 +321,7 @@ class GameState {
         this.currentY -= dy;
         this.currentRotation = newR;
         this.lastActionWasRotation = true;
+        this.pieceInputCount += 1;
 
         if (this.spawnGrace) this.spawnGraceUsed = true;
 
@@ -310,6 +340,7 @@ class GameState {
     if (this.isValidPosition(this.currentX + dx, this.currentY, this.currentRotation)) {
       this.currentX += dx;
       this.lastActionWasRotation = false;
+      this.pieceInputCount += 1;
 
       if (this.isTouchingGround && this.lockResetCount < this.maxLockResets) {
         this.lockDelayTimer = 0;
@@ -343,6 +374,7 @@ class GameState {
     while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
       this.currentY++;
     }
+    this.pieceInputCount += 1;
 
     const locked = this.lockPiece();
     if (!locked) return false;
@@ -401,6 +433,9 @@ class GameState {
 
     this.piecesPlaced++;
     this.dcdTimer = GameSettings.getInstance().dcd;
+    const extraInputs = Math.max(0, this.pieceInputCount - 6);
+    if (extraInputs > 0) this.finesseErrors += extraInputs;
+    const stackHeightBeforeClear = this.getStackHeight();
 
     this.lockDelayTimer = 0;
     this.lockResetCount = 0;
@@ -409,7 +444,7 @@ class GameState {
     this.rotateBuffer = null;
 
     const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
-    this.clearLines(pieceType, isSpin);
+    this.clearLines(pieceType, isSpin, stackHeightBeforeClear);
     return true;
   }
 
@@ -519,15 +554,43 @@ class GameState {
     return this.garbageHole;
   }
 
-  clearLines(lastPiece, isSpin) {
+  getPendingGarbageTotal() {
+    return this.pendingGarbage.reduce((sum, g) => sum + (Number(g.lines) || 0), 0);
+  }
+
+  getPendingGarbagePreview(limit = 5) {
+    const safeLimit = Math.max(1, Number(limit) || 5);
+    return this.pendingGarbage
+      .slice(0, safeLimit)
+      .map((g) => Math.max(0, Number(g.lines) || 0))
+      .filter((n) => n > 0);
+  }
+
+  emitCombatEvent(type, payload = {}) {
+    if (typeof this.onCombatEvent !== 'function') return;
+    this.onCombatEvent({ type, playerId: this.playerId, ...payload });
+  }
+
+  getStackHeight() {
+    for (let row = 0; row < ROWS; row++) {
+      if (this.board[row].some((cell) => cell !== 0)) {
+        return ROWS - row;
+      }
+    }
+    return 0;
+  }
+
+  clearLines(lastPiece, isSpin, stackHeightBeforeClear = 0) {
     const clearedRows = [];
     for (let row = 0; row < ROWS; row++) {
       if (this.board[row].every(cell => cell !== 0)) clearedRows.push(row);
     }
 
     const linesCleared = clearedRows.length;
+    const pendingBeforeCancel = this.getPendingGarbageTotal();
 
     if (linesCleared > 0) {
+      this.linesClearedTotal += linesCleared;
       SFX.play('line', linesCleared);
       for (let i = clearedRows.length - 1; i >= 0; i--) {
         this.board.splice(clearedRows[i], 1);
@@ -540,10 +603,12 @@ class GameState {
       let attack = this.calculateAttack(linesCleared, isSpin, isAllClear, lastPiece);
 
       const isB2BMove = (linesCleared === 4) || isSpin;
+      let b2bBonus = false;
       if (isB2BMove) {
         if (this.lastClearWasB2B) {
           this.b2bCounter++;
           attack += 1;
+          b2bBonus = true;
         } else {
           this.b2bCounter = 1;
         }
@@ -556,12 +621,27 @@ class GameState {
       this.comboCounter++;
       if (this.comboCounter >= 4) attack += 1;
 
+      const attackBeforeCancel = attack;
       attack = this.handleGarbageCanceling(attack);
+      const canceled = Math.max(0, attackBeforeCancel - attack);
 
       this.attacksSent += attack;
       if (attack > 0) NetworkManager.getInstance().sendAttack(attack, this.roundId);
+      this.emitCombatEvent('clear', {
+        linesCleared,
+        attackSent: attack,
+        canceled,
+        combo: Math.max(0, this.comboCounter),
+        b2bBonus,
+        isSpin: !!isSpin,
+        piece: lastPiece,
+        isAllClear: !!isAllClear,
+      });
     } else {
       this.comboCounter = -1;
+      if (stackHeightBeforeClear >= 14 || pendingBeforeCancel > 0) {
+        this.misdrops += 1;
+      }
       if (this.pendingGarbage.length > 0) this.applyGarbage();
     }
 
@@ -575,16 +655,23 @@ class GameState {
     const hole = this.getNextGarbageHole(safe);
     this.pendingGarbage.push({ lines: safe, hole });
     SFX.play('garbage_in');
+    this.emitCombatEvent('incomingGarbage', {
+      lines: safe,
+      totalPending: this.getPendingGarbageTotal(),
+    });
+    this.updateStats();
   }
 
   applyGarbage() {
     if (this.pendingGarbage.length === 0) return;
 
     let remainingCap = GARBAGE_APPLY_CAP;
+    let appliedTotal = 0;
 
     while (this.pendingGarbage.length > 0 && remainingCap > 0) {
       const g = this.pendingGarbage[0];
       const take = Math.min(g.lines, remainingCap);
+      appliedTotal += take;
 
       for (let i = 0; i < take && i < ROWS; i++) this.board.shift();
 
@@ -605,6 +692,13 @@ class GameState {
       `Applied garbage (cap ${GARBAGE_APPLY_CAP}). Pending: ${this.pendingGarbage.reduce((s,x)=>s+x.lines,0)}`,
       'System'
     );
+
+    if (appliedTotal > 0) {
+      this.emitCombatEvent('garbageApplied', {
+        lines: appliedTotal,
+        totalPending: this.getPendingGarbageTotal(),
+      });
+    }
   }
 
   holdCurrentPiece() {
@@ -707,11 +801,31 @@ this.lastGravityTime = 0;
     const elapsed = (Date.now() - this.gameStartTime) / 1000;
     const pps = this.piecesPlaced / Math.max(0.001, elapsed);
     const apm = (this.attacksSent / Math.max(0.001, elapsed)) * 60;
+    const pending = this.getPendingGarbageTotal();
 
-    document.getElementById(`pps${this.playerId}`).textContent = pps.toFixed(2);
-    document.getElementById(`apm${this.playerId}`).textContent = apm.toFixed(2);
-    document.getElementById(`b2b${this.playerId}`).textContent = this.b2bCounter.toString();
-    document.getElementById(`combo${this.playerId}`).textContent = Math.max(0, this.comboCounter).toString();
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setText(`pps${this.playerId}`, pps.toFixed(2));
+    setText(`apm${this.playerId}`, apm.toFixed(2));
+    setText(`b2b${this.playerId}`, this.b2bCounter.toString());
+    setText(`combo${this.playerId}`, Math.max(0, this.comboCounter).toString());
+    setText(`incoming${this.playerId}`, String(pending));
+
+    const meter = document.getElementById(`incomingMeterFill${this.playerId}`);
+    if (meter) {
+      const pct = Math.max(0, Math.min(100, (pending / 20) * 100));
+      meter.style.width = `${pct}%`;
+    }
+
+    const queue = document.getElementById(`incomingQueue${this.playerId}`);
+    if (queue) {
+      const preview = this.getPendingGarbagePreview(6);
+      const suffix = this.pendingGarbage.length > preview.length ? ' +...' : '';
+      queue.textContent = preview.length > 0 ? `Queue: ${preview.join('+')}${suffix}` : 'Queue: -';
+    }
   }
 
   draw() {
@@ -739,8 +853,15 @@ this.lastGravityTime = 0;
       queue: [...this.queue],
       piecesPlaced: this.piecesPlaced,
       attacksSent: this.attacksSent,
+      linesClearedTotal: this.linesClearedTotal,
+      misdrops: this.misdrops,
+      finesseErrors: this.finesseErrors,
       b2bCounter: this.b2bCounter,
-      comboCounter: this.comboCounter
+      comboCounter: this.comboCounter,
+      pendingGarbage: this.pendingGarbage.map((g) => ({
+        lines: Math.max(0, Math.min(10, Number(g.lines) || 0)),
+        hole: Math.max(0, Math.min(COLS - 1, Number(g.hole) || 0)),
+      })),
     };
   }
 
@@ -754,8 +875,21 @@ this.lastGravityTime = 0;
     this.queue = [...state.queue];
     this.piecesPlaced = state.piecesPlaced;
     this.attacksSent = state.attacksSent;
+    this.linesClearedTotal = Math.max(0, Number(state.linesClearedTotal) || 0);
+    this.misdrops = Math.max(0, Number(state.misdrops) || 0);
+    this.finesseErrors = Math.max(0, Number(state.finesseErrors) || 0);
     this.b2bCounter = state.b2bCounter;
     this.comboCounter = state.comboCounter;
+    if (Array.isArray(state.pendingGarbage)) {
+      this.pendingGarbage = state.pendingGarbage
+        .map((g) => ({
+          lines: Math.max(0, Math.min(10, Number(g?.lines) || 0)),
+          hole: Math.max(0, Math.min(COLS - 1, Number(g?.hole) || 0)),
+        }))
+        .filter((g) => g.lines > 0);
+    } else {
+      this.pendingGarbage = [];
+    }
 
     this.updateStats();
   }
@@ -765,5 +899,9 @@ this.lastGravityTime = 0;
   setRoundId(roundId) {
     const cleaned = (typeof roundId === 'string') ? roundId.trim() : '';
     this.roundId = cleaned || null;
+  }
+
+  setCombatEventHandler(handler) {
+    this.onCombatEvent = (typeof handler === 'function') ? handler : null;
   }
 }
