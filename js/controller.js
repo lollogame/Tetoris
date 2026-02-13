@@ -103,6 +103,40 @@ class GameController {
   /* =========================
      Small UI helpers
   ========================= */
+  setLobbyControlsEnabled(enabled) {
+    const on = !!enabled;
+    if (this.createBtn) this.createBtn.disabled = !on;
+    if (this.joinBtn) this.joinBtn.disabled = !on;
+    if (this.opponentPeerIdInput) this.opponentPeerIdInput.disabled = !on;
+  }
+
+  setMatchConfigLocked(locked) {
+    const on = !!locked;
+    const mf = document.getElementById('matchFormat');
+    const cd = document.getElementById('countdownSeconds');
+    if (mf) mf.disabled = on;
+    if (cd) cd.disabled = on;
+  }
+
+  handlePeerDisconnected() {
+    this.acceptInput = false;
+    this.stopLoop();
+
+    this.gameState1 = null;
+    this.gameState2 = null;
+    this.phase = 'waiting';
+    this.roundId = null;
+
+    this.hideResultOverlay();
+    if (this.gameArea) this.gameArea.classList.add('hidden');
+    if (this.restartBtn) this.restartBtn.classList.add('hidden');
+
+    this.setLobbyControlsEnabled(true);
+    this.setMatchConfigLocked(false);
+    this.setStatus('Opponent disconnected. Create or join a new match.');
+    this.updateScoreboard();
+  }
+
   setStatus(text) {
     if (this.gameStatus) this.gameStatus.textContent = text;
   }
@@ -286,6 +320,8 @@ class GameController {
     // UI
     if (this.gameArea) this.gameArea.classList.add('hidden');
     if (this.restartBtn) this.restartBtn.classList.add('hidden');
+    this.setLobbyControlsEnabled(true);
+    this.setMatchConfigLocked(false);
 
     // Clear local attack hook
     const nm = NetworkManager.getInstance();
@@ -428,6 +464,7 @@ initLocalPersistence() {
   // but we trigger their DOM wiring here after UI exists.
   if (typeof GameSettings !== 'undefined' && typeof GameSettings.getInstance === 'function') {
     const gs = GameSettings.getInstance();
+    if (typeof gs.applyToUI === 'function') gs.applyToUI();
     if (typeof gs.initPersistence === 'function') gs.initPersistence();
   }
   if (typeof InputManager !== 'undefined' && typeof InputManager.getInstance === 'function') {
@@ -503,7 +540,7 @@ wireMatchDefaultsAutoSave() {
         NetworkManager.getInstance().initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'host' });
         this.setStatus('Waiting for opponent to join...');
 
-        this.createBtn.disabled = true;
+        this.setLobbyControlsEnabled(false);
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), false);
         this.updateScoreboard();
@@ -527,6 +564,7 @@ wireMatchDefaultsAutoSave() {
         this.acceptInput = false;
 
         this.applyMatchConfig(this.readMatchConfigFromUI(), true);
+        this.setLobbyControlsEnabled(false);
 
         const nm = NetworkManager.getInstance();
         nm.initialize(this.handleNetworkMessage.bind(this), { useRoomCode: true, roomCodeLength: 6, role: 'client' });
@@ -936,6 +974,19 @@ wireMatchDefaultsAutoSave() {
 
       case 'joinedLobby':
         this.setStatus('Connected! Waiting for host…');
+        break;
+
+      case 'peerDisconnected':
+        ChatManager.addMessage('Opponent disconnected. Match stopped.', 'System');
+        this.handlePeerDisconnected();
+        break;
+
+      case 'networkError':
+        this.setLobbyControlsEnabled(true);
+        this.setMatchConfigLocked(false);
+        this.acceptInput = false;
+        this.phase = 'waiting';
+        this.setStatus(`Network error: ${msg.message || 'unknown'}`);
         break;
 
       case 'matchConfig': {
