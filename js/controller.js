@@ -126,6 +126,7 @@ class GameController {
     this.resultOverlay = document.getElementById('resultOverlay');
     this.resultText = document.getElementById('resultText');
     this.resultSub = document.getElementById('resultSub');
+    this.resultCloseBtn = document.getElementById('resultCloseBtn');
     this.roundStatsPanel = document.getElementById('roundStatsPanel');
     this.roundStatsTitle = document.getElementById('roundStatsTitle');
     this.combatFeed1 = document.getElementById('combatFeed1');
@@ -1094,6 +1095,15 @@ wireMatchDefaultsAutoSave() {
       if (copied) ChatManager.addMessage('Copied to clipboard!');
       else ChatManager.addMessage('Unable to copy automatically. Select the ID and copy manually.', 'System');
     };
+
+    if (this.resultCloseBtn) {
+      this.resultCloseBtn.addEventListener('click', () => this.hideResultOverlay());
+    }
+    if (this.resultOverlay) {
+      this.resultOverlay.addEventListener('click', (e) => {
+        if (e.target === this.resultOverlay) this.hideResultOverlay();
+      });
+    }
 
     // Host
     if (this.createBtn) {
@@ -2096,6 +2106,181 @@ wireMatchDefaultsAutoSave() {
     }
   }
 
+  _buildFallbackBotController(gameState, config = {}) {
+    const toNum = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const clamp = (v, min, max, d) => Math.max(min, Math.min(max, toNum(v, d)));
+
+    let pps = 1.6;
+    let aggression = 65;
+    let mistakeChance = 0.08;
+    let thinkJitterMs = 85;
+
+    let elapsedMs = 0;
+    let nextActionDelayMs = 0;
+
+    const configure = (cfg = {}) => {
+      pps = clamp(cfg.pps, 0.4, 6, 1.6);
+      aggression = clamp(cfg.aggression, 0, 100, 65);
+      mistakeChance = clamp(cfg.mistakeChance, 0, 100, 8) / 100;
+      thinkJitterMs = clamp(cfg.thinkJitterMs, 0, 400, 85);
+    };
+
+    const scheduleNextAction = (isFirst) => {
+      const base = 1000 / Math.max(0.1, pps);
+      const jitter = thinkJitterMs > 0 ? ((Math.random() * 2 - 1) * thinkJitterMs) : 0;
+      const startup = isFirst ? 120 : 0;
+      nextActionDelayMs = Math.max(30, base + jitter + startup);
+    };
+
+    const shapeFor = (piece, rot) => SHAPES[piece].shape[rot % 4];
+    const cloneBoard = (board) => board.map((row) => row.slice());
+
+    const canPlace = (board, piece, rot, x, y) => {
+      const shape = shapeFor(piece, rot);
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (!shape[r][c]) continue;
+          const nx = x + c;
+          const ny = y + r;
+          if (nx < 0 || nx >= COLS || ny >= ROWS) return false;
+          if (ny >= 0 && board[ny][nx]) return false;
+        }
+      }
+      return true;
+    };
+
+    const dropY = (board, piece, rot, x) => {
+      let y = SPAWN_ROW;
+      if (!canPlace(board, piece, rot, x, y)) return null;
+      while (canPlace(board, piece, rot, x, y + 1)) y++;
+      return y;
+    };
+
+    const simulatePlacement = (board, piece, rot, x, y) => {
+      const sim = cloneBoard(board);
+      const shape = shapeFor(piece, rot);
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (!shape[r][c]) continue;
+          const nx = x + c;
+          const ny = y + r;
+          if (ny < 0 || nx < 0 || nx >= COLS || ny >= ROWS) return null;
+          sim[ny][nx] = piece;
+        }
+      }
+
+      let linesCleared = 0;
+      for (let row = ROWS - 1; row >= 0; row--) {
+        if (sim[row].every((cell) => cell !== 0)) {
+          sim.splice(row, 1);
+          sim.unshift(Array(COLS).fill(0));
+          linesCleared++;
+          row++;
+        }
+      }
+      return { board: sim, linesCleared };
+    };
+
+    const analyzeBoard = (board) => {
+      const heights = Array(COLS).fill(0);
+      let holes = 0;
+
+      for (let c = 0; c < COLS; c++) {
+        let seen = false;
+        for (let r = 0; r < ROWS; r++) {
+          const filled = board[r][c] !== 0;
+          if (filled && !seen) {
+            heights[c] = ROWS - r;
+            seen = true;
+          } else if (!filled && seen) {
+            holes++;
+          }
+        }
+      }
+
+      let bumpiness = 0;
+      for (let c = 0; c < COLS - 1; c++) bumpiness += Math.abs(heights[c] - heights[c + 1]);
+      const aggregateHeight = heights.reduce((a, b) => a + b, 0);
+      return { aggregateHeight, holes, bumpiness };
+    };
+
+    const scorePlacement = (linesCleared, analysis) => {
+      const aggr = aggression / 100;
+      const lineWeight = 9 + aggr * 7;
+      const holePenalty = 7.5 - aggr * 2;
+      const heightPenalty = 0.42 - aggr * 0.13;
+      const bumpPenalty = 0.22 + (1 - aggr) * 0.06;
+      return (
+        (linesCleared * lineWeight) -
+        (analysis.holes * holePenalty) -
+        (analysis.aggregateHeight * heightPenalty) -
+        (analysis.bumpiness * bumpPenalty)
+      );
+    };
+
+    const choosePlacement = () => {
+      if (!gameState || !gameState.currentPiece) return null;
+      const piece = gameState.currentPiece;
+      const board = gameState.board;
+      const candidates = [];
+
+      for (let rot = 0; rot < 4; rot++) {
+        const shape = shapeFor(piece, rot);
+        const width = shape[0].length;
+        const minX = -2;
+        const maxX = COLS - width + 2;
+
+        for (let x = minX; x <= maxX; x++) {
+          const y = dropY(board, piece, rot, x);
+          if (y == null) continue;
+          const sim = simulatePlacement(board, piece, rot, x, y);
+          if (!sim) continue;
+          const analysis = analyzeBoard(sim.board);
+          const score = scorePlacement(sim.linesCleared, analysis);
+          candidates.push({ x, y, rot, score });
+        }
+      }
+
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.score - a.score);
+      if (Math.random() < mistakeChance) {
+        const pool = candidates.slice(0, Math.min(6, candidates.length));
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+      return candidates[0];
+    };
+
+    const executePlacement = (plan) => {
+      if (!gameState || !gameState.currentPiece) return true;
+      if (!plan) return gameState.hardDropAndSpawn();
+
+      gameState.currentRotation = plan.rot;
+      gameState.currentX = plan.x;
+      gameState.currentY = plan.y;
+
+      const locked = gameState.lockPiece();
+      if (!locked) return gameState.hardDropAndSpawn();
+      return gameState.spawnPiece();
+    };
+
+    configure(config);
+    scheduleNextAction(true);
+
+    return {
+      configure,
+      update: (deltaTimeMs) => {
+        if (!gameState || !gameState.currentPiece) return true;
+        elapsedMs += Math.max(0, Number(deltaTimeMs) || 0);
+        if (elapsedMs < nextActionDelayMs) return true;
+        elapsedMs = 0;
+        const plan = choosePlacement();
+        const ok = executePlacement(plan);
+        scheduleNextAction(false);
+        return ok;
+      },
+    };
+  }
+
   startBotPractice() {
     if (this.mode !== 'bot_practice') return;
 
@@ -2147,7 +2332,17 @@ wireMatchDefaultsAutoSave() {
         return;
       }
 
-      this.botController = new TetrisBot(this.gameState2, botCfg);
+      const BotCtor = (typeof globalThis !== 'undefined' && typeof globalThis.TetrisBot === 'function')
+        ? globalThis.TetrisBot
+        : (typeof TetrisBot === 'function' ? TetrisBot : null);
+
+      if (BotCtor) {
+        this.botController = new BotCtor(this.gameState2, botCfg);
+      } else {
+        this.botController = this._buildFallbackBotController(this.gameState2, botCfg);
+        ChatManager.addMessage('Bot script missing; using built-in fallback bot.', 'System');
+      }
+
       this.lastTime = 0;
       this.lastStateSendTime = 0;
       this.gameState1.draw();
@@ -2222,6 +2417,13 @@ wireMatchDefaultsAutoSave() {
     const tryGlobalShortcut = (code, bindings) => {
       if (this._isMenuVisible() || this._isSettingsVisible()) return false;
       if (bindings && Object.values(bindings).includes(code)) return false;
+
+      if (code === 'Escape') {
+        if (this.resultOverlay && !this.resultOverlay.classList.contains('hidden')) {
+          this.hideResultOverlay();
+          return true;
+        }
+      }
 
       if (code === 'KeyR') {
         if (this.mode === 'zen') {
