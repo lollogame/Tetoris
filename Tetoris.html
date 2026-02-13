@@ -795,22 +795,22 @@
   </div>
 
   <!-- Your split JS -->
-  <script src="constants.js"></script>
-  <script src="rng.js"></script>
-  <script src="renderer.js"></script>
-  <script src="settings.js"></script>
-  <script src="chat.js"></script>
-  <script src="network.js"></script>
-  <script src="input.js"></script>
-  <script src="gameState.js"></script>
-  <script src="controller.js"></script>
+  <script src="js/constants.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/network.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/gameState.js"></script>
+  <script src="js/controller.js"></script>
   <script>
     if (new URLSearchParams(window.location.search).has('debugHeartbeat')) {
       const script = document.createElement('script');
-      script.src = 'debugHeartbeat.js';
+      script.src = 'js/debugHeartbeat.js';
       document.body.appendChild(script);
     }
   </script>
-  <script src="main.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
