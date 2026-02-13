@@ -215,11 +215,15 @@ class GameController {
 
   readBotConfigFromSettings() {
     const s = GameSettings.getInstance();
+    const toNum = (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
     return {
-      pps: Number(s.botPps) || 1.6,
-      aggression: Number(s.botAggression) || 65,
-      mistakeChance: Number(s.botMistakeChance) || 8,
-      thinkJitterMs: Number(s.botThinkJitterMs) || 85,
+      pps: toNum(s.botPps, 1.6),
+      aggression: toNum(s.botAggression, 65),
+      mistakeChance: toNum(s.botMistakeChance, 8),
+      thinkJitterMs: toNum(s.botThinkJitterMs, 85),
     };
   }
 
@@ -1096,13 +1100,27 @@ wireMatchDefaultsAutoSave() {
       else ChatManager.addMessage('Unable to copy automatically. Select the ID and copy manually.', 'System');
     };
 
+    const closeResultUI = (event) => {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      this.dismissResultUI();
+    };
+
     if (this.resultCloseBtn) {
-      this.resultCloseBtn.addEventListener('click', () => this.hideResultOverlay());
+      this.resultCloseBtn.addEventListener('click', closeResultUI);
+      this.resultCloseBtn.addEventListener('pointerup', closeResultUI);
+      this.resultCloseBtn.addEventListener('touchend', closeResultUI, { passive: false });
     }
     if (this.resultOverlay) {
       this.resultOverlay.addEventListener('click', (e) => {
-        if (e.target === this.resultOverlay) this.hideResultOverlay();
+        if (e.target === this.resultOverlay) this.dismissResultUI();
       });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.closeResultOverlay = () => this.dismissResultUI();
     }
 
     // Host
@@ -2341,6 +2359,7 @@ wireMatchDefaultsAutoSave() {
       } else {
         this.botController = this._buildFallbackBotController(this.gameState2, botCfg);
         ChatManager.addMessage('Bot script missing; using built-in fallback bot.', 'System');
+        this.setStatus('Bot script missing; using fallback bot.');
       }
 
       this.lastTime = 0;
@@ -2419,8 +2438,10 @@ wireMatchDefaultsAutoSave() {
       if (bindings && Object.values(bindings).includes(code)) return false;
 
       if (code === 'Escape') {
-        if (this.resultOverlay && !this.resultOverlay.classList.contains('hidden')) {
-          this.hideResultOverlay();
+        const resultVisible = this.resultOverlay && !this.resultOverlay.classList.contains('hidden');
+        const statsVisible = this.roundStatsPanel && !this.roundStatsPanel.classList.contains('hidden');
+        if (resultVisible || statsVisible) {
+          this.dismissResultUI();
           return true;
         }
       }
@@ -2643,6 +2664,11 @@ wireMatchDefaultsAutoSave() {
     window.clearTimeout(this._resultOverlayTimer);
     this._resultOverlayTimer = null;
     if (this.resultOverlay) this.resultOverlay.classList.add('hidden');
+  }
+
+  dismissResultUI() {
+    this.hideResultOverlay();
+    this.hideRoundStatsPanel();
   }
 
   showResultOverlay(title, subtitle = '', { persistent = false, durationMs = 1300 } = {}) {
