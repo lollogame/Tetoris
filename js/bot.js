@@ -1,24 +1,76 @@
 'use strict';
 
 /* =========================================================
-   Bot Controller (heuristic, configurable)
+   Bot Controller (heuristic + lookahead + opener profiles)
 ========================================================= */
 class TetrisBot {
   constructor(gameState, config = {}) {
     this.gameState = gameState;
     this.elapsedMs = 0;
     this.nextActionDelayMs = 0;
+    this.preferredWell = (Math.random() < 0.5) ? 9 : 0;
+
+    this.style = 'tempo';
+    this.searchDepth = 2;
+    this.beamWidth = 10;
     this.lookaheadTop = 18;
+    this.lookaheadDecay = 0.66;
+    this.attackBias = 1;
+    this.survivalBias = 1;
+    this.openerPlan = 'balanced';
+    this.openingWindow = 12;
+
     this.configure(config);
     this._scheduleNextAction(true);
   }
 
   configure(config = {}) {
     const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
-    this.pps = Math.max(0.4, Math.min(6, num(config.pps, 1.6)));
+
+    this.pps = Math.max(0.4, Math.min(7, num(config.pps, 1.6)));
     this.aggression = Math.max(0, Math.min(100, num(config.aggression, 65)));
     this.mistakeChance = Math.max(0, Math.min(100, num(config.mistakeChance, 8))) / 100;
-    this.thinkJitterMs = Math.max(0, Math.min(400, num(config.thinkJitterMs, 85)));
+    this.thinkJitterMs = Math.max(0, Math.min(450, num(config.thinkJitterMs, 85)));
+
+    const requestedStyle = String(config.style || '').trim().toLowerCase();
+    if (requestedStyle === 'downstack' || requestedStyle === 'tempo' || requestedStyle === 'spike') {
+      this.style = requestedStyle;
+    } else if (this.aggression >= 74) {
+      this.style = 'spike';
+    } else if (this.aggression <= 34) {
+      this.style = 'downstack';
+    } else {
+      this.style = 'tempo';
+    }
+
+    if (this.style === 'downstack') {
+      this.searchDepth = 3;
+      this.beamWidth = 8;
+      this.lookaheadTop = 16;
+      this.lookaheadDecay = 0.7;
+      this.attackBias = 0.9;
+      this.survivalBias = 1.25;
+      this.openerPlan = 'safe_stack';
+      this.openingWindow = 10;
+    } else if (this.style === 'spike') {
+      this.searchDepth = 3;
+      this.beamWidth = 14;
+      this.lookaheadTop = 24;
+      this.lookaheadDecay = 0.62;
+      this.attackBias = 1.45;
+      this.survivalBias = 0.92;
+      this.openerPlan = 'tetris_spike';
+      this.openingWindow = 14;
+    } else {
+      this.searchDepth = 3;
+      this.beamWidth = 10;
+      this.lookaheadTop = 20;
+      this.lookaheadDecay = 0.67;
+      this.attackBias = 1.16;
+      this.survivalBias = 1.05;
+      this.openerPlan = 'tspin_pressure';
+      this.openingWindow = 12;
+    }
   }
 
   update(deltaTimeMs) {
@@ -39,8 +91,8 @@ class TetrisBot {
     const jitter = this.thinkJitterMs > 0
       ? ((Math.random() * 2 - 1) * this.thinkJitterMs)
       : 0;
-    const startup = isFirst ? 120 : 0;
-    this.nextActionDelayMs = Math.max(30, base + jitter + startup);
+    const startup = isFirst ? 110 : 0;
+    this.nextActionDelayMs = Math.max(18, base + jitter + startup);
   }
 
   _shapeFor(piece, rot) {
@@ -49,9 +101,14 @@ class TetrisBot {
     return def.shape[rot % 4];
   }
 
+  _cloneBoard(board) {
+    return board.map((row) => row.slice());
+  }
+
   _canPlace(board, piece, rot, x, y) {
     const shape = this._shapeFor(piece, rot);
     if (!shape) return false;
+
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         if (!shape[r][c]) continue;
@@ -71,14 +128,11 @@ class TetrisBot {
     return y;
   }
 
-  _cloneBoard(board) {
-    return board.map((row) => row.slice());
-  }
-
   _placePiece(board, piece, rot, x, y) {
     const sim = this._cloneBoard(board);
     const shape = this._shapeFor(piece, rot);
     if (!shape) return null;
+
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         if (!shape[r][c]) continue;
@@ -103,7 +157,6 @@ class TetrisBot {
         row++;
       }
     }
-
     return { board: sim, linesCleared };
   }
 
@@ -117,8 +170,7 @@ class TetrisBot {
   }
 
   _isTSpin(preClearBoard, piece, x, y, linesCleared) {
-    if (piece !== 'T') return false;
-    if (linesCleared <= 0) return false;
+    if (piece !== 'T' || linesCleared <= 0) return false;
 
     const corners = [
       [x, y],
@@ -140,12 +192,7 @@ class TetrisBot {
 
   _estimateAttack(piece, linesCleared, isSpin, isAllClear, preB2B, preCombo) {
     if (linesCleared <= 0) {
-      return {
-        attack: 0,
-        postB2B: 0,
-        postCombo: -1,
-        b2bBonus: false,
-      };
+      return { attack: 0, postB2B: 0, postCombo: -1, b2bBonus: false };
     }
 
     let attack = 0;
@@ -159,13 +206,13 @@ class TetrisBot {
       attack = [0, 0, 1, 2, 4][linesCleared] || 0;
     }
 
-    const b2bChainActive = Number(preB2B) > 0;
     const isB2BMove = (linesCleared === 4) || isSpin;
+    const chainActive = Number(preB2B) > 0;
     let postB2B = 0;
     let b2bBonus = false;
     if (isB2BMove) {
-      postB2B = b2bChainActive ? (Number(preB2B) + 1) : 1;
-      if (b2bChainActive) {
+      postB2B = chainActive ? (Number(preB2B) + 1) : 1;
+      if (chainActive) {
         attack += 1;
         b2bBonus = true;
       }
@@ -174,12 +221,7 @@ class TetrisBot {
     const postCombo = (Number(preCombo) || 0) + 1;
     if (postCombo >= 4) attack += 1;
 
-    return {
-      attack,
-      postB2B,
-      postCombo,
-      b2bBonus,
-    };
+    return { attack, postB2B, postCombo, b2bBonus };
   }
 
   _analyzeBoard(board) {
@@ -209,40 +251,89 @@ class TetrisBot {
 
     const aggregateHeight = heights.reduce((a, b) => a + b, 0);
     const maxHeight = Math.max(...heights);
-    return {
-      aggregateHeight,
-      holes,
-      coveredHoles,
-      bumpiness,
-      maxHeight,
-    };
+    return { heights, aggregateHeight, maxHeight, holes, coveredHoles, bumpiness };
   }
 
-  _scorePlacement(sim, analysis, attackInfo, context) {
+  _countSimpleTSlots(board) {
+    let count = 0;
+    for (let r = 1; r < ROWS - 1; r++) {
+      for (let c = 1; c < COLS - 1; c++) {
+        if (board[r][c] !== 0) continue;
+        const left = board[r][c - 1] !== 0;
+        const right = board[r][c + 1] !== 0;
+        const below = board[r + 1][c] !== 0;
+        if (!left || !right || !below) continue;
+
+        let diag = 0;
+        if (board[r - 1][c - 1] !== 0) diag++;
+        if (board[r - 1][c + 1] !== 0) diag++;
+        if (board[r + 1][c - 1] !== 0) diag++;
+        if (board[r + 1][c + 1] !== 0) diag++;
+        if (diag >= 2) count++;
+      }
+    }
+    return Math.min(6, count);
+  }
+
+  _openerBonus(candidate, analysis, context) {
+    const placed = Math.max(0, Number(context.piecesPlacedBefore) || 0);
+    if (placed >= this.openingWindow) return 0;
+
+    let bonus = 0;
+    const well = this.preferredWell;
+    const wellHeight = analysis.heights[well] || 0;
+    let sumOther = 0;
+    for (let c = 0; c < COLS; c++) {
+      if (c === well) continue;
+      sumOther += analysis.heights[c];
+    }
+    const avgOther = sumOther / Math.max(1, COLS - 1);
+
+    if (this.openerPlan === 'tetris_spike') {
+      bonus += (avgOther - wellHeight) * 2.8;
+      if (candidate.linesCleared === 4) bonus += 58;
+      if (candidate.attack >= 4) bonus += 18;
+      if (candidate.isTSpin) bonus += 8;
+    } else if (this.openerPlan === 'tspin_pressure') {
+      const tSlots = this._countSimpleTSlots(candidate.boardAfter);
+      bonus += tSlots * 5;
+      if (candidate.isTSpin) bonus += 42;
+      if (candidate.attack >= 2) bonus += 10;
+      bonus += (avgOther - wellHeight) * 1.2;
+    } else {
+      bonus += (candidate.linesCleared >= 2) ? 10 : 0;
+      bonus -= analysis.holes * 1.5;
+      bonus += (avgOther - wellHeight) * 1.3;
+    }
+
+    return bonus;
+  }
+
+  _scorePlacement(candidate, analysis, context) {
     const aggr = this.aggression / 100;
     const pendingGarbage = Math.max(0, Number(context.pendingGarbage) || 0);
     const danger = Math.max(0, (analysis.maxHeight - 11) / 8) + (pendingGarbage / 10);
 
-    const attackWeight = 22 + (aggr * 30) + (danger * 9);
+    const attackWeight = (20 + (aggr * 28) + (danger * 10)) * this.attackBias;
     const clearWeight = 3 + (aggr * 5);
-    const tspinWeight = 12 + (aggr * 16);
+    const tspinWeight = (12 + (aggr * 18)) * this.attackBias;
     const b2bWeight = 4 + (aggr * 8);
     const comboWeight = 2 + (aggr * 4);
     const allClearWeight = 90;
 
-    const holePenalty = 10 - (aggr * 2) + (danger * 4);
-    const coveredHolePenalty = 1.1 + (danger * 0.2);
-    const heightPenalty = 0.35 + ((1 - aggr) * 0.16) + (danger * 0.22);
-    const bumpPenalty = 0.24 + (danger * 0.12);
-    const maxHeightPenalty = 0.9 + (danger * 0.85);
+    const holePenalty = (10 - (aggr * 2) + (danger * 4)) * this.survivalBias;
+    const coveredHolePenalty = (1.1 + (danger * 0.25)) * this.survivalBias;
+    const heightPenalty = (0.35 + ((1 - aggr) * 0.16) + (danger * 0.2)) * this.survivalBias;
+    const bumpPenalty = (0.24 + (danger * 0.12)) * this.survivalBias;
+    const maxHeightPenalty = (0.9 + (danger * 0.85)) * this.survivalBias;
 
     let score = 0;
-    score += (attackInfo.attack * attackWeight);
-    score += (sim.linesCleared * clearWeight);
-    if (sim.isTSpin) score += tspinWeight;
-    if (attackInfo.b2bBonus) score += b2bWeight;
-    if (attackInfo.postCombo > 0) score += Math.min(6, attackInfo.postCombo) * comboWeight;
-    if (sim.isAllClear) score += allClearWeight;
+    score += (candidate.attack * attackWeight);
+    score += (candidate.linesCleared * clearWeight);
+    if (candidate.isTSpin) score += tspinWeight;
+    if (candidate.b2bBonus) score += b2bWeight;
+    if (candidate.postCombo > 0) score += Math.min(6, candidate.postCombo) * comboWeight;
+    if (candidate.isAllClear) score += allClearWeight;
 
     score -= (analysis.holes * holePenalty);
     score -= (analysis.coveredHoles * coveredHolePenalty);
@@ -250,9 +341,10 @@ class TetrisBot {
     score -= (analysis.bumpiness * bumpPenalty);
     score -= (analysis.maxHeight * maxHeightPenalty);
 
-    if (pendingGarbage > 0 && sim.linesCleared === 0) score -= 18;
-    if (analysis.maxHeight >= 18) score -= 120;
+    if (pendingGarbage > 0 && candidate.linesCleared === 0) score -= 24;
+    if (analysis.maxHeight >= 18) score -= 140;
 
+    score += this._openerBonus(candidate, analysis, context);
     return score;
   }
 
@@ -262,17 +354,18 @@ class TetrisBot {
     const preCombo = Number.isFinite(Number(options.preCombo)) ? Number(options.preCombo) : -1;
     const preB2B = Number.isFinite(Number(options.preB2B)) ? Number(options.preB2B) : 0;
     const pendingGarbage = Math.max(0, Number(options.pendingGarbage) || 0);
+    const piecesPlacedBefore = Math.max(0, Number(options.piecesPlacedBefore) || 0);
     const useHold = options.useHold === true;
+    const holdHadPiece = options.holdHadPiece === true;
 
     const out = [];
     for (let rot = 0; rot < 4; rot++) {
       const shape = this._shapeFor(piece, rot);
       if (!shape) continue;
-
       const width = shape[0].length;
+
       const minX = -2;
       const maxX = COLS - width + 2;
-
       for (let x = minX; x <= maxX; x++) {
         const y = this._dropY(board, piece, rot, x);
         if (y == null) continue;
@@ -284,130 +377,177 @@ class TetrisBot {
         const isAllClear = this._isAllClear(cleared.board);
         const isTSpin = this._isTSpin(preClearBoard, piece, x, y, cleared.linesCleared);
         const attackInfo = this._estimateAttack(piece, cleared.linesCleared, isTSpin, isAllClear, preB2B, preCombo);
-        const analysis = this._analyzeBoard(cleared.board);
-        const score = this._scorePlacement(
-          { linesCleared: cleared.linesCleared, isTSpin, isAllClear },
-          analysis,
-          attackInfo,
-          { pendingGarbage }
-        );
 
-        out.push({
+        const candidate = {
           piece,
           useHold,
+          holdHadPiece,
           x,
           y,
           rot,
-          score,
-          totalScore: score,
-          attack: attackInfo.attack,
           linesCleared: cleared.linesCleared,
-          isTSpin,
-          isAllClear,
+          attack: attackInfo.attack,
+          b2bBonus: attackInfo.b2bBonus,
           postCombo: attackInfo.postCombo,
           postB2B: attackInfo.postB2B,
-          lastActionWasRotation: (piece === 'T') && (isTSpin || rot !== 0),
+          isTSpin,
+          isAllClear,
+          lastActionWasRotation: (piece === 'T') && (rot !== 0 || isTSpin),
           boardAfter: cleared.board,
+        };
+
+        const analysis = this._analyzeBoard(cleared.board);
+        const baseScore = this._scorePlacement(candidate, analysis, {
+          pendingGarbage,
+          piecesPlacedBefore,
         });
+
+        candidate.baseScore = baseScore;
+        candidate.totalScore = baseScore + (candidate.attack * (8 + this.aggression * 0.08));
+        out.push(candidate);
       }
     }
 
-    out.sort((a, b) => b.score - a.score);
+    out.sort((a, b) => b.baseScore - a.baseScore);
     return out;
   }
 
-  _getNextPieceAfterFirstMove(useHold, currentHoldPiece, queue) {
-    if (!Array.isArray(queue) || queue.length === 0) return null;
-    if (!useHold) return queue[0] || null;
-    if (currentHoldPiece) return queue[0] || null;
-    return queue[1] || queue[0] || null;
+  _deriveFutureAfterFirstMove(useHold, holdHadPiece, queue) {
+    const q = Array.isArray(queue) ? queue : [];
+    if (useHold && !holdHadPiece) {
+      return {
+        nextActive: q[1] || null,
+        nextQueue: q.slice(2),
+      };
+    }
+    return {
+      nextActive: q[0] || null,
+      nextQueue: q.slice(1),
+    };
+  }
+
+  _searchNoHold(board, activePiece, queue, depth, context) {
+    if (depth <= 0 || !activePiece || !SHAPES[activePiece]) return 0;
+
+    const candidates = this._generateCandidates(board, activePiece, {
+      useHold: false,
+      preCombo: context.preCombo,
+      preB2B: context.preB2B,
+      pendingGarbage: context.pendingGarbage,
+      piecesPlacedBefore: context.piecesPlacedBefore,
+    });
+    if (candidates.length === 0) return -240;
+
+    const limit = Math.min(this.beamWidth, candidates.length);
+    let best = -Infinity;
+    for (let i = 0; i < limit; i++) {
+      const cand = candidates[i];
+      let score = cand.totalScore;
+
+      if (depth > 1) {
+        const nextActive = (queue && queue.length > 0) ? queue[0] : null;
+        const nextQueue = (queue && queue.length > 0) ? queue.slice(1) : [];
+        const nextPending = Math.max(0, context.pendingGarbage - cand.attack);
+        const continuation = this._searchNoHold(
+          cand.boardAfter,
+          nextActive,
+          nextQueue,
+          depth - 1,
+          {
+            preCombo: cand.postCombo,
+            preB2B: cand.postB2B,
+            pendingGarbage: nextPending,
+            piecesPlacedBefore: (context.piecesPlacedBefore + 1),
+          }
+        );
+        score += continuation * this.lookaheadDecay;
+      }
+
+      if (score > best) best = score;
+    }
+    return best;
   }
 
   _choosePlacement() {
     const gs = this.gameState;
     if (!gs || !gs.currentPiece) return null;
 
-    const board = gs.board;
     const queue = Array.isArray(gs.queue) ? gs.queue : [];
-    const preCombo = Number.isFinite(Number(gs.comboCounter)) ? Number(gs.comboCounter) : -1;
-    const preB2B = Number.isFinite(Number(gs.b2bCounter)) ? Number(gs.b2bCounter) : 0;
     const pendingGarbage = (typeof gs.getPendingGarbageTotal === 'function')
       ? Math.max(0, Number(gs.getPendingGarbageTotal()) || 0)
       : 0;
+    const preCombo = Number.isFinite(Number(gs.comboCounter)) ? Number(gs.comboCounter) : -1;
+    const preB2B = Number.isFinite(Number(gs.b2bCounter)) ? Number(gs.b2bCounter) : 0;
+    const piecesPlacedBefore = Math.max(0, Number(gs.piecesPlaced) || 0);
 
     const candidates = [];
     candidates.push(
-      ...this._generateCandidates(board, gs.currentPiece, {
+      ...this._generateCandidates(gs.board, gs.currentPiece, {
         useHold: false,
+        holdHadPiece: gs.holdPiece != null,
         preCombo,
         preB2B,
         pendingGarbage,
+        piecesPlacedBefore,
       })
     );
 
     if (gs.canHold) {
-      const holdPieceCandidate = gs.holdPiece || (queue[0] || null);
+      const holdPieceCandidate = (gs.holdPiece != null) ? gs.holdPiece : (queue[0] || null);
       if (holdPieceCandidate) {
         candidates.push(
-          ...this._generateCandidates(board, holdPieceCandidate, {
+          ...this._generateCandidates(gs.board, holdPieceCandidate, {
             useHold: true,
+            holdHadPiece: gs.holdPiece != null,
             preCombo,
             preB2B,
             pendingGarbage,
+            piecesPlacedBefore,
           })
         );
       }
     }
 
     if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.baseScore - a.baseScore);
 
-    const aggr = this.aggression / 100;
-    const lookaheadWeight = 0.52 + (aggr * 0.22);
-    const topEvalCount = Math.min(this.lookaheadTop, candidates.length);
-    for (let i = 0; i < topEvalCount; i++) {
+    const evalCount = Math.min(this.lookaheadTop, candidates.length);
+    for (let i = 0; i < evalCount; i++) {
       const cand = candidates[i];
-      let total = cand.score;
+      const future = this._deriveFutureAfterFirstMove(cand.useHold, cand.holdHadPiece, queue);
 
-      const nextPiece = this._getNextPieceAfterFirstMove(cand.useHold, gs.holdPiece, queue);
-      if (nextPiece && SHAPES[nextPiece]) {
-        const nextPending = Math.max(0, pendingGarbage - cand.attack);
-        const nextCandidates = this._generateCandidates(cand.boardAfter, nextPiece, {
-          useHold: false,
+      const nextPending = Math.max(0, pendingGarbage - cand.attack);
+      const continuation = this._searchNoHold(
+        cand.boardAfter,
+        future.nextActive,
+        future.nextQueue,
+        Math.max(1, this.searchDepth - 1),
+        {
           preCombo: cand.postCombo,
           preB2B: cand.postB2B,
           pendingGarbage: nextPending,
-        });
-        if (nextCandidates.length > 0) {
-          total += nextCandidates[0].score * lookaheadWeight;
-          total += nextCandidates[0].attack * (6 + (aggr * 8));
+          piecesPlacedBefore: piecesPlacedBefore + 1,
         }
-      }
-
-      total += cand.attack * (10 + (aggr * 12));
-      cand.totalScore = total;
+      );
+      cand.totalScore = cand.totalScore + (continuation * this.lookaheadDecay);
     }
 
-    for (let i = topEvalCount; i < candidates.length; i++) {
-      candidates[i].totalScore = candidates[i].score;
+    for (let i = evalCount; i < candidates.length; i++) {
+      candidates[i].totalScore = candidates[i].baseScore;
     }
-
     candidates.sort((a, b) => b.totalScore - a.totalScore);
 
     if (Math.random() < this.mistakeChance) {
       const pool = candidates.slice(0, Math.min(6, candidates.length));
       return pool[Math.floor(Math.random() * pool.length)];
     }
-
     return candidates[0];
   }
 
   _executePlacement(plan) {
     const gs = this.gameState;
     if (!gs || !gs.currentPiece) return true;
-
-    if (!plan) {
-      return gs.hardDropAndSpawn();
-    }
+    if (!plan) return gs.hardDropAndSpawn();
 
     if (plan.useHold) {
       const held = gs.holdCurrentPiece();
@@ -418,7 +558,6 @@ class TetrisBot {
     if (plan.piece && gs.currentPiece !== plan.piece) {
       return gs.hardDropAndSpawn();
     }
-
     if (!gs.isValidPosition(plan.x, plan.y, plan.rot)) {
       return gs.hardDropAndSpawn();
     }
@@ -430,9 +569,7 @@ class TetrisBot {
     gs.currentY = plan.y;
 
     const locked = gs.lockPiece();
-    if (!locked) {
-      return gs.hardDropAndSpawn();
-    }
+    if (!locked) return gs.hardDropAndSpawn();
     return gs.spawnPiece();
   }
 }
