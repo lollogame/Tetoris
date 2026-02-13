@@ -471,7 +471,8 @@
     /* If hidden, MUST NOT intercept clicks */
     #settingsModal.hidden,
     #countdownOverlay.hidden,
-    #mainMenu.hidden {
+    #mainMenu.hidden,
+    #resultOverlay.hidden {
       pointer-events: none !important;
     }
 
@@ -735,7 +736,7 @@
             align-items: center;
             background: rgba(5, 8, 24, 0.35);
             backdrop-filter: blur(3px);
-            pointer-events: none;
+            pointer-events: auto;
         }
 
         .result-card{
@@ -884,7 +885,7 @@
       <div class="result-card">
         <div class="result-big" id="resultText">ROUND OVER</div>
         <div class="result-sub" id="resultSub">…</div>
-        <button id="resultCloseBtn" class="result-close-btn" type="button">Close</button>
+        <button id="resultCloseBtn" class="result-close-btn" type="button" onclick="window.closeResultOverlay && window.closeResultOverlay()">Close</button>
       </div>
     </div>
 
