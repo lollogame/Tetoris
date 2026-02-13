@@ -138,6 +138,10 @@ class NetworkManager {
         if (typeof ChatManager !== 'undefined') {
           ChatManager.addMessage(`Network error: ${err?.type || err?.message || 'unknown'}`, 'System');
         }
+        this.handleInternalMessage({
+          type: 'networkError',
+          message: err?.message || err?.type || 'unknown',
+        });
       });
     };
 
@@ -170,6 +174,10 @@ class NetworkManager {
     this.conn.on('error', (err) => {
       console.error('Connection error:', err);
       ChatManager.addMessage(`Connection error: ${err?.message || err?.type || 'unknown'}`, 'System');
+      this.handleInternalMessage({
+        type: 'networkError',
+        message: err?.message || err?.type || 'unknown',
+      });
     });
   }
 
