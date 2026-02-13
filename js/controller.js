@@ -43,6 +43,8 @@ class GameController {
     // Guards for stale async flows (countdown / delayed round starts)
     this._roundFlowToken = 0;
     this._roundFlowTimers = new Set();
+    this._resultOverlayTimer = null;
+    this._roundStatsTimer = null;
 
     // Join connect waiter (bounded retries)
     this._joinAttemptToken = 0;
@@ -63,6 +65,13 @@ class GameController {
     this.applyModeUI();
     this.updateScoreboard();
     this.showMenu(true);
+
+    this._beforeUnloadHandler = (event) => {
+      if (!this.shouldConfirmLeaveMatch()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', this._beforeUnloadHandler);
   }
 
   /* =========================
@@ -106,6 +115,12 @@ class GameController {
     this.resultOverlay = document.getElementById('resultOverlay');
     this.resultText = document.getElementById('resultText');
     this.resultSub = document.getElementById('resultSub');
+    this.roundStatsPanel = document.getElementById('roundStatsPanel');
+    this.roundStatsTitle = document.getElementById('roundStatsTitle');
+    this.combatFeed1 = document.getElementById('combatFeed1');
+    this.combatFeed2 = document.getElementById('combatFeed2');
+    this.boardWrap1 = document.getElementById('boardWrap1');
+    this.boardWrap2 = document.getElementById('boardWrap2');
 
     // Containers
     const players = document.querySelectorAll('.player-container');
@@ -239,6 +254,8 @@ class GameController {
     this.roundId = null;
 
     this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
     if (this.gameArea) this.gameArea.classList.add('hidden');
     if (this.restartBtn) this.restartBtn.classList.add('hidden');
 
@@ -280,6 +297,167 @@ class GameController {
     const syncText = `${this.stateSendIntervalMs}ms`;
     this.networkStatus.classList.remove('hidden');
     this.networkStatus.textContent = `Network: RTT ${rttText} | Sync ${syncText}`;
+  }
+
+  shouldConfirmLeaveMatch() {
+    if (this.mode !== 'pvp_1v1') return false;
+    const nm = NetworkManager.getInstance();
+    const connected = nm.isConnected();
+    if (connected) return true;
+
+    const inRoundOrOver =
+      this.phase === 'countdown' ||
+      this.phase === 'playing' ||
+      this.phase === 'roundOver' ||
+      this.phase === 'matchOver';
+    if (inRoundOrOver) return true;
+
+    if (this.phase === 'waiting') {
+      const hasPeerSession = !!(nm.peer && !nm.peer.destroyed);
+      return hasPeerSession || (Number(this.match.round) || 0) > 0;
+    }
+
+    return false;
+  }
+
+  clearCombatFeed() {
+    const clearOne = (el) => {
+      if (!el) return;
+      while (el.firstChild) el.removeChild(el.firstChild);
+    };
+    clearOne(this.combatFeed1);
+    clearOne(this.combatFeed2);
+  }
+
+  pushCombatText(playerId, text, kind = 'neutral') {
+    const feed = (playerId === 2) ? this.combatFeed2 : this.combatFeed1;
+    if (!feed || !text) return;
+
+    const row = document.createElement('div');
+    row.className = `combat-text ${kind}`;
+    row.textContent = String(text);
+    feed.appendChild(row);
+
+    while (feed.children.length > 8) {
+      feed.removeChild(feed.firstElementChild);
+    }
+
+    const removeAfter = 1300;
+    window.setTimeout(() => {
+      if (row.parentNode === feed) feed.removeChild(row);
+    }, removeAfter);
+  }
+
+  triggerScreenShake(playerId, intensity = 'light') {
+    const settings = GameSettings.getInstance();
+    if (!settings.screenShake) return;
+
+    const wrap = (playerId === 2) ? this.boardWrap2 : this.boardWrap1;
+    if (!wrap) return;
+
+    const cls = intensity === 'heavy' ? 'shake-heavy' : 'shake-light';
+    wrap.classList.remove('shake-light', 'shake-heavy');
+    void wrap.offsetWidth; // restart animation
+    wrap.classList.add(cls);
+    window.setTimeout(() => wrap.classList.remove(cls), 220);
+  }
+
+  handleCombatEvent(playerId, event) {
+    if (!event || typeof event !== 'object') return;
+
+    switch (event.type) {
+      case 'clear': {
+        if (event.isSpin && event.linesCleared > 0) this.pushCombatText(playerId, 'T-SPIN', 'spin');
+        if (event.b2bBonus) this.pushCombatText(playerId, 'B2B', 'b2b');
+        if ((Number(event.combo) || 0) >= 2) this.pushCombatText(playerId, `COMBO x${event.combo}`, 'combo');
+        if (event.isAllClear) this.pushCombatText(playerId, 'ALL CLEAR', 'allclear');
+        if ((Number(event.attackSent) || 0) > 0) this.pushCombatText(playerId, `+${event.attackSent}`, 'attack');
+
+        if ((Number(event.linesCleared) || 0) >= 2 || (Number(event.attackSent) || 0) > 0) {
+          this.triggerScreenShake(playerId, 'light');
+        }
+        break;
+      }
+
+      case 'incomingGarbage': {
+        const lines = Number(event.lines) || 0;
+        if (lines > 0) this.pushCombatText(playerId, `IN +${lines}`, 'incoming');
+        this.triggerScreenShake(playerId, 'light');
+        break;
+      }
+
+      case 'garbageApplied': {
+        const lines = Number(event.lines) || 0;
+        if (lines > 0) this.pushCombatText(playerId, `GARBAGE +${lines}`, 'incoming');
+        this.triggerScreenShake(playerId, 'heavy');
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  hideRoundStatsPanel() {
+    window.clearTimeout(this._roundStatsTimer);
+    this._roundStatsTimer = null;
+    if (this.roundStatsPanel) this.roundStatsPanel.classList.add('hidden');
+  }
+
+  _readRoundStats(gameState) {
+    if (!gameState) {
+      return { pps: 0, apm: 0, vs: 0, misdrops: 0, finesse: 0 };
+    }
+
+    const startTime = Number(gameState.gameStartTime) || Date.now();
+    const elapsedSec = Math.max(0.001, (Date.now() - startTime) / 1000);
+    const piecesPlaced = Math.max(0, Number(gameState.piecesPlaced) || 0);
+    const attacksSent = Math.max(0, Number(gameState.attacksSent) || 0);
+    const pps = piecesPlaced / elapsedSec;
+    const apm = (attacksSent * 60) / elapsedSec;
+    const vs = apm + (pps * 45);
+
+    return {
+      pps,
+      apm,
+      vs,
+      misdrops: Math.max(0, Number(gameState.misdrops) || 0),
+      finesse: Math.max(0, Number(gameState.finesseErrors) || 0),
+    };
+  }
+
+  showRoundStatsPanel(title = 'ROUND STATS', { persistent = false, durationMs = 6500 } = {}) {
+    if (!this.roundStatsPanel) return;
+
+    const localStats = this._readRoundStats(this.gameState1);
+    const oppStats = (this.mode === 'pvp_1v1') ? this._readRoundStats(this.gameState2) : null;
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    if (this.roundStatsTitle) this.roundStatsTitle.textContent = String(title);
+
+    setText('rsYouPps', localStats.pps.toFixed(2));
+    setText('rsYouApm', localStats.apm.toFixed(2));
+    setText('rsYouVs', localStats.vs.toFixed(2));
+    setText('rsYouMisdrops', String(localStats.misdrops));
+    setText('rsYouFinesse', String(localStats.finesse));
+
+    setText('rsOppPps', oppStats ? oppStats.pps.toFixed(2) : '--');
+    setText('rsOppApm', oppStats ? oppStats.apm.toFixed(2) : '--');
+    setText('rsOppVs', oppStats ? oppStats.vs.toFixed(2) : '--');
+    setText('rsOppMisdrops', oppStats ? String(oppStats.misdrops) : '--');
+    setText('rsOppFinesse', oppStats ? String(oppStats.finesse) : '--');
+
+    this.roundStatsPanel.classList.remove('hidden');
+
+    window.clearTimeout(this._roundStatsTimer);
+    this._roundStatsTimer = null;
+    if (!persistent) {
+      this._roundStatsTimer = window.setTimeout(() => this.hideRoundStatsPanel(), Math.max(1200, Number(durationMs) || 6500));
+    }
   }
 
   showScoreboard(show) {
@@ -326,6 +504,7 @@ class GameController {
       this.elMenu.classList.remove('hidden');
       this.acceptInput = false;
       this.hideResultOverlay();
+      this.hideRoundStatsPanel();
     } else {
       this.elMenu.classList.add('hidden');
       // restore input only if actually in a playable state
@@ -400,6 +579,11 @@ class GameController {
       return;
     }
 
+    if (this.mode === 'pvp_1v1' && mode !== 'pvp_1v1' && this.shouldConfirmLeaveMatch()) {
+      const ok = window.confirm('Leave the current 1v1 match? Current match progress will be lost.');
+      if (!ok) return;
+    }
+
     this.mode = mode;
 
     // Visual selection
@@ -427,6 +611,7 @@ class GameController {
 
     // Scoreboard only PvP
     this.updateScoreboard();
+    if (this.mode !== 'pvp_1v1') this.hideRoundStatsPanel();
 
     // Set status message
     if (this.mode === 'zen') {
@@ -470,6 +655,8 @@ class GameController {
     this.zenPaused = false;
 
     this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
 
     // UI
     if (this.gameArea) this.gameArea.classList.add('hidden');
@@ -517,6 +704,8 @@ class GameController {
     this.roundId = null;
 
     this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
 
     // Optional local score hook: +100 per garbage line worth of attack
     const nm = NetworkManager.getInstance();
@@ -535,6 +724,7 @@ class GameController {
     try {
       this.gameState1 = new GameState('gameCanvas1', 'holdCanvas1', 'queueCanvas1', 1, seed);
       this.gameState1.setRoundId(null);
+      this.gameState1.setCombatEventHandler((event) => this.handleCombatEvent(1, event));
 
       const startTime = Date.now();
       this.gameState1.setGameStartTime(startTime);
@@ -896,6 +1086,36 @@ wireMatchDefaultsAutoSave() {
       return !!insideFormControl;
     };
 
+    const tryGlobalShortcut = (code, bindings) => {
+      if (this._isMenuVisible() || this._isSettingsVisible()) return false;
+      if (bindings && Object.values(bindings).includes(code)) return false;
+
+      if (code === 'KeyR') {
+        if (this.mode === 'zen') {
+          this.startZen();
+          return true;
+        }
+        const canRematch =
+          this.mode === 'pvp_1v1' &&
+          (this.phase === 'waiting' || this.phase === 'roundOver' || this.phase === 'matchOver');
+        if (canRematch && this.restartBtn && !this.restartBtn.classList.contains('hidden')) {
+          this.restartBtn.click();
+          return true;
+        }
+      }
+
+      if (code === 'KeyN' || code === 'Enter') {
+        if (this.mode === 'pvp_1v1' && (this.phase === 'roundOver' || this.phase === 'matchOver')) {
+          if (this.restartBtn && !this.restartBtn.classList.contains('hidden')) {
+            this.restartBtn.click();
+            return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
 
     document.addEventListener('keydown', (e) => {
       if (input.isCapturing()) return;
@@ -905,6 +1125,11 @@ wireMatchDefaultsAutoSave() {
 
       const b = input.getBindings();
       const code = e.code;
+
+      if (tryGlobalShortcut(code, b)) {
+        e.preventDefault();
+        return;
+      }
 
       if (Object.values(b).includes(code)) e.preventDefault();
 
@@ -1069,6 +1294,8 @@ wireMatchDefaultsAutoSave() {
      Result / KO overlay
   ========================= */
   hideResultOverlay() {
+    window.clearTimeout(this._resultOverlayTimer);
+    this._resultOverlayTimer = null;
     if (this.resultOverlay) this.resultOverlay.classList.add('hidden');
   }
 
@@ -1113,6 +1340,8 @@ wireMatchDefaultsAutoSave() {
     this.acceptInput = false;
 
     this.hideResultOverlay();
+    this.hideRoundStatsPanel();
+    this.clearCombatFeed();
 
     if (this.gameArea) this.gameArea.classList.remove('hidden');
     if (this.restartBtn) this.restartBtn.classList.remove('hidden');
@@ -1127,6 +1356,8 @@ wireMatchDefaultsAutoSave() {
       this.gameState2 = new GameState('gameCanvas2', 'holdCanvas2', 'queueCanvas2', 2, seed);
       this.gameState1.setRoundId(this.roundId);
       this.gameState2.setRoundId(this.roundId);
+      this.gameState1.setCombatEventHandler((event) => this.handleCombatEvent(1, event));
+      this.gameState2.setCombatEventHandler((event) => this.handleCombatEvent(2, event));
 
       const startTime = Date.now();
       this.gameState1.setGameStartTime(startTime);
@@ -1346,6 +1577,8 @@ wireMatchDefaultsAutoSave() {
       case 'attack':
         if (this._isStaleRoundPacket(msg.roundId)) break;
         if (this.gameState1) this.gameState1.receiveAttack(msg.lines);
+        this.pushCombatText(2, `+${msg.lines}`, 'attack');
+        this.triggerScreenShake(2, 'light');
         break;
 
       case 'peerConnected': {
@@ -1391,6 +1624,8 @@ wireMatchDefaultsAutoSave() {
         this.phase = 'waiting';
         this.stateSendIntervalMs = STATE_SEND_INTERVAL;
         this.networkRttMs = null;
+        this.hideRoundStatsPanel();
+        this.clearCombatFeed();
         this.setStatus(`Network error: ${msg.message || 'unknown'}`);
         this.updateNetworkStatus();
         break;
@@ -1432,6 +1667,8 @@ wireMatchDefaultsAutoSave() {
         this.updateNetworkStatus();
 
         this.hideResultOverlay();
+        this.hideRoundStatsPanel();
+        this.clearCombatFeed();
 
         if (this.isHost) {
           this.hostSetScoresAndBroadcast();
@@ -1461,6 +1698,7 @@ wireMatchDefaultsAutoSave() {
         ChatManager.addMessage('Opponent topped out! You win the round! 🎉', 'System');
         this.setStatus('Round win!');
         this.showResultOverlay('ROUND WON', 'Opponent topped out!', { durationMs: 1400 });
+        this.showRoundStatsPanel('ROUND STATS', { durationMs: 7000 });
 
         if (this.isHost) {
           this.match.hostScore += 1;
@@ -1474,6 +1712,7 @@ wireMatchDefaultsAutoSave() {
             this.setStatus(`MATCH OVER — ${winner} WINS!`);
             ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
             this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+            this.showRoundStatsPanel('MATCH STATS', { persistent: true });
             this.updateNetworkStatus();
           } else {
             this.setStatus('Next round starting…');
@@ -1500,6 +1739,7 @@ wireMatchDefaultsAutoSave() {
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+        this.showRoundStatsPanel('MATCH STATS', { persistent: true });
         this.updateNetworkStatus();
         break;
       }
@@ -1535,6 +1775,7 @@ wireMatchDefaultsAutoSave() {
       this.setStatus(`Zen over — Final score: ${this.zenScore}`);
       ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
       this.showResultOverlay('GAME OVER', `Final score: ${this.zenScore}`, { persistent: true });
+      this.showRoundStatsPanel('ZEN STATS', { persistent: true });
       this.updateNetworkStatus();
       return;
     }
@@ -1546,6 +1787,7 @@ wireMatchDefaultsAutoSave() {
     ChatManager.addMessage('You topped out! Round lost.', 'System');
 
     this.showResultOverlay('ROUND LOST', 'You topped out!', { durationMs: 1400 });
+    this.showRoundStatsPanel('ROUND STATS', { durationMs: 7000 });
 
     NetworkManager.getInstance().send({ type: 'gameOver', roundId: this.roundId });
 
@@ -1561,6 +1803,7 @@ wireMatchDefaultsAutoSave() {
         this.setStatus(`MATCH OVER — ${winner} WINS!`);
         ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
+        this.showRoundStatsPanel('MATCH STATS', { persistent: true });
         this.updateNetworkStatus();
       } else {
         this.setStatus('Next round starting…');
