@@ -11,11 +11,16 @@ class GameSettings {
     this.das = 167;
     this.dcd = 0;
     this.sdf = 6;              // number or 'inf'
-    this.preventMissdrop = true;
     this.screenShake = true;
     this.volumeMaster = 100;
     this.volumeSfx = 100;
     this.volumeMusic = 70;
+    this.brMaxPlayers = 4;
+    this.brAttackMode = 'random';
+    this.botPps = 1.6;
+    this.botAggression = 65;
+    this.botMistakeChance = 8;
+    this.botThinkJitterMs = 85;
   
     // Persistence
     this._storageKey = 'tetoris_settings_v1';
@@ -80,11 +85,16 @@ class GameSettings {
       das: 'Delayed Auto Shift in milliseconds before side movement starts repeating.',
       dcd: 'Delayed Charge Delay in milliseconds before DAS can charge after lock.',
       sdf: 'Soft Drop Factor. Higher values increase soft-drop speed.',
-      preventMissdrop: 'Legacy safety toggle. Hard-drop cooldown is disabled by gameplay patch.',
       volumeMaster: 'Master volume for all audio channels.',
       volumeSfx: 'Sound effects volume.',
       volumeMusic: 'Music channel volume (reserved for background music).',
       screenShake: 'Enable or disable board shake effects on clears and garbage hits.',
+      brMaxPlayers: 'Maximum number of players allowed in a Battle Royale lobby.',
+      brAttackMode: 'How your attacks choose targets in Battle Royale.',
+      botPps: 'Bot pace in pieces per second.',
+      botAggression: 'Higher values prioritize line clears and attacks over clean stacking.',
+      botMistakeChance: 'Chance that the bot intentionally picks a weaker move.',
+      botThinkJitterMs: 'Random delay variance added to bot decisions.',
     };
 
     for (const id of Object.keys(tips)) {
@@ -110,11 +120,18 @@ class GameSettings {
       if (s.sdf === 'inf') this.sdf = 'inf';
       else if (Number.isFinite(s.sdf)) this.sdf = Math.min(999999, Math.max(1, s.sdf));
 
-      if (typeof s.preventMissdrop === 'boolean') this.preventMissdrop = s.preventMissdrop;
       if (typeof s.screenShake === 'boolean') this.screenShake = s.screenShake;
       if (Number.isFinite(s.volumeMaster)) this.volumeMaster = Math.min(100, Math.max(0, Math.trunc(s.volumeMaster)));
       if (Number.isFinite(s.volumeSfx)) this.volumeSfx = Math.min(100, Math.max(0, Math.trunc(s.volumeSfx)));
       if (Number.isFinite(s.volumeMusic)) this.volumeMusic = Math.min(100, Math.max(0, Math.trunc(s.volumeMusic)));
+      if (Number.isFinite(s.brMaxPlayers)) this.brMaxPlayers = Math.min(8, Math.max(3, Math.trunc(s.brMaxPlayers)));
+      if (typeof s.brAttackMode === 'string' && ['random', 'highest_apm', 'retaliate'].includes(s.brAttackMode)) {
+        this.brAttackMode = s.brAttackMode;
+      }
+      if (Number.isFinite(s.botPps)) this.botPps = Math.min(6, Math.max(0.4, Number(s.botPps)));
+      if (Number.isFinite(s.botAggression)) this.botAggression = Math.min(100, Math.max(0, Math.trunc(s.botAggression)));
+      if (Number.isFinite(s.botMistakeChance)) this.botMistakeChance = Math.min(40, Math.max(0, Math.trunc(s.botMistakeChance)));
+      if (Number.isFinite(s.botThinkJitterMs)) this.botThinkJitterMs = Math.min(400, Math.max(0, Math.trunc(s.botThinkJitterMs)));
     } catch (_) {
       // ignore
     }
@@ -127,11 +144,16 @@ class GameSettings {
         das: this.das,
         dcd: this.dcd,
         sdf: this.sdf,
-        preventMissdrop: this.preventMissdrop,
         screenShake: this.screenShake,
         volumeMaster: this.volumeMaster,
         volumeSfx: this.volumeSfx,
         volumeMusic: this.volumeMusic,
+        brMaxPlayers: this.brMaxPlayers,
+        brAttackMode: this.brAttackMode,
+        botPps: this.botPps,
+        botAggression: this.botAggression,
+        botMistakeChance: this.botMistakeChance,
+        botThinkJitterMs: this.botThinkJitterMs,
       }));
     } catch (_) {
       // ignore
@@ -151,8 +173,12 @@ class GameSettings {
     setVal('volumeMaster', this.volumeMaster);
     setVal('volumeSfx', this.volumeSfx);
     setVal('volumeMusic', this.volumeMusic);
-    const pm = document.getElementById('preventMissdrop');
-    if (pm) pm.value = this.preventMissdrop ? 'true' : 'false';
+    setVal('brMaxPlayers', this.brMaxPlayers);
+    setVal('brAttackMode', this.brAttackMode);
+    setVal('botPps', this.botPps);
+    setVal('botAggression', this.botAggression);
+    setVal('botMistakeChance', this.botMistakeChance);
+    setVal('botThinkJitterMs', this.botThinkJitterMs);
     const ss = document.getElementById('screenShake');
     if (ss) ss.value = this.screenShake ? 'true' : 'false';
 
@@ -177,10 +203,6 @@ class GameSettings {
       this.sdf = this._floatStr(rawSdf, 6, 1, 999999);
     }
 
-    const pmEl = document.getElementById('preventMissdrop');
-    const rawPM = pmEl ? pmEl.value : 'true';
-    this.preventMissdrop = (rawPM === 'true');
-
     const ssEl = document.getElementById('screenShake');
     const rawSS = ssEl ? ssEl.value : 'true';
     this.screenShake = (rawSS === 'true');
@@ -188,6 +210,20 @@ class GameSettings {
     this.volumeMaster = this._int('volumeMaster', this.volumeMaster, 0, 100);
     this.volumeSfx = this._int('volumeSfx', this.volumeSfx, 0, 100);
     this.volumeMusic = this._int('volumeMusic', this.volumeMusic, 0, 100);
+    this.brMaxPlayers = this._int('brMaxPlayers', this.brMaxPlayers, 3, 8);
+    {
+      const modeEl = document.getElementById('brAttackMode');
+      const mode = modeEl ? String(modeEl.value || '').trim() : this.brAttackMode;
+      this.brAttackMode = ['random', 'highest_apm', 'retaliate'].includes(mode) ? mode : 'random';
+    }
+    {
+      const ppsEl = document.getElementById('botPps');
+      const raw = ppsEl ? ppsEl.value : String(this.botPps);
+      this.botPps = this._floatStr(raw, this.botPps, 0.4, 6);
+    }
+    this.botAggression = this._int('botAggression', this.botAggression, 0, 100);
+    this.botMistakeChance = this._int('botMistakeChance', this.botMistakeChance, 0, 40);
+    this.botThinkJitterMs = this._int('botThinkJitterMs', this.botThinkJitterMs, 0, 400);
 
     this._setPercentLabel('volumeMasterValue', this.volumeMaster);
     this._setPercentLabel('volumeSfxValue', this.volumeSfx);
@@ -201,8 +237,10 @@ class GameSettings {
     this._uiWired = true;
 
     const watchedIds = [
-      'arr', 'das', 'dcd', 'sdf', 'preventMissdrop',
+      'arr', 'das', 'dcd', 'sdf',
       'volumeMaster', 'volumeSfx', 'volumeMusic', 'screenShake',
+      'brMaxPlayers', 'brAttackMode',
+      'botPps', 'botAggression', 'botMistakeChance', 'botThinkJitterMs',
       'matchFormat', 'countdownSeconds',
       'keyLeft', 'keyRight', 'keySoftDrop', 'keyHardDrop',
       'keyRotateCW', 'keyRotateCCW', 'keyRotate180', 'keyHold',
