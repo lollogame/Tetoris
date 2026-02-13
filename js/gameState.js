@@ -152,15 +152,11 @@ class GameState {
     this.maxLockResets = 15;
     this.lockResetCount = 0;
 
-    this.hardDropCooldownMs = 0;
-    this.hardDropCooldownDurationMs = 170;
-
     this.dcdTimer = 0;
 
     this.piecesPlaced = 0;
     this.attacksSent = 0;
     this.linesClearedTotal = 0;
-    this.misdrops = 0;
     this.finesseErrors = 0;
     this.pieceInputCount = 0;
     this.b2bCounter = 0;
@@ -181,6 +177,7 @@ class GameState {
     this.garbageVel = 0; // -1, 0, +1 momentum
     this.roundId = null;
     this.onCombatEvent = null;
+    this.onAttackSend = null;
 
     const canvas = document.getElementById(canvasId);
     const holdCanvas = document.getElementById(holdCanvasId);
@@ -357,18 +354,6 @@ class GameState {
     return this.hardDropAndSpawn();
   }
 
-  canHardDropNow() {
-    const settings = GameSettings.getInstance();
-    return !(settings.preventMissdrop && this.hardDropCooldownMs > 0);
-  }
-
-  armHardDropCooldown() {
-    const settings = GameSettings.getInstance();
-    if (settings.preventMissdrop) {
-      this.hardDropCooldownMs = this.hardDropCooldownDurationMs;
-    }
-  }
-
   performHardDropLock() {
     if (!this.currentPiece) return false;
     while (this.isValidPosition(this.currentX, this.currentY + 1, this.currentRotation)) {
@@ -435,7 +420,6 @@ class GameState {
     this.dcdTimer = GameSettings.getInstance().dcd;
     const extraInputs = Math.max(0, this.pieceInputCount - 6);
     if (extraInputs > 0) this.finesseErrors += extraInputs;
-    const stackHeightBeforeClear = this.getStackHeight();
 
     this.lockDelayTimer = 0;
     this.lockResetCount = 0;
@@ -444,7 +428,7 @@ class GameState {
     this.rotateBuffer = null;
 
     const isSpin = this.checkSpin(pieceType, pieceX, pieceY, pieceRotation);
-    this.clearLines(pieceType, isSpin, stackHeightBeforeClear);
+    this.clearLines(pieceType, isSpin);
     return true;
   }
 
@@ -571,24 +555,13 @@ class GameState {
     this.onCombatEvent({ type, playerId: this.playerId, ...payload });
   }
 
-  getStackHeight() {
-    for (let row = 0; row < ROWS; row++) {
-      if (this.board[row].some((cell) => cell !== 0)) {
-        return ROWS - row;
-      }
-    }
-    return 0;
-  }
-
-  clearLines(lastPiece, isSpin, stackHeightBeforeClear = 0) {
+  clearLines(lastPiece, isSpin) {
     const clearedRows = [];
     for (let row = 0; row < ROWS; row++) {
       if (this.board[row].every(cell => cell !== 0)) clearedRows.push(row);
     }
 
     const linesCleared = clearedRows.length;
-    const pendingBeforeCancel = this.getPendingGarbageTotal();
-
     if (linesCleared > 0) {
       this.linesClearedTotal += linesCleared;
       SFX.play('line', linesCleared);
@@ -626,7 +599,13 @@ class GameState {
       const canceled = Math.max(0, attackBeforeCancel - attack);
 
       this.attacksSent += attack;
-      if (attack > 0) NetworkManager.getInstance().sendAttack(attack, this.roundId);
+      if (attack > 0) {
+        if (typeof this.onAttackSend === 'function') {
+          this.onAttackSend(attack, this.roundId);
+        } else {
+          NetworkManager.getInstance().sendAttack(attack, this.roundId);
+        }
+      }
       this.emitCombatEvent('clear', {
         linesCleared,
         attackSent: attack,
@@ -639,9 +618,6 @@ class GameState {
       });
     } else {
       this.comboCounter = -1;
-      if (stackHeightBeforeClear >= 14 || pendingBeforeCancel > 0) {
-        this.misdrops += 1;
-      }
       if (this.pendingGarbage.length > 0) this.applyGarbage();
     }
 
@@ -728,9 +704,6 @@ this.afterSpawnInput();
 
     this.consumeRotationBuffer();
 
-    if (this.hardDropCooldownMs > 0) {
-      this.hardDropCooldownMs = Math.max(0, this.hardDropCooldownMs - deltaTime);
-    }
     if (this.dcdTimer > 0) this.dcdTimer -= deltaTime;
 
     const wasTouching = this.isTouchingGround;
@@ -854,7 +827,6 @@ this.lastGravityTime = 0;
       piecesPlaced: this.piecesPlaced,
       attacksSent: this.attacksSent,
       linesClearedTotal: this.linesClearedTotal,
-      misdrops: this.misdrops,
       finesseErrors: this.finesseErrors,
       b2bCounter: this.b2bCounter,
       comboCounter: this.comboCounter,
@@ -876,7 +848,6 @@ this.lastGravityTime = 0;
     this.piecesPlaced = state.piecesPlaced;
     this.attacksSent = state.attacksSent;
     this.linesClearedTotal = Math.max(0, Number(state.linesClearedTotal) || 0);
-    this.misdrops = Math.max(0, Number(state.misdrops) || 0);
     this.finesseErrors = Math.max(0, Number(state.finesseErrors) || 0);
     this.b2bCounter = state.b2bCounter;
     this.comboCounter = state.comboCounter;
@@ -903,5 +874,9 @@ this.lastGravityTime = 0;
 
   setCombatEventHandler(handler) {
     this.onCombatEvent = (typeof handler === 'function') ? handler : null;
+  }
+
+  setAttackHandler(handler) {
+    this.onAttackSend = (typeof handler === 'function') ? handler : null;
   }
 }
