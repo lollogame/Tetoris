@@ -8,17 +8,17 @@ class TetrisBot {
     this.gameState = gameState;
     this.elapsedMs = 0;
     this.nextActionDelayMs = 0;
-    this.lookaheadTop = 22;
+    this.lookaheadTop = 28;
     this.configure(config);
     this._scheduleNextAction(true);
   }
 
   configure(config = {}) {
     const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
-    this.pps = Math.max(0.4, Math.min(6, num(config.pps, 1.6)));
-    this.aggression = Math.max(0, Math.min(100, num(config.aggression, 65)));
-    this.mistakeChance = Math.max(0, Math.min(100, num(config.mistakeChance, 8))) / 100;
-    this.thinkJitterMs = Math.max(0, Math.min(400, num(config.thinkJitterMs, 85)));
+    this.pps = Math.max(0.4, Math.min(6, num(config.pps, 2.4)));
+    this.aggression = Math.max(0, Math.min(100, num(config.aggression, 74)));
+    this.mistakeChance = Math.max(0, Math.min(100, num(config.mistakeChance, 2))) / 100;
+    this.thinkJitterMs = Math.max(0, Math.min(400, num(config.thinkJitterMs, 35)));
   }
 
   update(deltaTimeMs) {
@@ -35,12 +35,28 @@ class TetrisBot {
   }
 
   _scheduleNextAction(isFirst) {
-    const base = 1000 / Math.max(0.1, this.pps);
+    const danger = this._getCurrentDanger();
+    const pressureBoost = 1 + Math.min(1.15, danger * 0.55);
+    const effectivePps = Math.max(0.1, this.pps * pressureBoost);
+    const base = 1000 / effectivePps;
+    const jitterScale = Math.max(0.2, 1 - Math.min(0.75, danger * 0.35));
     const jitter = this.thinkJitterMs > 0
-      ? ((Math.random() * 2 - 1) * this.thinkJitterMs)
+      ? ((Math.random() * 2 - 1) * this.thinkJitterMs * jitterScale)
       : 0;
-    const startup = isFirst ? 120 : 0;
-    this.nextActionDelayMs = Math.max(30, base + jitter + startup);
+    const startup = isFirst ? 90 : 0;
+    this.nextActionDelayMs = Math.max(22, base + jitter + startup);
+  }
+
+  _getCurrentDanger() {
+    const gs = this.gameState;
+    if (!gs || !Array.isArray(gs.board)) return 0;
+
+    const analysis = this._analyzeBoard(gs.board);
+    const pendingGarbage = (typeof gs.getPendingGarbageTotal === 'function')
+      ? Math.max(0, Number(gs.getPendingGarbageTotal()) || 0)
+      : 0;
+
+    return this._dangerLevel(analysis, pendingGarbage);
   }
 
   _shapeFor(piece, rot) {
@@ -336,8 +352,12 @@ class TetrisBot {
     score -= (analysis.wellCells * wellPenalty);
 
     if (pendingAfterGarbage > 0 && sim.linesCleared === 0) score -= 24 + (pendingAfterGarbage * 1.5);
-    if (analysis.maxHeight >= 18) score -= 200;
-    if (analysis.maxHeight >= 19) score -= 300;
+    if (danger > 1.0 && sim.linesCleared > 0) score += sim.linesCleared * (8 + (danger * 9));
+    if (danger > 1.25 && sim.linesCleared === 0) score -= 18 + (danger * 14);
+    if (danger > 1.4 && analysis.maxHeight >= 16) score -= 90;
+    if (danger > 1.7 && analysis.maxHeight >= 17) score -= 150;
+    if (analysis.maxHeight >= 18) score -= 260;
+    if (analysis.maxHeight >= 19) score -= 420;
 
     return score;
   }
@@ -460,10 +480,10 @@ class TetrisBot {
     if (candidates.length === 0) return null;
 
     const aggr = this.aggression / 100;
-    const lookaheadWeight = (0.56 + (aggr * 0.24)) - Math.min(0.16, immediateDanger * 0.08);
-    const deepLookaheadWeight = 0.20 + (aggr * 0.12);
+    const lookaheadWeight = (0.60 + (aggr * 0.22)) - Math.min(0.12, immediateDanger * 0.06);
+    const deepLookaheadWeight = 0.24 + (aggr * 0.12);
     const topEvalCount = Math.min(this.lookaheadTop, candidates.length);
-    const deepEvalCount = Math.min(8, topEvalCount);
+    const deepEvalCount = Math.min(10, topEvalCount);
 
     for (let i = 0; i < topEvalCount; i++) {
       const cand = candidates[i];
@@ -526,7 +546,7 @@ class TetrisBot {
     const pressure = Math.max(immediateDanger, candidates[0]?.dangerAfter || 0);
     let effectiveMistakeChance = this.mistakeChance * (1 - (aggr * 0.75));
     effectiveMistakeChance *= (1 - Math.min(0.85, pressure * 0.55));
-    effectiveMistakeChance = Math.max(0, Math.min(0.35, effectiveMistakeChance));
+    effectiveMistakeChance = Math.max(0, Math.min(0.20, effectiveMistakeChance));
 
     if (Math.random() < effectiveMistakeChance) {
       const poolSize = pressure > 0.8 ? 2 : 3;
