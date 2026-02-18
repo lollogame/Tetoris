@@ -250,6 +250,79 @@ class TetrisBot {
     return { wellCells, deepestWell };
   }
 
+  _countCavities(board) {
+    let cavities = 0;
+    for (let r = 1; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (board[r][c]) continue;
+        if (!board[r - 1][c]) continue;
+        const leftBlocked = (c === 0) || !!board[r][c - 1];
+        const rightBlocked = (c === COLS - 1) || !!board[r][c + 1];
+        if (leftBlocked && rightBlocked) cavities++;
+      }
+    }
+    return cavities;
+  }
+
+  _countColumnHoles(board, col) {
+    let holes = 0;
+    let seenBlock = false;
+    for (let r = 0; r < ROWS; r++) {
+      if (board[r][col]) {
+        seenBlock = true;
+      } else if (seenBlock) {
+        holes++;
+      }
+    }
+    return holes;
+  }
+
+  _countTSlotOpportunities(board) {
+    let slots = 0;
+    for (let y = 0; y <= ROWS - 3; y++) {
+      for (let x = 0; x <= COLS - 3; x++) {
+        if (board[y + 1][x + 1]) continue;
+
+        let corners = 0;
+        if (board[y][x]) corners++;
+        if (board[y][x + 2]) corners++;
+        if (board[y + 2][x]) corners++;
+        if (board[y + 2][x + 2]) corners++;
+        if (corners < 3) continue;
+
+        const roof = board[y][x + 1] !== 0;
+        const support = board[y + 2][x + 1] !== 0;
+        const sideEntry = (board[y + 1][x] === 0) || (board[y + 1][x + 2] === 0);
+        if (roof && support && sideEntry) slots++;
+      }
+    }
+    return slots;
+  }
+
+  _evaluateEdgeWell(board, heights) {
+    const leftDepth = Math.max(0, (heights[1] || 0) - (heights[0] || 0));
+    const rightDepth = Math.max(0, (heights[COLS - 2] || 0) - (heights[COLS - 1] || 0));
+    const edgeWellCol = (rightDepth >= leftDepth) ? (COLS - 1) : 0;
+    const edgeWellDepth = Math.max(leftDepth, rightDepth);
+    const edgeWellHoles = this._countColumnHoles(board, edgeWellCol);
+
+    let centerWellPenalty = 0;
+    for (let c = 1; c < COLS - 1; c++) {
+      const sideMin = Math.min(heights[c - 1], heights[c + 1]);
+      const localDepth = Math.max(0, sideMin - heights[c]);
+      if (localDepth >= 2) centerWellPenalty += localDepth;
+    }
+
+    return {
+      edgeWellCol,
+      edgeWellDepth,
+      edgeWellHoles,
+      centerWellPenalty,
+      leftEdgeWellDepth: leftDepth,
+      rightEdgeWellDepth: rightDepth,
+    };
+  }
+
   _dangerLevel(analysis, pendingGarbage = 0) {
     const fromHeight = Math.max(0, analysis.maxHeight - 9) / 10;
     const fromHoles = Math.max(0, analysis.holes - 1) / 6;
@@ -290,8 +363,12 @@ class TetrisBot {
     const rowTransitions = this._countRowTransitions(board);
     const columnTransitions = this._countColumnTransitions(board);
     const { wellCells, deepestWell } = this._countWells(board);
+    const cavities = this._countCavities(board);
+    const tSlotOpportunities = this._countTSlotOpportunities(board);
+    const wellProfile = this._evaluateEdgeWell(board, heights);
 
     return {
+      heights,
       aggregateHeight,
       holes,
       holeDepth,
@@ -301,6 +378,14 @@ class TetrisBot {
       columnTransitions,
       wellCells,
       deepestWell,
+      cavities,
+      tSlotOpportunities,
+      edgeWellCol: wellProfile.edgeWellCol,
+      edgeWellDepth: wellProfile.edgeWellDepth,
+      edgeWellHoles: wellProfile.edgeWellHoles,
+      centerWellPenalty: wellProfile.centerWellPenalty,
+      leftEdgeWellDepth: wellProfile.leftEdgeWellDepth,
+      rightEdgeWellDepth: wellProfile.rightEdgeWellDepth,
     };
   }
 
@@ -308,17 +393,32 @@ class TetrisBot {
     const aggr = this.aggression / 100;
     const pendingGarbage = Math.max(0, Number(context.pendingGarbage) || 0);
     const pendingAfterGarbage = Math.max(0, Number(context.pendingAfterGarbage) || 0);
+    const preB2B = Number.isFinite(Number(context.preB2B)) ? Number(context.preB2B) : 0;
+    const piece = context.piece;
+    const before = context.beforeAnalysis || null;
     const danger = this._dangerLevel(analysis, pendingAfterGarbage);
+    const isB2BMove = (sim.linesCleared === 4) || sim.isTSpin;
+
+    const holesDelta = before ? (analysis.holes - before.holes) : 0;
+    const holeDepthDelta = before ? (analysis.holeDepth - before.holeDepth) : 0;
+    const cavitiesDelta = before ? (analysis.cavities - before.cavities) : 0;
+    const tSlotDelta = before ? (analysis.tSlotOpportunities - before.tSlotOpportunities) : 0;
+    const edgeWellDelta = before ? (analysis.edgeWellDepth - before.edgeWellDepth) : 0;
 
     const attackWeight = 30 + (aggr * 62) + (danger * 18);
-    const clearWeight = 3 + (aggr * 5);
-    const tspinWeight = 18 + (aggr * 24) + (danger * 8);
-    const b2bWeight = 8 + (aggr * 12);
+    const clearWeight = 2 + (aggr * 3);
+    const tspinWeight = 38 + (aggr * 34) + (danger * 11);
+    const b2bWeight = 14 + (aggr * 16);
     const comboWeight = 2 + (aggr * 5);
-    const allClearWeight = 120;
+    const allClearWeight = 132;
+    const tetrisWeight = 60 + (aggr * 34) + (Math.max(0, 1.2 - danger) * 14);
+    const tSpinLineWeight = 34 + (aggr * 30) + (danger * 10);
+    const b2bPreserveWeight = 20 + (aggr * 18);
+    const tSlotWeight = 8 + (aggr * 9);
 
     const holePenalty = 12 - (aggr * 4) + (danger * 9);
     const holeDepthPenalty = 1.9 + (danger * 1.5);
+    const cavityPenalty = 11 + (danger * 8);
     const heightPenalty = 0.42 + ((1 - aggr) * 0.25) + (danger * 0.38);
     const bumpPenalty = 0.30 + ((1 - aggr) * 0.18) + (danger * 0.22);
     const maxHeightPenalty = 1.2 + (danger * 1.45);
@@ -327,6 +427,11 @@ class TetrisBot {
     const wellPenalty = danger > 0.9
       ? (0.9 + danger * 0.5)
       : (0.25 + ((1 - aggr) * 0.10));
+    const edgeWellHolePenalty = 10 + (danger * 7);
+    const centerWellPenalty = 2.4 + ((1 - aggr) * 1.4);
+    const newHolePenalty = 24 + (danger * 15);
+    const newHoleDepthPenalty = 3.2 + (danger * 2.3);
+    const newCavityPenalty = 18 + (danger * 10);
 
     let score = 0;
     score += (attackInfo.attack * attackWeight);
@@ -335,25 +440,59 @@ class TetrisBot {
     if (attackInfo.b2bBonus) score += b2bWeight;
     if (attackInfo.postCombo > 0) score += Math.min(7, attackInfo.postCombo) * comboWeight;
     if (sim.isAllClear) score += allClearWeight;
+    if (sim.linesCleared === 4) {
+      score += tetrisWeight;
+      if (piece === 'I') score += 16 + (aggr * 8);
+    }
+    if (sim.isTSpin) {
+      const tSpinLineBonus = [0, 30, 66, 104][sim.linesCleared] || 0;
+      score += tSpinLineBonus;
+      score += sim.linesCleared * tSpinLineWeight;
+    }
+    if (preB2B > 0 && isB2BMove) score += b2bPreserveWeight;
+    if (preB2B > 0 && sim.linesCleared > 0 && !isB2BMove && danger < 1.3) {
+      score -= 30 + ((1 - aggr) * 10);
+    }
     if (analysis.deepestWell >= 3 && danger < 0.75) {
       score += analysis.deepestWell * (1.8 + (aggr * 2.4));
     }
+    if (analysis.edgeWellDepth >= 3 && analysis.edgeWellHoles === 0 && danger < 1.15) {
+      score += analysis.edgeWellDepth * (7 + (aggr * 5));
+    }
+    if (analysis.tSlotOpportunities > 0 && danger < 1.5) {
+      score += analysis.tSlotOpportunities * tSlotWeight;
+    }
+    if (tSlotDelta > 0) score += tSlotDelta * (7 + (aggr * 6));
+    if (tSlotDelta < 0 && piece !== 'T') score += tSlotDelta * (4 + ((1 - aggr) * 3));
     if (pendingGarbage > pendingAfterGarbage) {
       score += (pendingGarbage - pendingAfterGarbage) * (10 + (danger * 12));
     }
 
     score -= (analysis.holes * holePenalty);
     score -= (analysis.holeDepth * holeDepthPenalty);
+    score -= (analysis.cavities * cavityPenalty);
     score -= (analysis.aggregateHeight * heightPenalty);
     score -= (analysis.bumpiness * bumpPenalty);
     score -= (analysis.maxHeight * maxHeightPenalty);
     score -= (analysis.rowTransitions * rowTransitionPenalty);
     score -= (analysis.columnTransitions * colTransitionPenalty);
     score -= (analysis.wellCells * wellPenalty);
+    score -= (analysis.edgeWellHoles * edgeWellHolePenalty);
+    score -= (analysis.centerWellPenalty * centerWellPenalty);
+
+    if (holesDelta > 0) score -= holesDelta * newHolePenalty;
+    if (holeDepthDelta > 0) score -= holeDepthDelta * newHoleDepthPenalty;
+    if (cavitiesDelta > 0) score -= cavitiesDelta * newCavityPenalty;
+    if (edgeWellDelta < 0 && sim.linesCleared < 4 && !sim.isTSpin && danger < 1.15) {
+      score += edgeWellDelta * (16 + (aggr * 7));
+    }
 
     if (pendingAfterGarbage > 0 && sim.linesCleared === 0) score -= 24 + (pendingAfterGarbage * 1.5);
     if (danger > 1.0 && sim.linesCleared > 0) score += sim.linesCleared * (8 + (danger * 9));
     if (danger > 1.25 && sim.linesCleared === 0) score -= 18 + (danger * 14);
+    if (!sim.isTSpin && sim.linesCleared === 1 && danger < 1.05 && pendingAfterGarbage === 0) score -= 26;
+    if (!sim.isTSpin && sim.linesCleared === 2 && danger < 0.95 && pendingAfterGarbage === 0) score -= 15;
+    if (!sim.isTSpin && sim.linesCleared === 3 && danger < 0.85 && pendingAfterGarbage === 0) score -= 8;
     if (danger > 1.4 && analysis.maxHeight >= 16) score -= 90;
     if (danger > 1.7 && analysis.maxHeight >= 17) score -= 150;
     if (analysis.maxHeight >= 18) score -= 260;
@@ -369,6 +508,7 @@ class TetrisBot {
     const preB2B = Number.isFinite(Number(options.preB2B)) ? Number(options.preB2B) : 0;
     const pendingGarbage = Math.max(0, Number(options.pendingGarbage) || 0);
     const useHold = options.useHold === true;
+    const beforeAnalysis = options.beforeAnalysis || this._analyzeBoard(board);
 
     const out = [];
     for (let rot = 0; rot < 4; rot++) {
@@ -397,7 +537,13 @@ class TetrisBot {
           { linesCleared: cleared.linesCleared, isTSpin, isAllClear },
           analysis,
           attackInfo,
-          { pendingGarbage, pendingAfterGarbage }
+          {
+            pendingGarbage,
+            pendingAfterGarbage,
+            preB2B,
+            piece,
+            beforeAnalysis,
+          }
         );
 
         out.push({
@@ -417,6 +563,7 @@ class TetrisBot {
           postB2B: attackInfo.postB2B,
           lastActionWasRotation: (piece === 'T') && (isTSpin || rot !== 0),
           pendingAfterGarbage,
+          analysisAfter: analysis,
           boardAfter: cleared.board,
         });
       }
@@ -460,6 +607,7 @@ class TetrisBot {
         preCombo,
         preB2B,
         pendingGarbage,
+        beforeAnalysis: boardNow,
       })
     );
 
@@ -472,6 +620,7 @@ class TetrisBot {
             preCombo,
             preB2B,
             pendingGarbage,
+            beforeAnalysis: boardNow,
           })
         );
       }
@@ -497,11 +646,14 @@ class TetrisBot {
           preCombo: cand.postCombo,
           preB2B: cand.postB2B,
           pendingGarbage: nextPending,
+          beforeAnalysis: cand.analysisAfter,
         });
         if (nextCandidates.length > 0) {
           const bestNext = nextCandidates[0];
           total += bestNext.score * lookaheadWeight;
           total += bestNext.attack * (10 + (aggr * 14));
+          if (bestNext.linesCleared === 4) total += 14 + (aggr * 8);
+          if (bestNext.isTSpin) total += 18 + (bestNext.linesCleared * (10 + (aggr * 5)));
 
           if (i < deepEvalCount) {
             const thirdPiece = this._getPieceAfterFirstMove(cand.useHold, gs.holdPiece, queue, 2);
@@ -516,6 +668,7 @@ class TetrisBot {
                   preCombo: branch.postCombo,
                   preB2B: branch.postB2B,
                   pendingGarbage: thirdPending,
+                  beforeAnalysis: branch.analysisAfter,
                 });
                 if (thirdCandidates.length === 0) continue;
                 const bestThird = thirdCandidates[0];
@@ -530,6 +683,11 @@ class TetrisBot {
         }
       }
 
+      if (cand.linesCleared === 4) total += 34 + (aggr * 16);
+      if (cand.isTSpin) total += 38 + (cand.linesCleared * (14 + (aggr * 6)));
+      if (preB2B > 0 && cand.linesCleared > 0 && !(cand.linesCleared === 4 || cand.isTSpin) && immediateDanger < 1.2) {
+        total -= 22;
+      }
       total += cand.attack * (14 + (aggr * 16));
       if (cand.linesCleared === 0 && cand.attack === 0 && cand.dangerAfter > immediateDanger + 0.3) {
         total -= 12;
