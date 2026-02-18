@@ -9,6 +9,8 @@ class TetrisBot {
     this.elapsedMs = 0;
     this.nextActionDelayMs = 0;
     this.lookaheadTop = 28;
+    this.recentMoveTypes = [];
+    this.lastStrategy = 'b2b_mix';
     this.configure(config);
     this._scheduleNextAction(true);
   }
@@ -333,6 +335,120 @@ class TetrisBot {
     };
   }
 
+  _countNearFullRows(board, minFilled = 8) {
+    const target = Math.max(1, Math.min(COLS, Number(minFilled) || 8));
+    let near = 0;
+    for (let r = 0; r < ROWS; r++) {
+      const row = Array.isArray(board?.[r]) ? board[r] : null;
+      if (!row) continue;
+      let filled = 0;
+      for (let c = 0; c < COLS; c++) {
+        if (row[c]) filled++;
+      }
+      if (filled >= target && filled < COLS) near++;
+    }
+    return near;
+  }
+
+  _chooseStrategy(analysis, gameState, queue, pendingGarbage, immediateDanger) {
+    const gs = gameState || {};
+    const piecesPlaced = Math.max(0, Number(gs.piecesPlaced) || 0);
+    const combo = Number.isFinite(Number(gs.comboCounter)) ? Number(gs.comboCounter) : -1;
+    const b2b = Number.isFinite(Number(gs.b2bCounter)) ? Number(gs.b2bCounter) : 0;
+    const next = Array.isArray(queue) ? queue.slice(0, 5) : [];
+    const iSoon = next.includes('I');
+    const tSoon = next.includes('T');
+    const nearFullRows = this._countNearFullRows(gs.board || [], 8);
+
+    let strategy = 'b2b_mix';
+    if (immediateDanger > 1.35 || pendingGarbage >= 5 || analysis.holes >= 4) {
+      strategy = 'combo_downstack';
+    } else if (combo >= 1 && (nearFullRows >= 2 || analysis.holes > 0 || pendingGarbage > 0)) {
+      strategy = 'combo_downstack';
+    } else if (piecesPlaced <= 12) {
+      strategy = 'opener_mix';
+    } else if (analysis.tSlotOpportunities > 0 && (tSoon || gs.currentPiece === 'T')) {
+      strategy = 'tspin_convert';
+    } else if (analysis.tSlotOpportunities === 0 && (tSoon || gs.currentPiece === 'T' || !iSoon)) {
+      strategy = 'tspin_build';
+    } else {
+      strategy = 'b2b_mix';
+    }
+
+    if (
+      this.lastStrategy &&
+      immediateDanger < 1.15 &&
+      this.lastStrategy.startsWith('tspin') &&
+      strategy === 'b2b_mix' &&
+      analysis.holes <= 2
+    ) {
+      strategy = this.lastStrategy;
+    }
+
+    if (analysis.edgeWellDepth >= 6 && analysis.tSlotOpportunities === 0 && !iSoon && immediateDanger < 1.2) {
+      strategy = 'tspin_build';
+    }
+
+    return {
+      strategy,
+      piecesPlaced,
+      nearFullRows,
+      combo,
+      b2b,
+      iSoon,
+      tSoon,
+    };
+  }
+
+  _applyRecentPatternBias(candidates, strategyContext, immediateDanger) {
+    if (!Array.isArray(candidates) || candidates.length === 0) return;
+
+    const recent = this.recentMoveTypes.slice(-8);
+    if (recent.length < 4) return;
+
+    const tetrisCount = recent.filter((x) => x === 'tetris').length;
+    const tspinCount = recent.filter((x) => x === 'tspin').length;
+    const dryCount = recent.filter((x) => x === 'none').length;
+    const scope = Math.min(30, candidates.length);
+
+    if (tetrisCount >= 4 && immediateDanger < 1.3) {
+      for (let i = 0; i < scope; i++) {
+        const cand = candidates[i];
+        if (cand.linesCleared === 4) cand.totalScore -= 28;
+        if (cand.isTSpin) cand.totalScore += 40;
+        if (cand.tSlotDelta > 0) cand.totalScore += 18;
+      }
+    }
+
+    if (tspinCount === 0 && immediateDanger < 1.3) {
+      for (let i = 0; i < scope; i++) {
+        const cand = candidates[i];
+        if (cand.isTSpin) cand.totalScore += 34;
+        if (cand.tSlotDelta > 0) cand.totalScore += 14;
+      }
+    }
+
+    if (dryCount >= 4 && strategyContext?.strategy !== 'combo_downstack') {
+      for (let i = 0; i < scope; i++) {
+        const cand = candidates[i];
+        if (cand.attack > 0) cand.totalScore += 24;
+        if (cand.linesCleared === 0) cand.totalScore -= 18;
+      }
+    }
+  }
+
+  _recordMoveOutcome(plan) {
+    let type = 'none';
+    if (plan && plan.isTSpin) type = 'tspin';
+    else if (plan && plan.linesCleared === 4) type = 'tetris';
+    else if (plan && plan.linesCleared === 3) type = 'triple';
+    else if (plan && plan.linesCleared === 2) type = 'double';
+    else if (plan && plan.linesCleared === 1) type = 'single';
+
+    this.recentMoveTypes.push(type);
+    if (this.recentMoveTypes.length > 16) this.recentMoveTypes.shift();
+  }
+
   _dangerLevel(analysis, pendingGarbage = 0) {
     const fromHeight = Math.max(0, analysis.maxHeight - 9) / 10;
     const fromHoles = Math.max(0, analysis.holes - 1) / 6;
@@ -404,10 +520,15 @@ class TetrisBot {
     const pendingGarbage = Math.max(0, Number(context.pendingGarbage) || 0);
     const pendingAfterGarbage = Math.max(0, Number(context.pendingAfterGarbage) || 0);
     const preB2B = Number.isFinite(Number(context.preB2B)) ? Number(context.preB2B) : 0;
+    const preCombo = Number.isFinite(Number(context.preCombo)) ? Number(context.preCombo) : -1;
+    const strategy = (typeof context.strategy === 'string' && context.strategy) ? context.strategy : 'b2b_mix';
+    const piecesPlaced = Math.max(0, Number(context.piecesPlaced) || 0);
+    const nearFullRows = Math.max(0, Number(context.nearFullRows) || 0);
     const piece = context.piece;
     const before = context.beforeAnalysis || null;
     const danger = this._dangerLevel(analysis, pendingAfterGarbage);
     const isB2BMove = (sim.linesCleared === 4) || sim.isTSpin;
+    const comboDepth = Math.max(0, preCombo + 1);
 
     const holesDelta = before ? (analysis.holes - before.holes) : 0;
     const holeDepthDelta = before ? (analysis.holeDepth - before.holeDepth) : 0;
@@ -497,6 +618,63 @@ class TetrisBot {
       score += edgeWellDelta * (16 + (aggr * 7));
     }
 
+    if (strategy === 'opener_mix') {
+      if (piecesPlaced <= 12 && sim.linesCleared === 4 && danger < 0.95 && pendingAfterGarbage === 0) score -= 34;
+      if (tSlotDelta > 0) score += tSlotDelta * (30 + (aggr * 10));
+      if (analysis.tSlotOpportunities > 0) score += 12 + (analysis.tSlotOpportunities * 4);
+      if (analysis.edgeWellDepth >= 6 && analysis.tSlotOpportunities === 0 && sim.linesCleared < 4) score -= 24;
+      if (!sim.isTSpin && sim.linesCleared === 2) score += 8 + (nearFullRows * 2);
+    } else if (strategy === 'tspin_build') {
+      if (tSlotDelta > 0) score += tSlotDelta * (44 + (aggr * 10));
+      if (analysis.tSlotOpportunities > 0) score += 20 + (analysis.tSlotOpportunities * 6);
+      if (sim.isTSpin) score += 42 + (sim.linesCleared * 16);
+      if (tSlotDelta < 0 && piece !== 'T') score += tSlotDelta * (18 + ((1 - aggr) * 10));
+      if (sim.linesCleared === 4 && danger < 1.15 && analysis.tSlotOpportunities === 0) score -= 20;
+      if (analysis.edgeWellDepth >= 7 && analysis.tSlotOpportunities === 0 && piece !== 'I') score -= 22;
+    } else if (strategy === 'tspin_convert') {
+      if (sim.isTSpin) score += 78 + (sim.linesCleared * 18);
+      if (sim.linesCleared === 4) score += 12;
+      if (!sim.isTSpin && tSlotDelta < 0) score += tSlotDelta * (14 + ((1 - aggr) * 8));
+      if (analysis.tSlotOpportunities > 0 && !sim.isTSpin) score += 12;
+      if (piece === 'T' && sim.linesCleared === 0 && tSlotDelta >= 0) score += 10;
+    } else if (strategy === 'combo_downstack') {
+      if (sim.linesCleared === 1 || sim.linesCleared === 2) score += 18 + (comboDepth * 6);
+      if (sim.linesCleared === 3) score += 12 + (comboDepth * 4);
+      if (holesDelta < 0) score += Math.abs(holesDelta) * (34 + (comboDepth * 4));
+      if (cavitiesDelta < 0) score += Math.abs(cavitiesDelta) * (24 + (comboDepth * 3));
+      if (sim.linesCleared === 0 && (analysis.holes > 0 || pendingAfterGarbage > 0)) {
+        score -= 32 + (pendingAfterGarbage * 4);
+      }
+      if (sim.linesCleared === 4 && danger < 1.2 && analysis.holes > 0) score -= 18;
+    } else {
+      if (sim.isTSpin) score += 28 + (sim.linesCleared * 8);
+      if (sim.linesCleared === 4) score += 24;
+      if (analysis.tSlotOpportunities > 0 && !sim.isTSpin) score += 6;
+      if (
+        analysis.edgeWellDepth >= 7 &&
+        analysis.tSlotOpportunities === 0 &&
+        sim.linesCleared !== 4 &&
+        piece !== 'I' &&
+        danger < 1.2
+      ) {
+        score -= 22;
+      }
+      if (sim.linesCleared === 4 && analysis.tSlotOpportunities === 0 && danger < 0.9 && piecesPlaced > 14) {
+        score -= 12;
+      }
+    }
+
+    if (
+      analysis.edgeWellDepth >= 8 &&
+      analysis.tSlotOpportunities === 0 &&
+      piece !== 'I' &&
+      sim.linesCleared < 4 &&
+      !sim.isTSpin &&
+      danger < 1.2
+    ) {
+      score -= 30;
+    }
+
     if (pendingAfterGarbage > 0 && sim.linesCleared === 0) score -= 24 + (pendingAfterGarbage * 1.5);
     if (danger > 1.0 && sim.linesCleared > 0) score += sim.linesCleared * (8 + (danger * 9));
     if (danger > 1.25 && sim.linesCleared === 0) score -= 18 + (danger * 14);
@@ -519,6 +697,11 @@ class TetrisBot {
     const pendingGarbage = Math.max(0, Number(options.pendingGarbage) || 0);
     const useHold = options.useHold === true;
     const beforeAnalysis = options.beforeAnalysis || this._analyzeBoard(board);
+    const strategy = (typeof options.strategy === 'string' && options.strategy) ? options.strategy : 'b2b_mix';
+    const piecesPlaced = Math.max(0, Number(options.piecesPlaced) || 0);
+    const nearFullRows = Number.isFinite(Number(options.nearFullRows))
+      ? Math.max(0, Number(options.nearFullRows))
+      : this._countNearFullRows(board, 8);
 
     const out = [];
     for (let rot = 0; rot < 4; rot++) {
@@ -560,6 +743,10 @@ class TetrisBot {
               pendingGarbage,
               pendingAfterGarbage,
               preB2B,
+              preCombo,
+              strategy,
+              piecesPlaced,
+              nearFullRows,
               piece,
               beforeAnalysis,
             }
@@ -606,6 +793,7 @@ class TetrisBot {
 
     const immediateDanger = Math.max(0, Number(context.immediateDanger) || 0);
     const pendingGarbage = Math.max(0, Number(context.pendingGarbage) || 0);
+    const strategy = (typeof context.strategy === 'string' && context.strategy) ? context.strategy : 'b2b_mix';
     const lowDanger = immediateDanger < 1.25 && pendingGarbage <= 2;
     if (!lowDanger) return candidates;
 
@@ -630,6 +818,23 @@ class TetrisBot {
     const smoothPool = pool.filter((c) => (c.analysisAfter?.bumpiness ?? 0) <= minBump + 4);
     if (smoothPool.length > 0) {
       pool = smoothPool;
+    }
+
+    if (strategy === 'combo_downstack') {
+      const comboPool = pool.filter(
+        (c) => (c.linesCleared >= 1 && c.linesCleared <= 2) || c.holesDelta < 0 || c.cavitiesDelta < 0
+      );
+      if (comboPool.length > 0) return comboPool;
+    }
+
+    if (strategy === 'tspin_build' || strategy === 'tspin_convert') {
+      const tspinPool = pool.filter((c) => c.isTSpin || c.tSlotDelta > 0);
+      if (tspinPool.length > 0) return tspinPool;
+    }
+
+    if (strategy === 'opener_mix') {
+      const openerPool = pool.filter((c) => c.tSlotDelta > 0 || (!c.isTSpin && c.linesCleared === 2));
+      if (openerPool.length > 0) return openerPool;
     }
 
     const b2bAttackPool = pool.filter((c) => c.isTSpin || c.linesCleared === 4);
@@ -668,6 +873,8 @@ class TetrisBot {
       : 0;
     const boardNow = this._analyzeBoard(board);
     const immediateDanger = this._dangerLevel(boardNow, pendingGarbage);
+    const strategyContext = this._chooseStrategy(boardNow, gs, queue, pendingGarbage, immediateDanger);
+    this.lastStrategy = strategyContext.strategy;
 
     const candidates = [];
     candidates.push(
@@ -677,6 +884,9 @@ class TetrisBot {
         preB2B,
         pendingGarbage,
         beforeAnalysis: boardNow,
+        strategy: strategyContext.strategy,
+        piecesPlaced: strategyContext.piecesPlaced,
+        nearFullRows: strategyContext.nearFullRows,
       })
     );
 
@@ -690,6 +900,9 @@ class TetrisBot {
             preB2B,
             pendingGarbage,
             beforeAnalysis: boardNow,
+            strategy: strategyContext.strategy,
+            piecesPlaced: strategyContext.piecesPlaced,
+            nearFullRows: strategyContext.nearFullRows,
           })
         );
       }
@@ -716,6 +929,9 @@ class TetrisBot {
           preB2B: cand.postB2B,
           pendingGarbage: nextPending,
           beforeAnalysis: cand.analysisAfter,
+          strategy: strategyContext.strategy,
+          piecesPlaced: strategyContext.piecesPlaced + 1,
+          nearFullRows: this._countNearFullRows(cand.boardAfter, 8),
         });
         if (nextCandidates.length > 0) {
           const bestNext = nextCandidates[0];
@@ -738,6 +954,9 @@ class TetrisBot {
                   preB2B: branch.postB2B,
                   pendingGarbage: thirdPending,
                   beforeAnalysis: branch.analysisAfter,
+                  strategy: strategyContext.strategy,
+                  piecesPlaced: strategyContext.piecesPlaced + 2,
+                  nearFullRows: this._countNearFullRows(branch.boardAfter, 8),
                 });
                 if (thirdCandidates.length === 0) continue;
                 const bestThird = thirdCandidates[0];
@@ -772,6 +991,24 @@ class TetrisBot {
       if (cand.cavitiesDelta < 0) total += Math.abs(cand.cavitiesDelta) * (30 + (aggr * 12));
       if (cand.bumpinessDelta < 0) total += Math.min(6, Math.abs(cand.bumpinessDelta)) * (8 + ((1 - aggr) * 6));
       if (cand.maxHeightDelta < 0) total += Math.abs(cand.maxHeightDelta) * (10 + ((1 - aggr) * 8));
+      if (strategyContext.strategy === 'combo_downstack') {
+        if (cand.linesCleared >= 1 && cand.linesCleared <= 2) total += 18;
+        if (cand.holesDelta < 0) total += Math.abs(cand.holesDelta) * 24;
+        if (cand.cavitiesDelta < 0) total += Math.abs(cand.cavitiesDelta) * 16;
+        if (cand.linesCleared === 0 && (cand.analysisAfter?.holes ?? 0) > 0) total -= 26;
+      } else if (strategyContext.strategy === 'tspin_build' || strategyContext.strategy === 'tspin_convert') {
+        if (cand.isTSpin) total += 36 + (cand.linesCleared * 10);
+        if (cand.tSlotDelta > 0) total += cand.tSlotDelta * 18;
+        if (cand.linesCleared === 4 && (cand.analysisAfter?.tSlotOpportunities ?? 0) === 0 && immediateDanger < 1.15) {
+          total -= 14;
+        }
+      } else if (strategyContext.strategy === 'opener_mix') {
+        if (cand.tSlotDelta > 0) total += cand.tSlotDelta * 14;
+        if (cand.linesCleared === 4 && strategyContext.piecesPlaced < 10 && immediateDanger < 1.0) total -= 28;
+      } else {
+        if (cand.isTSpin) total += 16;
+        if (cand.linesCleared === 4) total += 12;
+      }
       total += cand.attack * (14 + (aggr * 16));
       if (cand.linesCleared === 0 && cand.attack === 0 && cand.dangerAfter > immediateDanger + 0.3) {
         total -= 12;
@@ -783,7 +1020,13 @@ class TetrisBot {
       candidates[i].totalScore = candidates[i].score;
     }
 
-    const filtered = this._filterCandidatesForCleanStack(candidates, { immediateDanger, pendingGarbage });
+    this._applyRecentPatternBias(candidates, strategyContext, immediateDanger);
+
+    const filtered = this._filterCandidatesForCleanStack(candidates, {
+      immediateDanger,
+      pendingGarbage,
+      strategy: strategyContext.strategy,
+    });
     const selectionPool = (filtered && filtered.length > 0) ? filtered : candidates;
 
     selectionPool.sort((a, b) => b.totalScore - a.totalScore);
@@ -818,20 +1061,26 @@ class TetrisBot {
     if (!gs || !gs.currentPiece) return true;
 
     if (!plan) {
+      this._recordMoveOutcome(null);
       return gs.hardDropAndSpawn();
     }
 
     if (plan.useHold) {
       const held = gs.holdCurrentPiece();
-      if (!held) return gs.hardDropAndSpawn();
+      if (!held) {
+        this._recordMoveOutcome(null);
+        return gs.hardDropAndSpawn();
+      }
       if (!gs.currentPiece) return false;
     }
 
     if (plan.piece && gs.currentPiece !== plan.piece) {
+      this._recordMoveOutcome(null);
       return gs.hardDropAndSpawn();
     }
 
     if (!gs.isValidPosition(plan.x, plan.y, plan.rot)) {
+      this._recordMoveOutcome(null);
       return gs.hardDropAndSpawn();
     }
 
@@ -843,8 +1092,10 @@ class TetrisBot {
 
     const locked = gs.lockPiece();
     if (!locked) {
+      this._recordMoveOutcome(null);
       return gs.hardDropAndSpawn();
     }
+    this._recordMoveOutcome(plan);
     return gs.spawnPiece();
   }
 }
