@@ -274,7 +274,7 @@ class InputManager {
   }
 
   /* =========================================================
-     ✅ NEW: Round-safe reset
+     Round-safe reset
      Keeps heldCodes so key-repeat doesn't become "fresh presses"
      (prevents invisible instant hard-drops/holds after round starts)
   ========================================================= */
@@ -331,3 +331,4 @@ class InputManager {
     this.clearCodes([b.rotateCW, b.rotateCCW, b.rotate180]);
   }
 }
+
