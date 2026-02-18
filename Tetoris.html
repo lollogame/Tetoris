@@ -412,14 +412,14 @@
       gap: 10px;
       margin-bottom: 10px;
 
-      /* keep topbar clickable above canvas/overlays */
+      /* keep topbar above board chrome but below overlays */
       position: relative;
-      z-index: 30001;
+      z-index: 40;
     }
 
     #openMenuBtn, #openSettingsBtn {
       position: relative;
-      z-index: 30002;
+      z-index: 41;
       pointer-events: auto;
     }
 
@@ -434,7 +434,7 @@
       inset: 0;
       background: rgba(5, 8, 24, 0.78);
       backdrop-filter: blur(5px);
-      z-index: 10000;
+      z-index: 26000;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -468,12 +468,51 @@
 
     .modal-close { font-size: 0.6rem; padding: 10px 14px; }
 
-    /* If hidden, MUST NOT intercept clicks */
+    #settingsModal,
+    #countdownOverlay,
+    #mainMenu,
+    #resultOverlay {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 160ms ease, visibility 160ms ease;
+    }
+
+    #settingsModal .modal-content,
+    #countdownOverlay .countdown-card,
+    #mainMenu .menu-card,
+    #resultOverlay .result-card {
+      transform: translateY(0) scale(1);
+      transition: transform 180ms ease, opacity 180ms ease;
+    }
+
     #settingsModal.hidden,
     #countdownOverlay.hidden,
     #mainMenu.hidden,
     #resultOverlay.hidden {
+      display: flex !important;
+      opacity: 0;
+      visibility: hidden;
       pointer-events: none !important;
+    }
+
+    #settingsModal.hidden .modal-content,
+    #countdownOverlay.hidden .countdown-card,
+    #mainMenu.hidden .menu-card,
+    #resultOverlay.hidden .result-card {
+      transform: translateY(8px) scale(0.98);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #settingsModal,
+      #countdownOverlay,
+      #mainMenu,
+      #resultOverlay,
+      #settingsModal .modal-content,
+      #countdownOverlay .countdown-card,
+      #mainMenu .menu-card,
+      #resultOverlay .result-card {
+        transition: none !important;
+      }
     }
 
     /* =========================
@@ -784,14 +823,14 @@
 
 <body>
   <div class="container">
-    <h1>⬛ TETORIS⬛</h1>
+    <h1>TETORIS</h1>
 
     <div class="topbar">
       <div class="topbar-left">
-        <button id="openMenuBtn">☰ Menu</button>
+        <button id="openMenuBtn">Menu</button>
       </div>
       <div class="topbar-right">
-        <button id="openSettingsBtn">⚙ Settings</button>
+        <button id="openSettingsBtn">Settings</button>
       </div>
     </div>
 
@@ -805,17 +844,17 @@
 
         <div class="mode-grid">
           <div class="mode-card selected" data-mode="zen">
-            <div class="mode-title">🧘 Zen</div>
+            <div class="mode-title">Zen</div>
             <div class="mode-desc">Single player practice</div>
           </div>
 
           <div class="mode-card" data-mode="pvp_1v1">
-            <div class="mode-title">⚔ 1v1</div>
+            <div class="mode-title">1v1</div>
             <div class="mode-desc">Online versus (PeerJS)</div>
           </div>
 
           <div class="mode-card" data-mode="battle_royale">
-            <div class="mode-title">👑 Battle Royale</div>
+            <div class="mode-title">Battle Royale</div>
             <div class="mode-desc">Online free-for-all with multiple players</div>
           </div>
 
@@ -826,8 +865,8 @@
         </div>
 
         <div class="menu-actions">
-          <button id="menuPlayBtn">▶ Play</button>
-          <button id="menuSettingsBtn">⚙ Settings</button>
+          <button id="menuPlayBtn">Play</button>
+          <button id="menuSettingsBtn">Settings</button>
         </div>
       </div>
     </div>
@@ -836,7 +875,7 @@
     <div id="scoreboard" class="scoreboard hidden">
       <div class="score-pill" id="matchFormatPill">FORMAT: <strong>FT3</strong></div>
       <div class="score-pill" id="matchRoundPill">ROUND: <strong>1</strong></div>
-      <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> — <strong>0</strong> OPP</div>
+      <div class="score-pill" id="matchScorePill">YOU <strong>0</strong> - <strong>0</strong> OPP</div>
     </div>
 
     <div id="brLobbyPanel" class="br-lobby-panel hidden">
@@ -877,14 +916,14 @@
     <div id="countdownOverlay" class="countdown-overlay hidden">
       <div class="countdown-card">
         <div class="countdown-big" id="countdownText">3</div>
-        <div class="countdown-sub" id="countdownSub">Get ready…</div>
+        <div class="countdown-sub" id="countdownSub">Get ready...</div>
       </div>
     </div>
     <!-- Result / KO overlay -->
     <div id="resultOverlay" class="result-overlay hidden">
       <div class="result-card">
         <div class="result-big" id="resultText">ROUND OVER</div>
-        <div class="result-sub" id="resultSub">…</div>
+        <div class="result-sub" id="resultSub">...</div>
         <button id="resultCloseBtn" class="result-close-btn" type="button" onclick="window.closeResultOverlay && window.closeResultOverlay()">Close</button>
       </div>
     </div>
@@ -941,7 +980,7 @@
             </div>
           </div>
           <div style="text-align:center;margin-top:10px;color:var(--text-secondary);font-size:0.75rem;">
-            Host decides match settings. Joiners will be locked to the host’s config.
+            Host decides match settings. Joiners will be locked to the host's config.
           </div>
         </div>
 
@@ -992,19 +1031,19 @@
             </div>
             <div class="control-item">
               <label>Bot PPS</label>
-              <input type="number" id="botPps" value="1.6" min="0.4" max="6" step="0.1">
+              <input type="number" id="botPps" value="2.4" min="0.4" max="6" step="0.1">
             </div>
             <div class="control-item">
               <label>Bot Aggression</label>
-              <input type="range" id="botAggression" min="0" max="100" value="65">
+              <input type="range" id="botAggression" min="0" max="100" value="74">
             </div>
             <div class="control-item">
               <label>Bot Mistake %</label>
-              <input type="range" id="botMistakeChance" min="0" max="40" value="8">
+              <input type="range" id="botMistakeChance" min="0" max="40" value="2">
             </div>
             <div class="control-item">
               <label>Bot Think Jitter (ms)</label>
-              <input type="number" id="botThinkJitterMs" value="85" min="0" max="400" step="5">
+              <input type="number" id="botThinkJitterMs" value="35" min="0" max="400" step="5">
             </div>
           </div>
 
@@ -1024,7 +1063,7 @@
     <div id="myPeerId" class="hidden">
       <div class="peer-id-label">YOUR PEER ID (share this with your opponent):</div>
       <div class="peer-id-value" id="peerIdDisplay" onclick="window.copyPeerId()">Connecting...</div>
-      <button class="copy-btn" onclick="window.copyPeerId()">📋 Copy ID</button>
+      <button class="copy-btn" onclick="window.copyPeerId()">Copy ID</button>
     </div>
 
     <div class="connection-panel">
@@ -1040,7 +1079,7 @@
 
     <div class="game-area hidden" id="gameArea">
       <div class="player-container">
-        <div class="player-header">🎮 YOU</div>
+        <div class="player-header">YOU</div>
         <div class="game-wrapper">
           <div class="side-panel">
             <div class="info-box">
@@ -1072,7 +1111,7 @@
       </div>
 
       <div class="player-container">
-        <div class="player-header">🎮 OPPONENT</div>
+        <div class="player-header">OPPONENT</div>
         <div class="game-wrapper">
           <div class="side-panel">
             <div class="info-box">
@@ -1105,7 +1144,7 @@
     </div>
 
     <div class="chat-container">
-      <h3 style="font-family:'Press Start 2P',cursive;font-size:0.8rem;margin-bottom:10px;text-align:center;color:var(--accent-yellow);">💬 CHAT</h3>
+      <h3 style="font-family:'Press Start 2P',cursive;font-size:0.8rem;margin-bottom:10px;text-align:center;color:var(--accent-yellow);">CHAT</h3>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-container">
         <input type="text" class="chat-input" id="chatInput" placeholder="Type a message...">
@@ -1135,3 +1174,4 @@
   <script src="js/main.js"></script>
 </body>
 </html>
+
