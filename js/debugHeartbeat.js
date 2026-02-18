@@ -1,6 +1,6 @@
 'use strict';
 
-(function debugHeartbeat(){
+(function debugHeartbeat() {
   const el = document.createElement('div');
   el.style.cssText = `
     position:fixed; left:8px; bottom:8px; z-index:99999;
@@ -11,16 +11,18 @@
 
   let lastRAF = performance.now();
   let lastStamp = 0;
-  let fps = 0, frames = 0, lastFpsT = performance.now();
+  let fps = 0;
+  let frames = 0;
+  let lastFpsT = performance.now();
 
   window.addEventListener('error', (e) => console.log('ERROR', e.message, e.filename, e.lineno));
   window.addEventListener('unhandledrejection', (e) => console.log('PROMISE', e.reason));
 
-  function tick(stamp){
+  function tick(stamp) {
     const now = performance.now();
     lastRAF = now;
     frames++;
-    if (now - lastFpsT >= 1000){
+    if (now - lastFpsT >= 1000) {
       fps = frames;
       frames = 0;
       lastFpsT = now;
@@ -39,7 +41,7 @@
   setInterval(() => {
     const now = performance.now();
     if (document.visibilityState === 'visible' && document.hasFocus() && (now - lastRAF) > 500) {
-      console.log('⚠️ rAF stalled while visible+focused. Something is throttling/suspending this tab.');
+      console.log('Warning: rAF stalled while visible+focused. Something is throttling/suspending this tab.');
     }
   }, 500);
 })();
