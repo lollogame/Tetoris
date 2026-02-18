@@ -17,10 +17,10 @@ class GameSettings {
     this.volumeMusic = 70;
     this.brMaxPlayers = 4;
     this.brAttackMode = 'random';
-    this.botPps = 1.6;
-    this.botAggression = 65;
-    this.botMistakeChance = 8;
-    this.botThinkJitterMs = 85;
+    this.botPps = 2.4;
+    this.botAggression = 74;
+    this.botMistakeChance = 2;
+    this.botThinkJitterMs = 35;
   
     // Persistence
     this._storageKey = 'tetoris_settings_v1';
