@@ -88,7 +88,7 @@ class NetworkManager {
         },
       };
 
-      // If desiredId exists => use it as PeerJS ID (this is the “alias”)
+      // If desiredId exists => use it as PeerJS ID (this is the alias)
       this.peer = desiredId ? new Peer(desiredId, peerOptions) : new Peer(peerOptions);
 
       this.peer.on('open', (id) => {
@@ -138,7 +138,7 @@ class NetworkManager {
         if (err && err.type === 'unavailable-id' && wantRoomCode && this._initAttempt < 5) {
           this._initAttempt += 1;
           if (typeof ChatManager !== 'undefined') {
-            ChatManager.addMessage('Room code already in use — generating a new one…', 'System');
+            ChatManager.addMessage('Room code already in use - generating a new one...', 'System');
           }
           createPeer();
           return;
@@ -303,3 +303,4 @@ class NetworkManager {
     this.localAttackHandler = (typeof handler === 'function') ? handler : null;
   }
 }
+
