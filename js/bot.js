@@ -17,7 +17,7 @@ class TetrisBot {
     const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
     this.pps = Math.max(0.4, Math.min(6, num(config.pps, 2.4)));
     this.aggression = Math.max(0, Math.min(100, num(config.aggression, 74)));
-    this.mistakeChance = Math.max(0, Math.min(100, num(config.mistakeChance, 2))) / 100;
+    this.mistakeChance = Math.max(0, Math.min(100, num(config.mistakeChance, 0))) / 100;
     this.thinkJitterMs = Math.max(0, Math.min(400, num(config.thinkJitterMs, 35)));
   }
 
@@ -85,6 +85,16 @@ class TetrisBot {
     if (!this._canPlace(board, piece, rot, x, y)) return null;
     while (this._canPlace(board, piece, rot, x, y + 1)) y++;
     return y;
+  }
+
+  _getLockYs(board, piece, rot, x) {
+    const ys = [];
+    for (let y = SPAWN_ROW; y < ROWS; y++) {
+      if (!this._canPlace(board, piece, rot, x, y)) continue;
+      if (this._canPlace(board, piece, rot, x, y + 1)) continue;
+      ys.push(y);
+    }
+    return ys;
   }
 
   _cloneBoard(board) {
@@ -520,57 +530,116 @@ class TetrisBot {
       const maxX = COLS - width + 2;
 
       for (let x = minX; x <= maxX; x++) {
-        const y = this._dropY(board, piece, rot, x);
-        if (y == null) continue;
+        const lockYs = this._getLockYs(board, piece, rot, x);
+        if (lockYs.length === 0) continue;
 
-        const preClearBoard = this._placePiece(board, piece, rot, x, y);
-        if (!preClearBoard) continue;
+        for (const y of lockYs) {
+          const preClearBoard = this._placePiece(board, piece, rot, x, y);
+          if (!preClearBoard) continue;
 
-        const cleared = this._clearFullLines(preClearBoard);
-        const isAllClear = this._isAllClear(cleared.board);
-        const isTSpin = this._isTSpin(preClearBoard, piece, x, y, cleared.linesCleared);
-        const attackInfo = this._estimateAttack(piece, cleared.linesCleared, isTSpin, isAllClear, preB2B, preCombo);
-        const analysis = this._analyzeBoard(cleared.board);
-        const pendingAfterGarbage = Math.max(0, pendingGarbage - attackInfo.attack);
-        const dangerAfter = this._dangerLevel(analysis, pendingAfterGarbage);
-        const score = this._scorePlacement(
-          { linesCleared: cleared.linesCleared, isTSpin, isAllClear },
-          analysis,
-          attackInfo,
-          {
-            pendingGarbage,
-            pendingAfterGarbage,
-            preB2B,
+          const cleared = this._clearFullLines(preClearBoard);
+          const isAllClear = this._isAllClear(cleared.board);
+          const isTSpin = this._isTSpin(preClearBoard, piece, x, y, cleared.linesCleared);
+          const attackInfo = this._estimateAttack(piece, cleared.linesCleared, isTSpin, isAllClear, preB2B, preCombo);
+          const analysis = this._analyzeBoard(cleared.board);
+          const holesDelta = analysis.holes - beforeAnalysis.holes;
+          const holeDepthDelta = analysis.holeDepth - beforeAnalysis.holeDepth;
+          const cavitiesDelta = analysis.cavities - beforeAnalysis.cavities;
+          const bumpinessDelta = analysis.bumpiness - beforeAnalysis.bumpiness;
+          const maxHeightDelta = analysis.maxHeight - beforeAnalysis.maxHeight;
+          const tSlotDelta = analysis.tSlotOpportunities - beforeAnalysis.tSlotOpportunities;
+          const edgeWellDelta = analysis.edgeWellDepth - beforeAnalysis.edgeWellDepth;
+          const centerWellPenaltyDelta = analysis.centerWellPenalty - beforeAnalysis.centerWellPenalty;
+          const pendingAfterGarbage = Math.max(0, pendingGarbage - attackInfo.attack);
+          const dangerAfter = this._dangerLevel(analysis, pendingAfterGarbage);
+          const score = this._scorePlacement(
+            { linesCleared: cleared.linesCleared, isTSpin, isAllClear },
+            analysis,
+            attackInfo,
+            {
+              pendingGarbage,
+              pendingAfterGarbage,
+              preB2B,
+              piece,
+              beforeAnalysis,
+            }
+          );
+
+          out.push({
             piece,
-            beforeAnalysis,
-          }
-        );
-
-        out.push({
-          piece,
-          useHold,
-          x,
-          y,
-          rot,
-          score,
-          totalScore: score,
-          attack: attackInfo.attack,
-          linesCleared: cleared.linesCleared,
-          isTSpin,
-          isAllClear,
-          dangerAfter,
-          postCombo: attackInfo.postCombo,
-          postB2B: attackInfo.postB2B,
-          lastActionWasRotation: (piece === 'T') && (isTSpin || rot !== 0),
-          pendingAfterGarbage,
-          analysisAfter: analysis,
-          boardAfter: cleared.board,
-        });
+            useHold,
+            x,
+            y,
+            rot,
+            score,
+            totalScore: score,
+            attack: attackInfo.attack,
+            linesCleared: cleared.linesCleared,
+            isTSpin,
+            isAllClear,
+            dangerAfter,
+            postCombo: attackInfo.postCombo,
+            postB2B: attackInfo.postB2B,
+            lastActionWasRotation: (piece === 'T') && (isTSpin || rot !== 0),
+            holesDelta,
+            holeDepthDelta,
+            cavitiesDelta,
+            bumpinessDelta,
+            maxHeightDelta,
+            tSlotDelta,
+            edgeWellDelta,
+            centerWellPenaltyDelta,
+            pendingAfterGarbage,
+            analysisAfter: analysis,
+            boardAfter: cleared.board,
+          });
+        }
       }
     }
 
     out.sort((a, b) => b.score - a.score);
     return out;
+  }
+
+  _filterCandidatesForCleanStack(candidates, context = {}) {
+    if (!Array.isArray(candidates) || candidates.length <= 1) return candidates;
+
+    const immediateDanger = Math.max(0, Number(context.immediateDanger) || 0);
+    const pendingGarbage = Math.max(0, Number(context.pendingGarbage) || 0);
+    const lowDanger = immediateDanger < 1.25 && pendingGarbage <= 2;
+    if (!lowDanger) return candidates;
+
+    let pool = candidates.slice();
+
+    const zeroHoleOptions = pool.filter((c) => c.holesDelta <= 0 && c.cavitiesDelta <= 0);
+    if (zeroHoleOptions.length > 0) {
+      pool = zeroHoleOptions;
+    }
+
+    const gentleSurface = pool.filter(
+      (c) => c.bumpinessDelta <= 2 && c.maxHeightDelta <= 1 && c.centerWellPenaltyDelta <= 1
+    );
+    if (gentleSurface.length > 0) {
+      pool = gentleSurface;
+    }
+
+    const minHoles = Math.min(...pool.map((c) => c.analysisAfter?.holes ?? 0));
+    pool = pool.filter((c) => (c.analysisAfter?.holes ?? 0) <= minHoles + 1);
+
+    const minBump = Math.min(...pool.map((c) => c.analysisAfter?.bumpiness ?? 0));
+    const smoothPool = pool.filter((c) => (c.analysisAfter?.bumpiness ?? 0) <= minBump + 4);
+    if (smoothPool.length > 0) {
+      pool = smoothPool;
+    }
+
+    const b2bAttackPool = pool.filter((c) => c.isTSpin || c.linesCleared === 4);
+    const cleanB2BAttackPool = b2bAttackPool.filter((c) => c.holesDelta <= 0 && c.cavitiesDelta <= 0);
+    if (cleanB2BAttackPool.length > 0) return cleanB2BAttackPool;
+    if (b2bAttackPool.length > 0 && b2bAttackPool.length >= Math.max(2, Math.floor(pool.length / 4))) {
+      return b2bAttackPool;
+    }
+
+    return pool.length > 0 ? pool : candidates;
   }
 
   _getQueueOffsetAfterFirstMove(useHold, currentHoldPiece) {
@@ -688,6 +757,21 @@ class TetrisBot {
       if (preB2B > 0 && cand.linesCleared > 0 && !(cand.linesCleared === 4 || cand.isTSpin) && immediateDanger < 1.2) {
         total -= 22;
       }
+      if (immediateDanger < 1.45) {
+        if (cand.holesDelta > 0) total -= cand.holesDelta * (240 + (aggr * 70));
+        if (cand.holeDepthDelta > 0) total -= cand.holeDepthDelta * (38 + (aggr * 10));
+        if (cand.cavitiesDelta > 0) total -= cand.cavitiesDelta * (190 + (aggr * 55));
+        if (cand.bumpinessDelta > 0) total -= cand.bumpinessDelta * (28 + ((1 - aggr) * 10));
+        if (cand.maxHeightDelta > 0) total -= cand.maxHeightDelta * (34 + ((1 - aggr) * 14));
+        if (cand.centerWellPenaltyDelta > 0) total -= cand.centerWellPenaltyDelta * (20 + ((1 - aggr) * 8));
+        if (cand.edgeWellDelta < 0 && cand.linesCleared < 4 && !cand.isTSpin) {
+          total += cand.edgeWellDelta * (24 + (aggr * 7));
+        }
+      }
+      if (cand.holesDelta < 0) total += Math.abs(cand.holesDelta) * (42 + (aggr * 18));
+      if (cand.cavitiesDelta < 0) total += Math.abs(cand.cavitiesDelta) * (30 + (aggr * 12));
+      if (cand.bumpinessDelta < 0) total += Math.min(6, Math.abs(cand.bumpinessDelta)) * (8 + ((1 - aggr) * 6));
+      if (cand.maxHeightDelta < 0) total += Math.abs(cand.maxHeightDelta) * (10 + ((1 - aggr) * 8));
       total += cand.attack * (14 + (aggr * 16));
       if (cand.linesCleared === 0 && cand.attack === 0 && cand.dangerAfter > immediateDanger + 0.3) {
         total -= 12;
@@ -699,20 +783,34 @@ class TetrisBot {
       candidates[i].totalScore = candidates[i].score;
     }
 
-    candidates.sort((a, b) => b.totalScore - a.totalScore);
+    const filtered = this._filterCandidatesForCleanStack(candidates, { immediateDanger, pendingGarbage });
+    const selectionPool = (filtered && filtered.length > 0) ? filtered : candidates;
 
-    const pressure = Math.max(immediateDanger, candidates[0]?.dangerAfter || 0);
+    selectionPool.sort((a, b) => b.totalScore - a.totalScore);
+
+    const pressure = Math.max(immediateDanger, selectionPool[0]?.dangerAfter || 0);
     let effectiveMistakeChance = this.mistakeChance * (1 - (aggr * 0.75));
     effectiveMistakeChance *= (1 - Math.min(0.85, pressure * 0.55));
     effectiveMistakeChance = Math.max(0, Math.min(0.20, effectiveMistakeChance));
+    if (pressure < 1.2) effectiveMistakeChance *= 0.45;
+    const best = selectionPool[0] || null;
+    if (
+      best &&
+      pressure < 1.35 &&
+      best.holesDelta <= 0 &&
+      best.cavitiesDelta <= 0 &&
+      best.bumpinessDelta <= 2
+    ) {
+      effectiveMistakeChance = 0;
+    }
 
     if (Math.random() < effectiveMistakeChance) {
       const poolSize = pressure > 0.8 ? 2 : 3;
-      const pool = candidates.slice(0, Math.min(poolSize, candidates.length));
+      const pool = selectionPool.slice(0, Math.min(poolSize, selectionPool.length));
       return pool[Math.floor(Math.random() * pool.length)];
     }
 
-    return candidates[0];
+    return selectionPool[0];
   }
 
   _executePlacement(plan) {
