@@ -44,6 +44,7 @@ class GameController {
     // Input gating
     this.acceptInput = false;
     this.zenPaused = false;
+    this.botPaused = false;
 
     // Guards for stale async flows (countdown / delayed round starts)
     this._roundFlowToken = 0;
@@ -220,10 +221,10 @@ class GameController {
       return Number.isFinite(parsed) ? parsed : fallback;
     };
     return {
-      pps: toNum(s.botPps, 1.6),
-      aggression: toNum(s.botAggression, 65),
-      mistakeChance: toNum(s.botMistakeChance, 8),
-      thinkJitterMs: toNum(s.botThinkJitterMs, 85),
+      pps: toNum(s.botPps, 2.4),
+      aggression: toNum(s.botAggression, 74),
+      mistakeChance: toNum(s.botMistakeChance, 2),
+      thinkJitterMs: toNum(s.botThinkJitterMs, 35),
     };
   }
 
@@ -334,12 +335,32 @@ class GameController {
   }
 
   _updateZenPauseState() {
-    if (this.mode !== 'zen' || !this.gameRunning) {
+    const isLocalMode = (this.mode === 'zen' || this.mode === 'bot_practice');
+    if (!isLocalMode || !this.gameRunning) {
       this.zenPaused = false;
+      this.botPaused = false;
       return;
     }
 
     const shouldPause = this._isMenuVisible() || this._isSettingsVisible();
+    if (this.mode === 'bot_practice') {
+      if (shouldPause) {
+        if (!this.botPaused) this.setStatus('Bot practice paused.');
+        this.botPaused = true;
+        this.acceptInput = false;
+        this.lastTime = 0;
+        return;
+      }
+
+      if (this.botPaused) {
+        this.botPaused = false;
+        this.acceptInput = (this.phase === 'playing');
+        this.lastTime = 0;
+        if (this.phase === 'playing') this.setStatus('Bot practice in progress.');
+      }
+      return;
+    }
+
     if (shouldPause) {
       if (!this.zenPaused) this.setStatus(`Zen paused - Score: ${this.zenScore}`);
       this.zenPaused = true;
@@ -632,7 +653,7 @@ class GameController {
   }
 
   formatLabelFromTarget(targetWins) {
-    if (!targetWins || targetWins <= 0) return '∞';
+    if (!targetWins || targetWins <= 0) return 'INF';
     return `FT${targetWins}`;
   }
 
@@ -658,7 +679,7 @@ class GameController {
     const fmt = this.formatLabelFromTarget(this.match.targetWins);
     if (formatPill) formatPill.innerHTML = `FORMAT: <strong>${fmt}</strong>`;
     if (roundPill) roundPill.innerHTML = `ROUND: <strong>${Math.max(1, this.match.round)}</strong>`;
-    if (scorePill) scorePill.innerHTML = `YOU <strong>${this.getLocalScore()}</strong> — <strong>${this.getOppScore()}</strong> OPP`;
+    if (scorePill) scorePill.innerHTML = `YOU <strong>${this.getLocalScore()}</strong> - <strong>${this.getOppScore()}</strong> OPP`;
 
     this.showScoreboard(this.phase !== 'idle');
   }
@@ -667,6 +688,7 @@ class GameController {
     if (!this.elMenu) return;
 
     if (show) {
+      if (this._isSettingsVisible()) this.closeSettings();
       this.elMenu.classList.remove('hidden');
       this.acceptInput = false;
       this.hideResultOverlay();
@@ -686,6 +708,7 @@ class GameController {
 
   openSettings() {
     if (!this.settingsModal) return;
+    if (this._isMenuVisible() && this.elMenu) this.elMenu.classList.add('hidden');
     this.settingsModal.classList.remove('hidden');
     this._updateZenPauseState();
   }
@@ -711,7 +734,10 @@ class GameController {
     }
 
     if (this.btnMenuSettings) {
-      this.btnMenuSettings.addEventListener('click', () => this.openSettings());
+      this.btnMenuSettings.addEventListener('click', () => {
+        this.showMenu(false);
+        this.openSettings();
+      });
     }
 
     if (this.btnMenuClose) {
@@ -802,7 +828,18 @@ class GameController {
 
     // Hide game area until a mode actually starts
     if (this.gameArea) {
-      const shouldShow = (this.mode === 'zen') ? this.gameRunning : (this.phase !== 'idle');
+      let shouldShow = false;
+      if (this.mode === 'zen') {
+        shouldShow = this.gameRunning;
+      } else if (this.mode === 'bot_practice') {
+        shouldShow = this.phase !== 'idle';
+      } else {
+        shouldShow = !!this.gameState1 ||
+          this.phase === 'countdown' ||
+          this.phase === 'playing' ||
+          this.phase === 'roundOver' ||
+          this.phase === 'matchOver';
+      }
       this.gameArea.classList.toggle('hidden', !shouldShow);
     }
 
@@ -835,6 +872,7 @@ class GameController {
     this.roundId = null;
     this.acceptInput = false;
     this.zenPaused = false;
+    this.botPaused = false;
 
     this.hideResultOverlay();
     this.hideRoundStatsPanel();
@@ -2128,19 +2166,19 @@ wireMatchDefaultsAutoSave() {
     const toNum = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
     const clamp = (v, min, max, d) => Math.max(min, Math.min(max, toNum(v, d)));
 
-    let pps = 1.6;
-    let aggression = 65;
-    let mistakeChance = 0.08;
-    let thinkJitterMs = 85;
+    let pps = 2.4;
+    let aggression = 74;
+    let mistakeChance = 0.02;
+    let thinkJitterMs = 35;
 
     let elapsedMs = 0;
     let nextActionDelayMs = 0;
 
     const configure = (cfg = {}) => {
-      pps = clamp(cfg.pps, 0.4, 6, 1.6);
-      aggression = clamp(cfg.aggression, 0, 100, 65);
-      mistakeChance = clamp(cfg.mistakeChance, 0, 100, 8) / 100;
-      thinkJitterMs = clamp(cfg.thinkJitterMs, 0, 400, 85);
+      pps = clamp(cfg.pps, 0.4, 6, 2.4);
+      aggression = clamp(cfg.aggression, 0, 100, 74);
+      mistakeChance = clamp(cfg.mistakeChance, 0, 100, 2) / 100;
+      thinkJitterMs = clamp(cfg.thinkJitterMs, 0, 400, 35);
     };
 
     const scheduleNextAction = (isFirst) => {
@@ -2308,6 +2346,7 @@ wireMatchDefaultsAutoSave() {
     this.phase = 'playing';
     this.roundId = `bot-${Date.now()}`;
     this.acceptInput = true;
+    this.botPaused = false;
     this.hideResultOverlay();
     this.hideRoundStatsPanel();
     this.clearCombatFeed();
@@ -2391,6 +2430,7 @@ wireMatchDefaultsAutoSave() {
     if (this.phase === 'matchOver') return;
 
     this.acceptInput = false;
+    this.botPaused = false;
     this.phase = 'matchOver';
     this.stopLoop();
 
@@ -2434,6 +2474,17 @@ wireMatchDefaultsAutoSave() {
     };
 
     const tryGlobalShortcut = (code, bindings) => {
+      if (code === 'Escape') {
+        if (this._isSettingsVisible()) {
+          this.closeSettings();
+          return true;
+        }
+        if (this._isMenuVisible()) {
+          this.showMenu(false);
+          return true;
+        }
+      }
+
       if (this._isMenuVisible() || this._isSettingsVisible()) return false;
       if (bindings && Object.values(bindings).includes(code)) return false;
 
@@ -2547,7 +2598,8 @@ wireMatchDefaultsAutoSave() {
       }
 
       if (code === b.hold) {
-        this.gameState1.holdCurrentPiece();
+        const ok = this.gameState1.holdCurrentPiece();
+        if (!ok) this.handleGameOver();
         return;
       }
     });
@@ -2763,7 +2815,7 @@ wireMatchDefaultsAutoSave() {
 
     this.sendInitStateSnapshot();
 
-    this.setStatus(`Round ${this.match.round} starting…`);
+    this.setStatus(`Round ${this.match.round} starting...`);
     ChatManager.addMessage(`Round ${this.match.round} is starting!`, 'System');
 
     if (!this.gameRunning) {
@@ -2970,7 +3022,7 @@ wireMatchDefaultsAutoSave() {
         this.resetMatchScores();
         this.hostSetScoresAndBroadcast();
 
-        this.setStatus('Opponent connected! Starting match…');
+        this.setStatus('Opponent connected! Starting match...');
         this.updateNetworkStatus();
         this.startNextRoundAsHost(true);
         break;
@@ -2978,7 +3030,7 @@ wireMatchDefaultsAutoSave() {
 
       case 'joinedLobby':
         this._cancelJoinConnectLoop();
-        this.setStatus('Connected! Waiting for host…');
+        this.setStatus('Connected! Waiting for host...');
         this.updateNetworkStatus();
         break;
 
@@ -3011,7 +3063,7 @@ wireMatchDefaultsAutoSave() {
         this.applyMatchConfig(cfg, true);
         this.phase = 'waiting';
         this.updateScoreboard();
-        this.setStatus('Match configured. Waiting for round start…');
+        this.setStatus('Match configured. Waiting for round start...');
         this.updateNetworkStatus();
         break;
       }
@@ -3046,7 +3098,7 @@ wireMatchDefaultsAutoSave() {
           this.hostSetScoresAndBroadcast();
           this.startNextRoundAsHost(true);
         } else {
-          this.setStatus('Match reset. Waiting for host…');
+          this.setStatus('Match reset. Waiting for host...');
         }
         break;
       }
@@ -3067,7 +3119,7 @@ wireMatchDefaultsAutoSave() {
         this.acceptInput = false;
         this.phase = 'roundOver';
 
-        ChatManager.addMessage('Opponent topped out! You win the round! 🎉', 'System');
+        ChatManager.addMessage('Opponent topped out! You win the round!', 'System');
         this.setStatus('Round win!');
         this.showResultOverlay('ROUND WON', 'Opponent topped out!', { durationMs: 1400 });
         this.showRoundStatsPanel('ROUND STATS', { durationMs: 7000 });
@@ -3081,17 +3133,17 @@ wireMatchDefaultsAutoSave() {
             const winner = this.getMatchWinnerLabelForLocal();
             NetworkManager.getInstance().send({ type: 'matchOver', winner: 'HOST', roundId: this.roundId });
             this.phase = 'matchOver';
-            this.setStatus(`MATCH OVER — ${winner} WINS!`);
-            ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+            this.setStatus(`MATCH OVER - ${winner} WINS!`);
+            ChatManager.addMessage(`MATCH OVER - ${winner} WINS!`, 'System');
             this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
             this.showRoundStatsPanel('MATCH STATS', { persistent: true });
             this.updateNetworkStatus();
           } else {
-            this.setStatus('Next round starting…');
+            this.setStatus('Next round starting...');
             this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
           }
         } else {
-          this.setStatus('Round win! Waiting for next round…');
+          this.setStatus('Round win! Waiting for next round...');
           this.updateNetworkStatus();
         }
         break;
@@ -3108,8 +3160,8 @@ wireMatchDefaultsAutoSave() {
           ? (this.isHost ? 'YOU' : 'OPPONENT')
           : (this.isHost ? 'OPPONENT' : 'YOU');
 
-        this.setStatus(`MATCH OVER — ${winner} WINS!`);
-        ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+        this.setStatus(`MATCH OVER - ${winner} WINS!`);
+        ChatManager.addMessage(`MATCH OVER - ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
         this.showRoundStatsPanel('MATCH STATS', { persistent: true });
         this.updateNetworkStatus();
@@ -3144,7 +3196,7 @@ wireMatchDefaultsAutoSave() {
 
     if (this.mode === 'zen') {
       this.gameRunning = false;
-      this.setStatus(`Zen over — Final score: ${this.zenScore}`);
+      this.setStatus(`Zen over - Final score: ${this.zenScore}`);
       ChatManager.addMessage('Zen ended (top out). Open Menu to play again.', 'System');
       this.showResultOverlay('GAME OVER', `Final score: ${this.zenScore}`, { persistent: true });
       this.showRoundStatsPanel('ZEN STATS', { persistent: true });
@@ -3182,17 +3234,17 @@ wireMatchDefaultsAutoSave() {
         const winner = this.getMatchWinnerLabelForLocal();
         NetworkManager.getInstance().send({ type: 'matchOver', winner: 'CLIENT', roundId: this.roundId });
         this.phase = 'matchOver';
-        this.setStatus(`MATCH OVER — ${winner} WINS!`);
-        ChatManager.addMessage(`MATCH OVER — ${winner} WINS!`, 'System');
+        this.setStatus(`MATCH OVER - ${winner} WINS!`);
+        ChatManager.addMessage(`MATCH OVER - ${winner} WINS!`, 'System');
         this.showResultOverlay('MATCH OVER', `${winner} wins!`, { persistent: true });
         this.showRoundStatsPanel('MATCH STATS', { persistent: true });
         this.updateNetworkStatus();
       } else {
-        this.setStatus('Next round starting…');
+        this.setStatus('Next round starting...');
         this._setRoundFlowTimeout(() => this.startNextRoundAsHost(false), 1400);
       }
     } else {
-      this.setStatus('Round lost. Waiting for next round…');
+      this.setStatus('Round lost. Waiting for next round...');
       this.updateNetworkStatus();
     }
   }
@@ -3259,7 +3311,9 @@ wireMatchDefaultsAutoSave() {
         if (this.gameState1) this.gameState1.draw();
         if (this.gameState2) this.gameState2.draw();
       } else if (this.mode === 'bot_practice') {
-        if (this.phase === 'playing') {
+        if (this.botPaused) {
+          this.lastTime = 0;
+        } else if (this.phase === 'playing') {
           if (this.gameState1 && this.acceptInput) input.processMovement(deltaTime, (dx) => this.gameState1.move(dx));
 
           if (this.gameState1) {
@@ -3336,6 +3390,7 @@ wireMatchDefaultsAutoSave() {
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
   }
 }
+
 
 
 
