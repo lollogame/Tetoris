@@ -1783,7 +1783,7 @@ wireMatchDefaultsAutoSave() {
       this.updateNetworkStatus();
     });
 
-    peer.on('connection', (conn) => this._attachBrHostConnection(conn));
+    this.peer.on('connection', (conn) => this._attachBrHostConnection(conn));
 
     peer.on('error', (err) => {
       console.error('BR host peer error:', err);
